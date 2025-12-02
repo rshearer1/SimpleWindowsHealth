@@ -4304,202 +4304,201 @@ class MainWindow(QMainWindow):
 
 
 # =============================================================================
-# SPLASH SCREEN
+# SPLASH SCREEN (Runs in separate process)
 # =============================================================================
 
-class SplashScreen(QWidget):
+def run_splash_process(pipe_conn):
     """
-    Modern splash screen with loading progress bar.
-    Shows during app initialization to provide immediate visual feedback.
+    Run splash screen in a separate process.
+    Communicates with main process via pipe.
+    """
+    import sys
+    from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QProgressBar
+    from PyQt6.QtCore import Qt, QTimer
+    from PyQt6.QtGui import QPainter, QColor, QBrush
+    
+    app = QApplication(sys.argv)
+    
+    class SplashWindow(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.SplashScreen
+            )
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            self.setFixedSize(480, 320)
+            
+            # Center on screen
+            screen = app.primaryScreen()
+            if screen:
+                geom = screen.geometry()
+                x = (geom.width() - self.width()) // 2
+                y = (geom.height() - self.height()) // 2
+                self.move(x, y)
+            
+            self.setup_ui()
+            
+            # Timer to check for messages from main process
+            self.check_timer = QTimer()
+            self.check_timer.timeout.connect(self.check_pipe)
+            self.check_timer.start(50)
+        
+        def setup_ui(self):
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            
+            container = QFrame()
+            container.setStyleSheet("""
+                QFrame {
+                    background: #1a1a2e;
+                    border-radius: 16px;
+                    border: 1px solid #2d2d44;
+                }
+            """)
+            
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(40, 40, 40, 32)
+            container_layout.setSpacing(16)
+            
+            # App icon
+            icon_container = QFrame()
+            icon_container.setFixedSize(64, 64)
+            icon_container.setStyleSheet("background: #6366f1; border-radius: 16px;")
+            icon_layout = QHBoxLayout(icon_container)
+            icon_layout.setContentsMargins(0, 0, 0, 0)
+            icon = QLabel("+")
+            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon.setStyleSheet("background: transparent; color: white; font-size: 32px; font-weight: bold;")
+            icon_layout.addWidget(icon)
+            container_layout.addWidget(icon_container, alignment=Qt.AlignmentFlag.AlignCenter)
+            
+            # Title
+            title = QLabel("Windows Health Checker Pro")
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title.setStyleSheet("background: transparent; color: #e2e8f0; font-size: 22px; font-weight: bold;")
+            container_layout.addWidget(title)
+            
+            # Subtitle
+            subtitle = QLabel("System Diagnostics & Optimization")
+            subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            subtitle.setStyleSheet("background: transparent; color: #64748b; font-size: 12px;")
+            container_layout.addWidget(subtitle)
+            
+            container_layout.addSpacing(24)
+            
+            # Progress bar
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setFixedHeight(6)
+            self.progress_bar.setTextVisible(False)
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    background: #16213e;
+                    border: none;
+                    border-radius: 3px;
+                }
+                QProgressBar::chunk {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #6366f1, stop:1 #818cf8);
+                    border-radius: 3px;
+                }
+            """)
+            container_layout.addWidget(self.progress_bar)
+            
+            # Status label
+            self.status_label = QLabel("Starting...")
+            self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.status_label.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px;")
+            container_layout.addWidget(self.status_label)
+            
+            container_layout.addStretch()
+            
+            # Version
+            version = QLabel("Version 1.0.0")
+            version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            version.setStyleSheet("background: transparent; color: #64748b; font-size: 10px;")
+            container_layout.addWidget(version)
+            
+            layout.addWidget(container)
+        
+        def check_pipe(self):
+            """Check for messages from main process"""
+            try:
+                if pipe_conn.poll():
+                    msg = pipe_conn.recv()
+                    if msg.get("action") == "progress":
+                        self.progress_bar.setValue(msg.get("value", 0))
+                        if msg.get("status"):
+                            self.status_label.setText(msg["status"])
+                    elif msg.get("action") == "close":
+                        self.check_timer.stop()
+                        app.quit()
+            except Exception:
+                pass
+        
+        def paintEvent(self, event):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            shadow_color = QColor(0, 0, 0, 60)
+            painter.setBrush(QBrush(shadow_color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(4, 4, self.width() - 4, self.height() - 4, 16, 16)
+    
+    splash = SplashWindow()
+    splash.show()
+    app.exec()
+
+
+class SplashController:
+    """
+    Controller for the splash screen process.
+    Runs splash in separate process and communicates via pipe.
     """
     
     def __init__(self):
-        super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.SplashScreen
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(480, 320)
-        
-        # Center on screen
-        screen = QApplication.primaryScreen().geometry()
-        x = (screen.width() - self.width()) // 2
-        y = (screen.height() - self.height()) // 2
-        self.move(x, y)
-        
-        self.progress = 0
-        self.status_text = "Initializing..."
-        self.setup_ui()
+        self.process = None
+        self.parent_conn = None
+        self.child_conn = None
     
-    def setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Main container with rounded corners
-        container = QFrame()
-        container.setStyleSheet(f"""
-            QFrame {{
-                background: {Theme.BG_SIDEBAR};
-                border-radius: 16px;
-                border: 1px solid {Theme.BORDER};
-            }}
-        """)
-        
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(40, 40, 40, 32)
-        container_layout.setSpacing(16)
-        
-        # App icon
-        icon_container = QFrame()
-        icon_container.setFixedSize(64, 64)
-        icon_container.setStyleSheet(f"""
-            background: {Theme.ACCENT};
-            border-radius: 16px;
-        """)
-        icon_layout = QHBoxLayout(icon_container)
-        icon_layout.setContentsMargins(0, 0, 0, 0)
-        icon = QLabel("+")
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet("background: transparent; color: white; font-size: 32px; font-weight: bold;")
-        icon_layout.addWidget(icon)
-        
-        container_layout.addWidget(icon_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        # App title
-        title = QLabel("Windows Health Checker Pro")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_PRIMARY};
-            font-size: 22px;
-            font-weight: bold;
-        """)
-        container_layout.addWidget(title)
-        
-        # Subtitle
-        subtitle = QLabel("System Diagnostics & Optimization")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_TERTIARY};
-            font-size: 12px;
-        """)
-        container_layout.addWidget(subtitle)
-        
-        container_layout.addSpacing(24)
-        
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedHeight(6)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                background: {Theme.BG_CARD};
-                border: none;
-                border-radius: 3px;
-            }}
-            QProgressBar::chunk {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {Theme.ACCENT}, stop:1 {Theme.ACCENT_LIGHT});
-                border-radius: 3px;
-            }}
-        """)
-        container_layout.addWidget(self.progress_bar)
-        
-        # Status label
-        self.status_label = QLabel("Initializing...")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_SECONDARY};
-            font-size: 11px;
-        """)
-        container_layout.addWidget(self.status_label)
-        
-        container_layout.addStretch()
-        
-        # Version
-        version = QLabel("Version 1.0.0")
-        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        version.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_TERTIARY};
-            font-size: 10px;
-        """)
-        container_layout.addWidget(version)
-        
-        layout.addWidget(container)
+    def start(self):
+        """Start the splash screen process"""
+        import multiprocessing
+        self.parent_conn, self.child_conn = multiprocessing.Pipe()
+        self.process = multiprocessing.Process(
+            target=run_splash_process, 
+            args=(self.child_conn,),
+            daemon=True
+        )
+        self.process.start()
     
     def set_progress(self, value: int, status: str = None):
-        """Update progress bar and status text"""
-        self.progress = min(100, max(0, value))
-        self.progress_bar.setValue(self.progress)
-        if status:
-            self.status_label.setText(status)
-        QApplication.processEvents()  # Force UI update
+        """Update splash screen progress"""
+        if self.parent_conn:
+            try:
+                self.parent_conn.send({
+                    "action": "progress",
+                    "value": value,
+                    "status": status
+                })
+            except Exception:
+                pass
     
-    def paintEvent(self, event):
-        """Draw shadow behind the container"""
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    def close(self):
+        """Close the splash screen"""
+        if self.parent_conn:
+            try:
+                self.parent_conn.send({"action": "close"})
+            except Exception:
+                pass
         
-        # Draw subtle shadow
-        shadow_color = QColor(0, 0, 0, 60)
-        painter.setBrush(QBrush(shadow_color))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(4, 4, self.width() - 4, self.height() - 4, 16, 16)
-
-
-class AppLoader:
-    """
-    Manages app loading with splash screen.
-    Loads components in stages with progress updates.
-    """
-    
-    def __init__(self, app: QApplication):
-        self.app = app
-        self.splash = SplashScreen()
-        self.window = None
-    
-    def load(self) -> MainWindow:
-        """Load the app with progress updates"""
-        self.splash.show()
-        
-        # Stage 1: Basic initialization
-        self.splash.set_progress(10, "Loading UI components...")
-        QApplication.processEvents()
-        
-        # Stage 2: Create main window (this imports and sets up all pages)
-        self.splash.set_progress(30, "Initializing main window...")
-        QApplication.processEvents()
-        
-        self.window = MainWindow()
-        
-        # Stage 3: Additional setup
-        self.splash.set_progress(60, "Loading backend services...")
-        QApplication.processEvents()
-        
-        # Small delay to show progress
-        import time
-        time.sleep(0.1)
-        
-        # Stage 4: Finalizing
-        self.splash.set_progress(80, "Preparing interface...")
-        QApplication.processEvents()
-        time.sleep(0.1)
-        
-        # Stage 5: Complete
-        self.splash.set_progress(100, "Ready!")
-        QApplication.processEvents()
-        time.sleep(0.2)
-        
-        # Close splash and show main window
-        self.splash.close()
-        return self.window
+        # Give it a moment to close gracefully
+        if self.process:
+            self.process.join(timeout=1)
+            if self.process.is_alive():
+                self.process.terminate()
 
 
 # =============================================================================
@@ -4507,6 +4506,17 @@ class AppLoader:
 # =============================================================================
 
 def main():
+    import multiprocessing
+    multiprocessing.freeze_support()  # Required for Windows executables
+    
+    # Start splash screen in separate process
+    splash = SplashController()
+    splash.start()
+    splash.set_progress(10, "Starting application...")
+    
+    # Now do the heavy imports and setup
+    splash.set_progress(20, "Loading UI framework...")
+    
     # Enable high DPI before creating app
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
@@ -4515,8 +4525,11 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
+    splash.set_progress(30, "Checking permissions...")
+    
     # Check admin privileges
     if not is_admin():
+        splash.close()  # Close splash before showing dialog
         from PyQt6.QtWidgets import QMessageBox
         reply = QMessageBox.question(
             None,
@@ -4528,10 +4541,27 @@ def main():
         if reply == QMessageBox.StandardButton.Yes:
             run_as_admin()
             sys.exit()
+        # If user says no, restart splash
+        splash = SplashController()
+        splash.start()
+        splash.set_progress(40, "Continuing...")
     
-    # Load app with splash screen
-    loader = AppLoader(app)
-    window = loader.load()
+    splash.set_progress(50, "Initializing main window...")
+    
+    # Create the main window
+    window = MainWindow()
+    
+    splash.set_progress(80, "Preparing interface...")
+    
+    # Small delay to show progress
+    import time
+    time.sleep(0.2)
+    
+    splash.set_progress(100, "Ready!")
+    time.sleep(0.3)
+    
+    # Close splash and show window
+    splash.close()
     window.show()
     
     sys.exit(app.exec())
