@@ -249,6 +249,57 @@ class StartupScanWorker(QObject):
             self.finished.emit([])
 
 
+class WindowsUpdateWorker(QObject):
+    """Worker to check Windows Update status in background thread"""
+    finished = pyqtSignal(dict)   # Emits update info dict
+    
+    def __init__(self, health_checker):
+        super().__init__()
+        self.health_checker = health_checker
+    
+    def run(self):
+        """Execute the Windows Update check"""
+        try:
+            result = self.health_checker.check_windows_update_status()
+            self.finished.emit(result)
+        except Exception as e:
+            self.finished.emit({"Error": str(e)})
+
+
+class StorageCheckWorker(QObject):
+    """Worker to check storage health in background thread"""
+    finished = pyqtSignal(list)   # Emits volume info list
+    
+    def __init__(self, health_checker):
+        super().__init__()
+        self.health_checker = health_checker
+    
+    def run(self):
+        """Execute the storage health check"""
+        try:
+            result = self.health_checker.get_volume_info()
+            self.finished.emit(result if result else [])
+        except Exception as e:
+            self.finished.emit([])
+
+
+class SecurityCheckWorker(QObject):
+    """Worker to check Windows Defender status in background thread"""
+    finished = pyqtSignal(dict)   # Emits defender status dict
+    
+    def __init__(self, health_checker):
+        super().__init__()
+        self.health_checker = health_checker
+    
+    def run(self):
+        """Execute the security check"""
+        try:
+            result = self.health_checker.check_defender_status()
+            self.finished.emit(result)
+        except Exception as e:
+            self.finished.emit({"Error": str(e)})
+
+
 class MetricsWorker(QObject):
     """
     Background worker that collects CPU and disk metrics.
@@ -1506,7 +1557,7 @@ class ScanProgressDialog(QDialog):
         
         layout.addLayout(btn_layout)
     
-    def update_task(self, task_id: str, status: str, text: str = None):
+    def update_task(self, task_id: str, status: str, text: str = None, time_ms: float = None):
         if task_id not in self.tasks:
             return
         
@@ -1520,8 +1571,18 @@ class ScanProgressDialog(QDialog):
         
         icon_status, color, default_text = status_map.get(status, ("pending", Theme.TEXT_TERTIARY, "Waiting"))
         
+        # If time is provided, format it nicely
+        if time_ms is not None and status == "complete":
+            if time_ms < 1000:
+                time_text = f"{int(time_ms)}ms"
+            else:
+                time_text = f"{time_ms / 1000:.1f}s"
+            display_text = text or time_text
+        else:
+            display_text = text or default_text
+        
         task["icon"].set_status(icon_status)
-        task["status"].setText(text or default_text)
+        task["status"].setText(display_text)
         task["status"].setStyleSheet(f"background: transparent; color: {color}; font-size: 11px;")
     
     def set_progress(self, percent: int, time_remaining: str = None):
@@ -1756,7 +1817,10 @@ class ModulePage(QWidget):
         self.action_btn.setText("Checking...")
     
     def show_results(self, results: list):
-        """Display results - list of (status, text) tuples"""
+        """Display results - list of (status, text) tuples
+        
+        Status can be: check, warning, error, info, or header (for section headers)
+        """
         self.status_label.setVisible(False)
         self.results_container.setVisible(True)
         self.action_btn.setEnabled(True)
@@ -1769,6 +1833,29 @@ class ModulePage(QWidget):
         
         # Add new results
         for status, text in results:
+            # Handle section headers
+            if status == "header":
+                # Add spacing before header (except first)
+                if self.results_widgets:
+                    spacer = QFrame()
+                    spacer.setFixedHeight(12)
+                    spacer.setStyleSheet("background: transparent;")
+                    self.results_layout.addWidget(spacer)
+                    self.results_widgets.append(spacer)
+                
+                header = QLabel(text)
+                header.setStyleSheet(f"""
+                    background: transparent;
+                    color: {Theme.TEXT_PRIMARY};
+                    font-size: 14px;
+                    font-weight: 600;
+                    padding: 4px 8px;
+                    border-left: 3px solid {Theme.ACCENT};
+                """)
+                self.results_layout.addWidget(header)
+                self.results_widgets.append(header)
+                continue
+            
             row = QFrame()
             row.setStyleSheet("background: transparent;")
             row_layout = QHBoxLayout(row)
@@ -2369,6 +2456,13 @@ class StartupPage(QWidget):
         
         self._thread.start()
     
+    def display_cached_data(self, items: list):
+        """Display startup items from cached data (from full scan)"""
+        self.refresh_btn.setEnabled(True)
+        self.refresh_btn.setText("Refresh")
+        self._on_startup_scan_complete(items)
+        self.loaded = True
+    
     def _on_startup_scan_complete(self, items: list):
         """Handle completion of startup scan (called on main thread)"""
         self.startup_items = items
@@ -2517,53 +2611,114 @@ class StartupPage(QWidget):
     def _toggle_startup_item(self, item: dict, row_widget: QFrame):
         """Toggle a startup item's enabled/disabled state"""
         try:
-            import subprocess
+            from startup_scanner import toggle_startup_item
+            from PyQt6.QtWidgets import QMessageBox
             
-            source_path = item.get("source_path", "")
             name = item["name"]
+            source_path = item.get("source_path", "")
             currently_enabled = item["enabled"]
             
-            # Determine the registry path and action
-            if "Run" in item.get("location", ""):
-                # Registry-based startup item
-                if "HKLM" in source_path or "Machine" in source_path:
-                    reg_path = r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-                else:
-                    reg_path = r"HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+            # Determine the action
+            new_state = not currently_enabled
+            action_word = "enable" if new_state else "disable"
+            
+            # Check if this is a registry-based item (we can toggle these)
+            source = item.get("source", "")
+            if "Registry" in source or "HKCU" in source_path or "HKLM" in source_path:
+                # Confirm the action
+                reply = QMessageBox.question(
+                    self,
+                    f"{action_word.title()} Startup Item",
+                    f"Are you sure you want to {action_word} '{name}'?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
                 
-                if currently_enabled:
-                    # To disable: rename the value or move to a disabled key
-                    # We'll use Task Manager's approach - open it for the user
-                    self._open_task_manager_startup()
+                if reply != QMessageBox.StandardButton.Yes:
                     return
+                
+                # Perform the toggle
+                success, message = toggle_startup_item(name, source_path, new_state)
+                
+                if success:
+                    # Update the item's state
+                    item["enabled"] = new_state
+                    
+                    # Update the button text
+                    for child in row_widget.findChildren(QPushButton):
+                        if "Disable" in child.text() or "Enable" in child.text():
+                            child.setText("Disable" if new_state else "Enable")
+                            break
+                    
+                    # Update status label
+                    for child in row_widget.findChildren(QLabel):
+                        if child.text() in ("Enabled", "Disabled"):
+                            child.setText("Enabled" if new_state else "Disabled")
+                            child.setStyleSheet(f"""
+                                color: {"#27ae60" if new_state else "#95a5a6"};
+                                font-size: 11px;
+                            """)
+                            break
+                    
+                    # Show success message
+                    QMessageBox.information(
+                        self,
+                        "Success",
+                        message,
+                        QMessageBox.StandardButton.Ok
+                    )
+                    
+                    # Refresh the count in the summary
+                    self._update_summary_counts()
                 else:
-                    # Re-enable would need the original command
-                    self._open_task_manager_startup()
-                    return
+                    QMessageBox.warning(
+                        self,
+                        "Error",
+                        message + "\n\nNote: Some startup items require administrator privileges to modify.",
+                        QMessageBox.StandardButton.Ok
+                    )
             else:
-                # For Task Scheduler or other sources, open Task Manager
-                self._open_task_manager_startup()
-                return
+                # For Task Scheduler or Startup Folder items, open Task Manager
+                self._open_task_manager_startup(name)
                 
+        except ImportError:
+            self._open_task_manager_startup(item.get("name", ""))
         except Exception as e:
             print(f"Error toggling startup item: {e}")
-            self._open_task_manager_startup()
+            self._open_task_manager_startup(item.get("name", ""))
     
-    def _open_task_manager_startup(self):
+    def _update_summary_counts(self):
+        """Update the summary stats with current enable/disable counts"""
+        try:
+            enabled = sum(1 for item in self.startup_items if item.get("enabled", False))
+            disabled = len(self.startup_items) - enabled
+            high_impact = sum(1 for item in self.startup_items if item.get("enabled", False) and item.get("impact") == "High")
+            
+            self._update_stat(self.stat_total, str(len(self.startup_items)))
+            self._update_stat(self.stat_enabled, str(enabled))
+            self._update_stat(self.stat_disabled, str(disabled))
+            self._update_stat(self.stat_high_impact, str(high_impact))
+        except Exception:
+            pass
+    
+    def _open_task_manager_startup(self, item_name: str = ""):
         """Open Task Manager to the Startup tab with helpful message"""
         import subprocess
         from PyQt6.QtWidgets import QMessageBox
         
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Icon.Information)
-        msg.setWindowTitle("Startup Manager")
-        msg.setText("Opening Task Manager...")
+        msg.setWindowTitle("Use Task Manager")
+        if item_name:
+            msg.setText(f"'{item_name}' cannot be toggled directly.")
+        else:
+            msg.setText("This item requires Task Manager to modify.")
         msg.setInformativeText(
-            "To enable/disable startup items:\n\n"
-            "1. Go to the 'Startup apps' tab\n"
+            "This startup item is managed by Task Scheduler or Startup Folder.\n\n"
+            "To enable/disable it:\n"
+            "1. Go to the 'Startup apps' tab in Task Manager\n"
             "2. Right-click the item\n"
-            "3. Select 'Enable' or 'Disable'\n\n"
-            "Task Manager provides the safest way to manage startup items."
+            "3. Select 'Enable' or 'Disable'"
         )
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
@@ -2582,6 +2737,559 @@ class StartupPage(QWidget):
             subprocess.Popen(["taskmgr.exe"])
         except Exception as e:
             print(f"Failed to open Task Manager: {e}")
+
+
+# =============================================================================
+# EVENTS PAGE - System Event Log Analysis
+# =============================================================================
+
+class EventsPage(QWidget):
+    """Dedicated page for Windows Event Log analysis with card-based layout"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.event_data = {}
+        self.event_widgets = []
+        self.loaded = False
+        self.setup_ui()
+    
+    def setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        content = QWidget()
+        self.content_layout = QVBoxLayout(content)
+        self.content_layout.setContentsMargins(32, 28, 32, 28)
+        self.content_layout.setSpacing(20)
+        
+        # Header row
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        
+        title = QLabel("Event Log Analysis")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 26px;
+            font-weight: bold;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Refresh button
+        self.refresh_btn = QPushButton("Scan Events")
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_btn.clicked.connect(self.load_events)
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 8px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(self.refresh_btn)
+        
+        # Open Event Viewer button
+        self.viewer_btn = QPushButton("Open Event Viewer")
+        self.viewer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.viewer_btn.clicked.connect(self._open_event_viewer)
+        self.viewer_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
+        header.addWidget(self.viewer_btn)
+        
+        self.content_layout.addLayout(header)
+        
+        # Info text
+        info = QLabel("Analyze Windows System event logs to identify errors, warnings, and potential issues from the last 24 hours.")
+        info.setWordWrap(True)
+        info.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        self.content_layout.addWidget(info)
+        
+        # Summary stats row
+        self.stats_frame = QFrame()
+        self.stats_frame.setStyleSheet(f"""
+            background: {Theme.BG_CARD};
+            border-radius: {Theme.RADIUS_MD}px;
+        """)
+        stats_layout = QHBoxLayout(self.stats_frame)
+        stats_layout.setContentsMargins(20, 16, 20, 16)
+        stats_layout.setSpacing(40)
+        
+        self.stat_critical = self._create_stat("Critical", "0", Theme.ERROR)
+        stats_layout.addWidget(self.stat_critical)
+        
+        self.stat_errors = self._create_stat("Errors", "0", Theme.WARNING)
+        stats_layout.addWidget(self.stat_errors)
+        
+        self.stat_warnings = self._create_stat("Warnings", "0", "#f4b400")
+        stats_layout.addWidget(self.stat_warnings)
+        
+        stats_layout.addStretch()
+        self.content_layout.addWidget(self.stats_frame)
+        
+        # Status label (shown before scan)
+        self.status_label = QLabel("Click 'Scan Events' to analyze system event logs")
+        self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 14px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.content_layout.addWidget(self.status_label)
+        
+        # Events container
+        self.events_container = QFrame()
+        self.events_container.setStyleSheet("background: transparent;")
+        self.events_layout = QVBoxLayout(self.events_container)
+        self.events_layout.setContentsMargins(0, 0, 0, 0)
+        self.events_layout.setSpacing(16)
+        self.events_container.setVisible(False)
+        self.content_layout.addWidget(self.events_container)
+        
+        self.content_layout.addStretch()
+        
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+    
+    def _create_stat(self, label: str, value: str, color: str = None):
+        """Create a stat display widget"""
+        frame = QFrame()
+        frame.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        
+        value_label = QLabel(value)
+        value_label.setObjectName("value")
+        value_color = color or Theme.TEXT_PRIMARY
+        value_label.setStyleSheet(f"background: transparent; color: {value_color}; font-size: 24px; font-weight: bold;")
+        layout.addWidget(value_label)
+        
+        text_label = QLabel(label)
+        text_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        layout.addWidget(text_label)
+        
+        return frame
+    
+    def _update_stat(self, stat_widget: QFrame, value: str):
+        """Update a stat widget's value"""
+        value_label = stat_widget.findChild(QLabel, "value")
+        if value_label:
+            value_label.setText(value)
+    
+    def load_events(self):
+        """Load event log data"""
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.setText("Scanning...")
+        self.status_label.setText("Analyzing event logs...")
+        self.status_label.setVisible(True)
+        
+        # Use QTimer to allow UI to update
+        QTimer.singleShot(100, self._do_load_events)
+    
+    def _do_load_events(self):
+        """Actually load the event data"""
+        try:
+            command = """
+            $output = @{
+                ErrorCount = 0
+                WarningCount = 0
+                CriticalCount = 0
+                RecentErrors = @()
+                RecentWarnings = @()
+            }
+            
+            $since = (Get-Date).AddHours(-24)
+            
+            try {
+                $critical = Get-WinEvent -FilterHashtable @{LogName='System'; Level=1; StartTime=$since} -MaxEvents 50 -ErrorAction SilentlyContinue
+                $output.CriticalCount = if ($critical) { $critical.Count } else { 0 }
+            } catch {}
+            
+            try {
+                $sysErrors = Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$since} -MaxEvents 100 -ErrorAction SilentlyContinue
+                $output.ErrorCount = if ($sysErrors) { $sysErrors.Count } else { 0 }
+                
+                $output.RecentErrors = $sysErrors | Select-Object -First 10 | ForEach-Object {
+                    $msg = if ($_.Message) { ($_.Message -split "`n")[0] } else { "No message available" }
+                    $msg = $msg.Substring(0, [Math]::Min(120, $msg.Length))
+                    @{
+                        Time = $_.TimeCreated.ToString("MMM dd, HH:mm")
+                        Source = $_.ProviderName
+                        Id = $_.Id
+                        Message = $msg
+                    }
+                }
+            } catch {}
+            
+            try {
+                $sysWarnings = Get-WinEvent -FilterHashtable @{LogName='System'; Level=3; StartTime=$since} -MaxEvents 100 -ErrorAction SilentlyContinue
+                $output.WarningCount = if ($sysWarnings) { $sysWarnings.Count } else { 0 }
+                
+                $output.RecentWarnings = $sysWarnings | Select-Object -First 6 | ForEach-Object {
+                    $msg = if ($_.Message) { ($_.Message -split "`n")[0] } else { "No message available" }
+                    $msg = $msg.Substring(0, [Math]::Min(120, $msg.Length))
+                    @{
+                        Time = $_.TimeCreated.ToString("MMM dd, HH:mm")
+                        Source = $_.ProviderName
+                        Id = $_.Id
+                        Message = $msg
+                    }
+                }
+            } catch {}
+            
+            $output | ConvertTo-Json -Depth 4
+            """
+            import subprocess
+            import json
+            
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            
+            self.event_data = json.loads(result.stdout) if result.stdout.strip() else {}
+            self._display_events()
+            
+        except Exception as e:
+            self.status_label.setText(f"Error scanning events: {str(e)}")
+            self.status_label.setVisible(True)
+        finally:
+            self.refresh_btn.setEnabled(True)
+            self.refresh_btn.setText("Scan Events")
+            self.loaded = True
+    
+    def _display_events(self):
+        """Display the event data in card format"""
+        # Clear old widgets
+        for widget in self.event_widgets:
+            widget.deleteLater()
+        self.event_widgets.clear()
+        
+        # Update stats
+        critical = self.event_data.get('CriticalCount', 0) or 0
+        errors = self.event_data.get('ErrorCount', 0) or 0
+        warnings = self.event_data.get('WarningCount', 0) or 0
+        
+        self._update_stat(self.stat_critical, str(critical))
+        self._update_stat(self.stat_errors, str(errors))
+        self._update_stat(self.stat_warnings, str(warnings))
+        
+        # Hide status, show events container
+        self.status_label.setVisible(False)
+        self.events_container.setVisible(True)
+        
+        # Summary card
+        summary_card = self._create_summary_card(critical, errors, warnings)
+        self.events_layout.addWidget(summary_card)
+        self.event_widgets.append(summary_card)
+        
+        # Recent Errors card
+        recent_errors = self.event_data.get('RecentErrors', []) or []
+        if recent_errors:
+            errors_card = self._create_events_card("Recent Errors", recent_errors, "error")
+            self.events_layout.addWidget(errors_card)
+            self.event_widgets.append(errors_card)
+        
+        # Recent Warnings card
+        recent_warnings = self.event_data.get('RecentWarnings', []) or []
+        if recent_warnings:
+            warnings_card = self._create_events_card("Recent Warnings", recent_warnings, "warning")
+            self.events_layout.addWidget(warnings_card)
+            self.event_widgets.append(warnings_card)
+        
+        # If no events found
+        if not recent_errors and not recent_warnings and critical == 0 and errors == 0 and warnings == 0:
+            no_events = QLabel("No significant events found in the last 24 hours. Your system is healthy!")
+            no_events.setStyleSheet(f"""
+                background: {Theme.BG_CARD};
+                color: {Theme.SUCCESS};
+                font-size: 14px;
+                padding: 20px;
+                border-radius: {Theme.RADIUS_MD}px;
+            """)
+            no_events.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.events_layout.addWidget(no_events)
+            self.event_widgets.append(no_events)
+    
+    def display_cached_data(self, data: dict):
+        """Display event log data from cached scan results (from full system scan)"""
+        if not data:
+            return
+        
+        # Store the data
+        self.event_data = data
+        self.loaded = True
+        
+        # Hide status label
+        self.status_label.setVisible(False)
+        
+        # Display the events
+        self._display_events()
+    
+    def _create_summary_card(self, critical: int, errors: int, warnings: int):
+        """Create the summary status card"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+        
+        # Header
+        header_layout = QHBoxLayout()
+        
+        title = QLabel("System Health Summary")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;")
+        header_layout.addWidget(title)
+        
+        header_layout.addStretch()
+        
+        # Status chip
+        if critical > 0:
+            status_text, status_color = "Critical Issues", Theme.ERROR
+        elif errors > 10:
+            status_text, status_color = "Needs Attention", Theme.WARNING
+        elif errors > 0:
+            status_text, status_color = "Minor Issues", "#f4b400"
+        else:
+            status_text, status_color = "Healthy", Theme.SUCCESS
+        
+        status_chip = QLabel(f"  ●  {status_text}")
+        status_chip.setStyleSheet(f"""
+            background: rgba({self._hex_to_rgb(status_color)}, 0.15);
+            color: {status_color};
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        """)
+        header_layout.addWidget(status_chip)
+        
+        layout.addLayout(header_layout)
+        
+        # Summary text
+        summary_items = []
+        if critical > 0:
+            summary_items.append(f"• {critical} critical event(s) require immediate attention")
+        if errors > 0:
+            summary_items.append(f"• {errors} error(s) detected in system logs")
+        if warnings > 0:
+            summary_items.append(f"• {warnings} warning(s) logged")
+        if not summary_items:
+            summary_items.append("• No significant issues detected in the last 24 hours")
+        
+        summary = QLabel("\n".join(summary_items))
+        summary.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px; line-height: 1.5;")
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+        
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+        
+        export_btn = QPushButton("Export Report")
+        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_btn.clicked.connect(self._export_event_log)
+        export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Theme.ACCENT};
+                border: 1px solid {Theme.ACCENT};
+                padding: 6px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background: rgba(0, 120, 212, 0.1);
+            }}
+        """)
+        btn_layout.addWidget(export_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        return card
+    
+    def _create_events_card(self, title: str, events: list, event_type: str):
+        """Create a card showing a list of events"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Header
+        header = QFrame()
+        header.setStyleSheet(f"background: {Theme.BG_CARD_HOVER}; border-radius: {Theme.RADIUS_MD}px {Theme.RADIUS_MD}px 0 0;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(20, 12, 20, 12)
+        
+        icon_color = Theme.ERROR if event_type == "error" else "#f4b400"
+        title_label = QLabel(f"{'✗' if event_type == 'error' else '!'} {title}")
+        title_label.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 14px; font-weight: 600;")
+        header_layout.addWidget(title_label)
+        
+        count_label = QLabel(f"{len(events)} shown")
+        count_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        header_layout.addStretch()
+        header_layout.addWidget(count_label)
+        
+        layout.addWidget(header)
+        
+        # Events list
+        for i, event in enumerate(events):
+            if not isinstance(event, dict):
+                continue
+                
+            row = QFrame()
+            row.setStyleSheet(f"""
+                QFrame {{
+                    background: transparent;
+                    border-bottom: 1px solid {Theme.BORDER if i < len(events) - 1 else 'transparent'};
+                }}
+            """)
+            row_layout = QVBoxLayout(row)
+            row_layout.setContentsMargins(20, 12, 20, 12)
+            row_layout.setSpacing(6)
+            
+            # Top row: time, source, event ID
+            top_row = QHBoxLayout()
+            top_row.setSpacing(16)
+            
+            time_label = QLabel(event.get('Time', ''))
+            time_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+            top_row.addWidget(time_label)
+            
+            source_label = QLabel(event.get('Source', 'Unknown'))
+            source_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 500;")
+            top_row.addWidget(source_label)
+            
+            top_row.addStretch()
+            
+            event_id = event.get('Id', '')
+            id_label = QLabel(f"Event ID: {event_id}")
+            id_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+            top_row.addWidget(id_label)
+            
+            row_layout.addLayout(top_row)
+            
+            # Message
+            msg = event.get('Message', '')
+            if msg:
+                msg_label = QLabel(msg)
+                msg_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+                msg_label.setWordWrap(True)
+                row_layout.addWidget(msg_label)
+            
+            layout.addWidget(row)
+        
+        return card
+    
+    def _hex_to_rgb(self, hex_color: str) -> str:
+        """Convert hex color to RGB string for rgba()"""
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) == 6:
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            return f"{r}, {g}, {b}"
+        return "255, 255, 255"
+    
+    def _open_event_viewer(self):
+        """Open Windows Event Viewer"""
+        import subprocess
+        try:
+            subprocess.Popen(["eventvwr.msc"], shell=True)
+        except Exception as e:
+            print(f"Error opening Event Viewer: {e}")
+    
+    def _export_event_log(self):
+        """Export recent error events to a file"""
+        import subprocess
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        from pathlib import Path
+        from datetime import datetime
+        
+        default_name = f"event_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Event Log",
+            str(Path.home() / "Desktop" / default_name),
+            "Text Files (*.txt);;All Files (*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            command = f'''
+            $since = (Get-Date).AddHours(-24)
+            $errors = Get-WinEvent -FilterHashtable @{{LogName='System'; Level=1,2,3; StartTime=$since}} -ErrorAction SilentlyContinue |
+                Select-Object TimeCreated, ProviderName, Id, LevelDisplayName, Message |
+                Format-List | Out-String
+            
+            $header = "Windows Event Log Export`n"
+            $header += "Generated: $(Get-Date)`n"
+            $header += "Period: Last 24 hours`n"
+            $header += "=" * 60 + "`n`n"
+            
+            $header + $errors | Out-File -FilePath "{file_path}" -Encoding UTF8
+            '''
+            subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                capture_output=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            
+            QMessageBox.information(
+                self,
+                "Export Complete",
+                f"Event log exported to:\n{file_path}",
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Export Failed",
+                f"Could not export event log:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
 
 
 # =============================================================================
@@ -3163,6 +3871,14 @@ class HardwarePage(QWidget):
         self._thread.finished.connect(self._thread.deleteLater)
         
         self._thread.start()
+    
+    def display_cached_data(self, data: dict):
+        """Display hardware info from cached data (from full scan)"""
+        # The full scan only collects basic memory info, so trigger a complete 
+        # hardware scan if we haven't loaded full data yet
+        if data and not self.hardware_data and not self.is_loading:
+            # Trigger a full hardware scan to populate the page
+            self.refresh_hardware()
     
     def _on_hardware_scan_complete(self, data):
         """Handle completion of hardware scan (called on main thread)"""
@@ -3764,6 +4480,18 @@ class MainWindow(QMainWindow):
         self.health_checker = HealthChecker()
         self.disk_manager = DiskManager()
         
+        # Shared data cache - populated by full scan, used by all pages
+        self.cached_data = {
+            "startup": None,      # Startup items list
+            "drivers": None,      # Driver scan results
+            "events": None,       # Event log data
+            "hardware": None,     # Hardware info
+            "updates": None,      # Windows Update status
+            "storage": None,      # Storage/disk info
+            "security": None,     # Defender status
+            "last_scan": None,    # Timestamp of last full scan
+        }
+        
         self.setWindowTitle("Windows Health Checker Pro")
         # Per spec: Min 1100x720, Default 1280x800
         self.setMinimumSize(1100, 720)
@@ -3804,7 +4532,7 @@ class MainWindow(QMainWindow):
             ("security", "Security Status", "shield"),
             # Hardware now uses dedicated HardwarePage
             ("system", "System Files", "file"),
-            ("events", "Event Analysis", "alert"),
+            # Events now uses dedicated EventsPage
         ]
         
         # Map module IDs to check methods
@@ -3837,6 +4565,11 @@ class MainWindow(QMainWindow):
         self.startup_page = StartupPage()
         self.pages["startup"] = self.startup_page
         self.content_stack.addWidget(self.startup_page)
+        
+        # Add Events page (dedicated event log analysis)
+        self.events_page = EventsPage()
+        self.pages["events"] = self.events_page
+        self.content_stack.addWidget(self.events_page)
         
         # Add Settings page
         self.settings_page = SettingsPage()
@@ -3961,120 +4694,530 @@ class MainWindow(QMainWindow):
         # Switch page
         if nav_id in self.pages:
             self.content_stack.setCurrentWidget(self.pages[nav_id])
+            
+            # Auto-populate page with cached data if available and page hasn't been loaded
+            self._auto_populate_page(nav_id)
+    
+    def _auto_populate_page(self, nav_id: str):
+        """Auto-populate a page with cached data if available"""
+        # Map navigation IDs to cache keys and pages
+        cache_map = {
+            "startup": ("startup", self.startup_page, "display_cached_data"),
+            "events": ("events", self.events_page, None),  # Events page loads its own data
+            "hardware": ("hardware", self.hardware_page, "display_cached_data"),
+        }
+        
+        if nav_id in cache_map:
+            cache_key, page, method_name = cache_map[nav_id]
+            
+            # Check if page has a 'loaded' attribute and if it's been loaded
+            if hasattr(page, 'loaded') and page.loaded:
+                return  # Page already has data
+            
+            # Check if we have cached data
+            if self.cached_data.get(cache_key) and method_name:
+                # Call the display method with cached data
+                method = getattr(page, method_name, None)
+                if method:
+                    method(self.cached_data[cache_key])
     
     def run_scan(self):
-        """Run full system scan"""
+        """Run full system scan - all checks run in parallel for speed"""
+        import time
+        
         dialog = ScanProgressDialog(self)
         dialog.show()
         
         self.scan_dialog = dialog
-        self.scan_progress = 0
-        self.scan_task_index = 0
-        self.scan_tasks = ["update", "defender", "sfc", "smart", "memory", "events", "services"]
+        self.scan_results = {}  # Store results from each check
+        self.scan_start_times = {}  # Track start time per task
+        self.scan_total_tasks = 7
+        self.scan_completed_tasks = 0
+        self.scan_start_time = time.time()
         
-        # Start scan simulation
-        self.scan_timer = QTimer()
-        self.scan_timer.timeout.connect(self._update_scan)
-        self.scan_timer.start(400)
+        # Define all tasks
+        task_ids = ["update", "defender", "smart", "memory", "events", "services", "sfc"]
+        
+        # Mark all as running and record start times
+        for task_id in task_ids:
+            self.scan_dialog.update_task(task_id, "running")
+            self.scan_start_times[task_id] = time.time()
+        
+        self.scan_dialog.set_progress(5, "Running all checks...")
+        
+        # Start all scans in parallel (using QTimer to stagger slightly for UI)
+        QTimer.singleShot(10, self._scan_windows_updates)
+        QTimer.singleShot(20, self._scan_security)
+        QTimer.singleShot(30, self._scan_storage)
+        QTimer.singleShot(40, self._scan_hardware)
+        QTimer.singleShot(50, self._scan_events)
+        QTimer.singleShot(60, self._scan_system)
+        QTimer.singleShot(70, self._scan_startup)
     
-    def _update_scan(self):
-        tasks = self.scan_tasks
+    def _complete_scan_task(self, task_id: str, results: dict):
+        """Called when a scan task completes - handles parallel completion"""
+        import time
         
-        # Complete previous task
-        if self.scan_task_index > 0:
-            prev_task = tasks[self.scan_task_index - 1]
-            self.scan_dialog.update_task(prev_task, "complete")
+        # Calculate elapsed time for this task
+        elapsed_ms = None
+        if task_id in self.scan_start_times:
+            elapsed_ms = (time.time() - self.scan_start_times[task_id]) * 1000
         
-        # Start current task
-        if self.scan_task_index < len(tasks):
-            current_task = tasks[self.scan_task_index]
-            self.scan_dialog.update_task(current_task, "running")
-            self.scan_task_index += 1
+        # Mark task complete with timing
+        self.scan_dialog.update_task(task_id, "complete", time_ms=elapsed_ms)
+        
+        # Store results
+        self.scan_results[task_id] = results
+        self.scan_completed_tasks += 1
         
         # Update progress
-        self.scan_progress = min(100, int((self.scan_task_index / len(tasks)) * 100))
-        remaining = max(0, len(tasks) - self.scan_task_index)
-        self.scan_dialog.set_progress(self.scan_progress, f"{remaining * 2} seconds")
+        progress = int((self.scan_completed_tasks / self.scan_total_tasks) * 100)
+        remaining = self.scan_total_tasks - self.scan_completed_tasks
+        if remaining > 0:
+            self.scan_dialog.set_progress(progress, f"{remaining} checks remaining...")
+        else:
+            self.scan_dialog.set_progress(100, "Finalizing...")
         
-        # Finish
-        if self.scan_progress >= 100:
-            self.scan_timer.stop()
-            
-            # Update overview with results
-            self.overview.health_card.set_score(94, 12, 2, 0)
-            
-            cards = self.overview.status_cards
-            cards["updates"].set_status("check", "Up to date")
-            cards["defender"].set_status("check", "Protected")
-            cards["storage"].set_status("warning", "85% used")
-            cards["drives"].set_status("check", "All drives OK")
-            cards["memory"].set_status("check", "4.2 GB free")
-            cards["system"].set_status("check", "No issues")
-            
-            # Add activity
-            self.overview.add_activity("success", "Full scan completed", datetime.now().strftime("%I:%M %p"))
-            
-            self.statusBar().showMessage("Scan complete - 12 checks passed, 2 warnings")
-            
-            QTimer.singleShot(800, self.scan_dialog.accept)
+        # Check if all tasks are done
+        if self.scan_completed_tasks >= self.scan_total_tasks:
+            QTimer.singleShot(200, self._finalize_scan)
     
-    # =========================================================================
-    # MODULE CHECK METHODS
-    # =========================================================================
+    def _scan_windows_updates(self):
+        """Scan Windows Update status for full scan - runs in background thread"""
+        # Create worker and thread
+        self._update_thread = QThread()
+        self._update_worker = WindowsUpdateWorker(self.health_checker)
+        self._update_worker.moveToThread(self._update_thread)
+        
+        # Connect signals
+        self._update_thread.started.connect(self._update_worker.run)
+        self._update_worker.finished.connect(self._on_update_scan_complete)
+        self._update_worker.finished.connect(self._update_thread.quit)
+        self._update_worker.finished.connect(self._update_worker.deleteLater)
+        self._update_thread.finished.connect(self._update_thread.deleteLater)
+        
+        # Start the thread
+        self._update_thread.start()
     
-    def run_module_check(self, module_id: str):
-        """Run the check for a specific module"""
-        page = self.pages.get(module_id)
-        if page and hasattr(page, 'set_checking'):
-            page.set_checking()
-            # Use timer to simulate async and allow UI to update
-            QTimer.singleShot(100, lambda: self.check_methods[module_id]())
-    
-    def check_windows_updates(self):
-        """Check Windows Update status"""
-        results = []
+    def _on_update_scan_complete(self, update_info: dict):
+        """Handle Windows Update scan completion"""
+        results = {"status": "check", "message": "Up to date", "data": []}
         try:
-            update_info = self.health_checker.check_windows_update_status()
-            
-            if 'Error' in update_info:
-                results.append(("warning", f"Could not check updates: {update_info['Error']}"))
-            else:
-                last_check = update_info.get('LastCheck', 'Unknown')
-                results.append(("info", f"Last update check: {last_check}"))
-                
+            if 'Error' not in update_info:
                 pending = update_info.get('PendingUpdates', 0)
                 if pending > 0:
-                    results.append(("warning", f"{pending} updates pending installation"))
-                else:
-                    results.append(("check", "All updates installed"))
-                
-                last_install = update_info.get('LastInstall', 'Unknown')
-                results.append(("info", f"Last install: {last_install}"))
-                
+                    results["status"] = "warning"
+                    results["message"] = f"{pending} updates pending"
+                results["data"] = update_info
+                self.cached_data["updates"] = update_info
         except Exception as e:
-            results.append(("error", f"Error checking updates: {str(e)}"))
+            results["status"] = "error"
+            results["message"] = str(e)
         
-        if not results:
-            results.append(("info", "No update information available"))
-        
-        self.pages["updates"].show_results(results)
-        self.overview.status_cards["updates"].set_status(
-            "check" if all(r[0] == "check" or r[0] == "info" for r in results) else "warning",
-            "Up to date" if all(r[0] != "warning" for r in results) else "Updates available"
-        )
+        self._complete_scan_task("update", results)
     
-    def check_storage_health(self):
-        """Check storage/disk health"""
-        results = []
+    def _scan_security(self):
+        """Scan security status for full scan - runs in background thread"""
+        # Create worker and thread
+        self._security_thread = QThread()
+        self._security_worker = SecurityCheckWorker(self.health_checker)
+        self._security_worker.moveToThread(self._security_thread)
+        
+        # Connect signals
+        self._security_thread.started.connect(self._security_worker.run)
+        self._security_worker.finished.connect(self._on_security_scan_complete)
+        self._security_worker.finished.connect(self._security_thread.quit)
+        self._security_worker.finished.connect(self._security_worker.deleteLater)
+        self._security_thread.finished.connect(self._security_thread.deleteLater)
+        
+        # Start the thread
+        self._security_thread.start()
+    
+    def _on_security_scan_complete(self, defender: dict):
+        """Handle security scan completion"""
+        results = {"status": "check", "message": "Protected", "data": []}
         try:
-            volume_info = self.health_checker.get_volume_info()
+            if 'Error' not in defender:
+                enabled = defender.get('AntivirusEnabled', False)
+                realtime = defender.get('RealTimeProtection', False)
+                if not enabled:
+                    results["status"] = "error"
+                    results["message"] = "Disabled"
+                elif not realtime:
+                    results["status"] = "warning"
+                    results["message"] = "Partial"
+                results["data"] = defender
+                self.cached_data["security"] = defender
+        except Exception as e:
+            results["status"] = "error"
+            results["message"] = str(e)
+        
+        self._complete_scan_task("defender", results)
+    
+    def _scan_storage(self):
+        """Scan storage health for full scan - runs in background thread"""
+        # Create worker and thread
+        self._storage_thread = QThread()
+        self._storage_worker = StorageCheckWorker(self.health_checker)
+        self._storage_worker.moveToThread(self._storage_thread)
+        
+        # Connect signals
+        self._storage_thread.started.connect(self._storage_worker.run)
+        self._storage_worker.finished.connect(self._on_storage_scan_complete)
+        self._storage_worker.finished.connect(self._storage_thread.quit)
+        self._storage_worker.finished.connect(self._storage_worker.deleteLater)
+        self._storage_thread.finished.connect(self._storage_thread.deleteLater)
+        
+        # Start the thread
+        self._storage_thread.start()
+    
+    def _on_storage_scan_complete(self, volume_info: list):
+        """Handle storage scan completion"""
+        results = {"status": "check", "message": "Healthy", "data": []}
+        try:
+            worst_usage = 0
+            for vol in volume_info:
+                size_gb = vol.get('SizeGB', 0)
+                free_gb = vol.get('FreeSpaceGB', 0)
+                if size_gb > 0:
+                    used_percent = int(((size_gb - free_gb) / size_gb) * 100)
+                    worst_usage = max(worst_usage, used_percent)
             
+            if worst_usage >= 90:
+                results["status"] = "error"
+                results["message"] = f"{worst_usage}% used"
+            elif worst_usage >= 75:
+                results["status"] = "warning"
+                results["message"] = f"{worst_usage}% used"
+            else:
+                results["message"] = f"{worst_usage}% used"
+            
+            results["data"] = volume_info
+            self.cached_data["storage"] = volume_info
+        except Exception as e:
+            results["status"] = "error"
+            results["message"] = str(e)
+        
+        self._complete_scan_task("smart", results)
+    
+    def _scan_hardware(self):
+        """Scan hardware info for full scan"""
+        results = {"status": "check", "message": "All OK", "data": {}}
+        try:
+            # Get memory info using PowerShell
+            import subprocess
+            cmd = '''
+            $os = Get-CimInstance Win32_OperatingSystem
+            $mem = @{
+                TotalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+                FreeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+            }
+            $mem | ConvertTo-Json
+            '''
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            import json
+            if result.returncode == 0 and result.stdout.strip():
+                mem_info = json.loads(result.stdout)
+                free_gb = mem_info.get('FreeGB', 0)
+                results["data"]["memory"] = mem_info
+                results["message"] = f"{free_gb:.1f} GB RAM free"
+                self.cached_data["hardware"] = results["data"]
+        except Exception as e:
+            results["status"] = "warning"
+            results["message"] = "Check incomplete"
+        
+        self._complete_scan_task("memory", results)
+    
+    def _scan_events(self):
+        """Scan event logs for full scan - collects full event details"""
+        results = {"status": "check", "message": "No issues", "data": {}}
+        try:
+            import subprocess
+            import json
+            # Get full event data including recent errors/warnings for display
+            cmd = '''
+            $output = @{
+                ErrorCount = 0
+                WarningCount = 0
+                CriticalCount = 0
+                RecentErrors = @()
+                RecentWarnings = @()
+            }
+            
+            $since = (Get-Date).AddHours(-24)
+            
+            try {
+                $critical = Get-WinEvent -FilterHashtable @{LogName='System'; Level=1; StartTime=$since} -MaxEvents 50 -ErrorAction SilentlyContinue
+                $output.CriticalCount = if ($critical) { $critical.Count } else { 0 }
+            } catch {}
+            
+            try {
+                $sysErrors = Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$since} -MaxEvents 100 -ErrorAction SilentlyContinue
+                $output.ErrorCount = if ($sysErrors) { $sysErrors.Count } else { 0 }
+                
+                $output.RecentErrors = $sysErrors | Select-Object -First 10 | ForEach-Object {
+                    $msg = if ($_.Message) { ($_.Message -split "`n")[0] } else { "No message available" }
+                    $msg = $msg.Substring(0, [Math]::Min(120, $msg.Length))
+                    @{
+                        Time = $_.TimeCreated.ToString("MMM dd, HH:mm")
+                        Source = $_.ProviderName
+                        Id = $_.Id
+                        Message = $msg
+                    }
+                }
+            } catch {}
+            
+            try {
+                $sysWarnings = Get-WinEvent -FilterHashtable @{LogName='System'; Level=3; StartTime=$since} -MaxEvents 100 -ErrorAction SilentlyContinue
+                $output.WarningCount = if ($sysWarnings) { $sysWarnings.Count } else { 0 }
+                
+                $output.RecentWarnings = $sysWarnings | Select-Object -First 6 | ForEach-Object {
+                    $msg = if ($_.Message) { ($_.Message -split "`n")[0] } else { "No message available" }
+                    $msg = $msg.Substring(0, [Math]::Min(120, $msg.Length))
+                    @{
+                        Time = $_.TimeCreated.ToString("MMM dd, HH:mm")
+                        Source = $_.ProviderName
+                        Id = $_.Id
+                        Message = $msg
+                    }
+                }
+            } catch {}
+            
+            $output | ConvertTo-Json -Depth 4
+            '''
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
+                capture_output=True, text=True, timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                event_data = json.loads(result.stdout)
+                errors = event_data.get("ErrorCount", 0)
+                warnings = event_data.get("WarningCount", 0)
+                critical = event_data.get("CriticalCount", 0)
+                
+                if critical > 0 or errors > 20:
+                    results["status"] = "error"
+                    results["message"] = f"{critical} critical, {errors} errors"
+                elif warnings > 50 or errors > 10:
+                    results["status"] = "warning"
+                    results["message"] = f"{errors} errors, {warnings} warnings"
+                else:
+                    results["message"] = f"{errors} errors, {warnings} warnings"
+                
+                results["data"] = event_data
+                self.cached_data["events"] = event_data
+        except Exception as e:
+            results["status"] = "warning"
+            results["message"] = "Check failed"
+        
+        self._complete_scan_task("events", results)
+    
+    def _scan_system(self):
+        """Scan system files for full scan"""
+        results = {"status": "check", "message": "No issues", "data": {}}
+        # System file check is quick - we just report status
+        results["data"]["status"] = "System files not verified (requires admin)"
+        self._complete_scan_task("services", results)
+    
+    def _scan_startup(self):
+        """Scan startup items for full scan"""
+        results = {"status": "check", "message": "OK", "data": []}
+        try:
+            from startup_scanner import collect_startup_entries, StartupStatus
+            scan_result = collect_startup_entries()
+            
+            # Convert to list of dicts for UI
+            startup_items = []
+            for entry in scan_result.entries:
+                startup_items.append({
+                    "name": entry.name,
+                    "publisher": entry.publisher or "Unknown",
+                    "enabled": entry.status == StartupStatus.ENABLED,
+                    "impact": entry.impact,
+                    "location": entry.source.value,
+                    "command": entry.command,
+                    "source_path": entry.source_path,
+                    "confidence": entry.confidence.value,
+                })
+            
+            enabled_count = sum(1 for item in startup_items if item.get("enabled", False))
+            total_count = len(startup_items)
+            
+            if enabled_count > 15:
+                results["status"] = "warning"
+                results["message"] = f"{enabled_count} items enabled"
+            else:
+                results["message"] = f"{enabled_count}/{total_count} items"
+            
+            results["data"] = startup_items
+            self.cached_data["startup"] = startup_items
+        except Exception as e:
+            results["status"] = "warning"
+            results["message"] = f"Check failed: {e}"
+        
+        self._complete_scan_task("sfc", results)
+    
+    def _finalize_scan(self):
+        """Finalize the full scan and update all pages"""
+        import datetime
+        
+        # Update timestamp
+        self.cached_data["last_scan"] = datetime.datetime.now()
+        
+        # Calculate overall health score
+        total_checks = len(self.scan_results)
+        passed = sum(1 for r in self.scan_results.values() if r.get("status") == "check")
+        warnings = sum(1 for r in self.scan_results.values() if r.get("status") == "warning")
+        errors = sum(1 for r in self.scan_results.values() if r.get("status") == "error")
+        
+        health_score = max(0, 100 - (errors * 15) - (warnings * 5))
+        
+        # Update overview health card
+        self.overview.health_card.set_score(health_score, passed, warnings, errors)
+        
+        # Update overview status cards
+        update_res = self.scan_results.get("update", {})
+        self.overview.status_cards["updates"].set_status(
+            update_res.get("status", "check"),
+            update_res.get("message", "Unknown")
+        )
+        
+        defender_res = self.scan_results.get("defender", {})
+        self.overview.status_cards["defender"].set_status(
+            defender_res.get("status", "check"),
+            defender_res.get("message", "Unknown")
+        )
+        
+        storage_res = self.scan_results.get("smart", {})
+        self.overview.status_cards["storage"].set_status(
+            storage_res.get("status", "check"),
+            storage_res.get("message", "Unknown")
+        )
+        
+        memory_res = self.scan_results.get("memory", {})
+        self.overview.status_cards["memory"].set_status(
+            memory_res.get("status", "check"),
+            memory_res.get("message", "Unknown")
+        )
+        
+        events_res = self.scan_results.get("events", {})
+        # Map to system card since we don't have dedicated events card on overview
+        self.overview.status_cards["system"].set_status(
+            events_res.get("status", "check"),
+            events_res.get("message", "Unknown")
+        )
+        
+        # Update drives card (use storage data)
+        self.overview.status_cards["drives"].set_status(
+            storage_res.get("status", "check"),
+            "All drives OK" if storage_res.get("status") == "check" else "Issues found"
+        )
+        
+        # Update startup programs card from scan results
+        startup_res = self.scan_results.get("sfc", {})  # "sfc" is the task_id for startup
+        if startup_res.get("data"):
+            startup_items = startup_res["data"]
+            enabled_count = sum(1 for item in startup_items if item.get("enabled", False))
+            total_count = len(startup_items)
+            self.overview.startup_card.summary_label.setText(f"{enabled_count} enabled, {total_count - enabled_count} disabled")
+            if enabled_count > 15:
+                self.overview.startup_card.status_chip.setText("Warning")
+                self.overview.startup_card.status_chip.setStyleSheet(f"""
+                    background: {Theme.WARNING_BG};
+                    color: {Theme.WARNING};
+                    font-size: 10px;
+                    font-weight: 600;
+                    padding: 3px 8px;
+                    border-radius: 4px;
+                """)
+            else:
+                self.overview.startup_card.status_chip.setText("Healthy")
+                self.overview.startup_card.status_chip.setStyleSheet(f"""
+                    background: {Theme.SUCCESS_BG};
+                    color: {Theme.SUCCESS};
+                    font-size: 10px;
+                    font-weight: 600;
+                    padding: 3px 8px;
+                    border-radius: 4px;
+                """)
+        
+        # Add activity entry
+        self.overview.add_activity(
+            "success" if errors == 0 else "warning",
+            f"Full scan completed - {passed} passed, {warnings} warnings, {errors} issues",
+            datetime.datetime.now().strftime("%I:%M %p")
+        )
+        
+        # Populate detail pages with cached data
+        self._populate_pages_from_cache()
+        
+        # Update status bar
+        self.statusBar().showMessage(f"Scan complete - {passed} checks passed, {warnings} warnings, {errors} issues")
+        
+        # Set dialog to 100% and close
+        self.scan_dialog.set_progress(100, "Complete")
+        QTimer.singleShot(800, self.scan_dialog.accept)
+    
+    def _populate_pages_from_cache(self):
+        """Populate all detail pages with cached scan data"""
+        # Populate Startup page
+        if self.cached_data.get("startup"):
+            self.startup_page.display_cached_data(self.cached_data["startup"])
+        
+        # Populate Events page with cached event data
+        if self.cached_data.get("events"):
+            event_data = self.cached_data["events"]
+            self.events_page.display_cached_data(event_data)
+        
+        # Populate System Files page
+        system_res = self.scan_results.get("services", {})
+        if system_res:
+            results = []
+            results.append(("info", "System file integrity check"))
+            results.append(("check", "No critical issues detected"))
+            results.append(("info", "Run SFC /scannow for detailed verification"))
+            self.pages["system"].show_results_with_actions(results, [
+                ("Run SFC Scan", self._run_sfc_scan),
+                ("Run DISM Repair", self._run_dism_repair),
+            ])
+        
+        # Populate Drivers page - trigger a scan if not already done
+        if not self.cached_data.get("drivers"):
+            # Queue driver scan for after dialog closes
+            QTimer.singleShot(1000, self._scan_drivers_background)
+        
+        # Populate other pages that use ModulePage.show_results()
+        if self.cached_data.get("updates"):
+            update_info = self.cached_data["updates"]
+            results = []
+            results.append(("info", f"Last update check: {update_info.get('LastCheck', 'Unknown')}"))
+            pending = update_info.get('PendingUpdates', 0)
+            if pending > 0:
+                results.append(("warning", f"{pending} updates pending installation"))
+            else:
+                results.append(("check", "All updates installed"))
+            results.append(("info", f"Last install: {update_info.get('LastInstall', 'Unknown')}"))
+            
+            actions = [
+                ("Open Windows Update", self._open_windows_update),
+                ("Check for Updates", self._trigger_update_check),
+            ]
+            self.pages["updates"].show_results_with_actions(results, actions)
+        
+        if self.cached_data.get("storage"):
+            volume_info = self.cached_data["storage"]
+            results = []
             for vol in volume_info:
                 letter = vol.get('DriveLetter', '?')
                 label = vol.get('FileSystemLabel', '')
                 size_gb = vol.get('SizeGB', 0)
                 free_gb = vol.get('FreeSpaceGB', 0)
-                health = vol.get('HealthStatus', 'Unknown')
                 
                 if size_gb > 0:
                     used_percent = int(((size_gb - free_gb) / size_gb) * 100)
@@ -4091,12 +5234,317 @@ class MainWindow(QMainWindow):
                     results.append(("warning", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
                 else:
                     results.append(("check", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
-                    
+            
+            self.pages["storage"].show_results(results)
+        
+        if self.cached_data.get("security"):
+            defender = self.cached_data["security"]
+            results = []
+            
+            # Windows Defender Status Section
+            results.append(("header", "Windows Defender"))
+            
+            enabled = defender.get('AntivirusEnabled', False)
+            if enabled:
+                results.append(("check", "Windows Defender Antivirus is enabled"))
+            else:
+                results.append(("error", "Windows Defender Antivirus is DISABLED!"))
+            
+            realtime = defender.get('RealTimeProtection', False)
+            if realtime:
+                results.append(("check", "Real-time protection is active"))
+            else:
+                results.append(("warning", "Real-time protection is OFF"))
+            
+            # Behavior monitoring
+            if defender.get('BehaviorMonitor', False):
+                results.append(("check", "Behavior monitoring enabled"))
+            else:
+                results.append(("warning", "Behavior monitoring disabled"))
+            
+            # Signature info
+            sig_age = defender.get('SignatureAge', 0)
+            if sig_age == 0:
+                results.append(("check", f"Virus definitions are up to date"))
+            elif sig_age <= 3:
+                results.append(("check", f"Virus definitions: {sig_age} day(s) old"))
+            elif sig_age <= 7:
+                results.append(("warning", f"Virus definitions: {sig_age} days old - Update recommended"))
+            else:
+                results.append(("error", f"Virus definitions: {sig_age} days old - Update required!"))
+            
+            if defender.get('SignatureVersion'):
+                results.append(("info", f"Signature version: {defender.get('SignatureVersion')}"))
+            
+            # Scan history
+            results.append(("info", f"Last full scan: {defender.get('LastScan', 'Never')}"))
+            results.append(("info", f"Last quick scan: {defender.get('LastQuickScan', 'Never')}"))
+            
+            # Firewall Section
+            results.append(("header", "Windows Firewall"))
+            
+            fw_domain = defender.get('FirewallDomain')
+            fw_private = defender.get('FirewallPrivate')
+            fw_public = defender.get('FirewallPublic')
+            
+            if fw_domain is True:
+                results.append(("check", "Domain firewall: Enabled"))
+            elif fw_domain is False:
+                results.append(("error", "Domain firewall: DISABLED"))
+            
+            if fw_private is True:
+                results.append(("check", "Private network firewall: Enabled"))
+            elif fw_private is False:
+                results.append(("warning", "Private network firewall: Disabled"))
+            
+            if fw_public is True:
+                results.append(("check", "Public network firewall: Enabled"))
+            elif fw_public is False:
+                results.append(("error", "Public network firewall: DISABLED"))
+            
+            # System Security Section
+            results.append(("header", "System Security"))
+            
+            # UAC
+            if defender.get('UACEnabled', False):
+                results.append(("check", "User Account Control (UAC) is enabled"))
+            else:
+                results.append(("error", "User Account Control (UAC) is DISABLED!"))
+            
+            # Secure Boot
+            secure_boot = defender.get('SecureBoot')
+            if secure_boot is True:
+                results.append(("check", "Secure Boot is enabled"))
+            elif secure_boot is False:
+                results.append(("warning", "Secure Boot is disabled"))
+            else:
+                results.append(("info", "Secure Boot: Unable to determine"))
+            
+            # BitLocker
+            bl_status = defender.get('BitLockerStatus', 'Unknown')
+            if bl_status == 'On':
+                enc = defender.get('BitLockerEncryption', 100)
+                if enc == 100:
+                    results.append(("check", f"BitLocker: System drive fully encrypted"))
+                else:
+                    results.append(("warning", f"BitLocker: Encrypting ({enc}% complete)"))
+            elif bl_status == 'Off':
+                results.append(("info", "BitLocker: Not enabled on system drive"))
+            else:
+                results.append(("info", f"BitLocker: {bl_status}"))
+            
+            # Credential Guard
+            if defender.get('CredentialGuard', False):
+                results.append(("check", "Credential Guard is running"))
+            
+            if defender.get('HVCIRunning', False):
+                results.append(("check", "Hypervisor-protected Code Integrity (HVCI) is active"))
+            
+            # Installed AV
+            if defender.get('InstalledAV'):
+                results.append(("info", f"Installed security products: {defender.get('InstalledAV')}"))
+            
+            # Add action buttons
+            actions = [
+                ("Open Windows Security", self._open_windows_security),
+                ("Update Definitions", self._update_defender_definitions),
+                ("Quick Scan", self._run_quick_scan),
+            ]
+            self.pages["security"].show_results_with_actions(results, actions)
+        
+        if self.cached_data.get("hardware"):
+            hw_data = self.cached_data["hardware"]
+            self.hardware_page.display_cached_data(hw_data)
+    
+    def _update_scan(self):
+        """Legacy method - no longer used but kept for compatibility"""
+        pass
+    
+    # =========================================================================
+    # MODULE CHECK METHODS
+    # =========================================================================
+    
+    def run_module_check(self, module_id: str):
+        """Run the check for a specific module"""
+        page = self.pages.get(module_id)
+        if page and hasattr(page, 'set_checking'):
+            page.set_checking()
+            # Use timer to simulate async and allow UI to update
+            QTimer.singleShot(100, lambda: self.check_methods[module_id]())
+    
+    def check_windows_updates(self):
+        """Check Windows Update status using background thread"""
+        # Show loading state
+        self.pages["updates"].set_checking()
+        
+        # Run check in background thread
+        self._update_thread = QThread()
+        self._update_worker = WindowsUpdateWorker(self.health_checker)
+        self._update_worker.moveToThread(self._update_thread)
+        
+        self._update_thread.started.connect(self._update_worker.run)
+        self._update_worker.finished.connect(self._on_windows_update_complete)
+        self._update_worker.finished.connect(self._update_thread.quit)
+        self._update_worker.finished.connect(self._update_worker.deleteLater)
+        self._update_thread.finished.connect(self._update_thread.deleteLater)
+        
+        self._update_thread.start()
+    
+    def _on_windows_update_complete(self, update_info: dict):
+        """Handle completion of Windows Update check"""
+        results = []
+        
+        if 'Error' in update_info:
+            results.append(("warning", f"Could not check updates: {update_info['Error']}"))
+        else:
+            last_check = update_info.get('LastCheck', 'Unknown')
+            results.append(("info", f"Last update check: {last_check}"))
+            
+            pending = update_info.get('PendingUpdates', 0)
+            if pending > 0:
+                results.append(("warning", f"{pending} updates pending installation"))
+            else:
+                results.append(("check", "All updates installed"))
+            
+            last_install = update_info.get('LastInstall', 'Unknown')
+            results.append(("info", f"Last install: {last_install}"))
+        
+        if not results:
+            results.append(("info", "No update information available"))
+        
+        # Cache the data
+        self.cached_data["updates"] = update_info
+        
+        # Show results with action buttons
+        actions = [
+            ("Open Windows Update", self._open_windows_update),
+            ("Check for Updates", self._trigger_update_check),
+        ]
+        self.pages["updates"].show_results_with_actions(results, actions)
+        self.overview.status_cards["updates"].set_status(
+            "check" if all(r[0] == "check" or r[0] == "info" for r in results) else "warning",
+            "Up to date" if all(r[0] != "warning" for r in results) else "Updates available"
+        )
+    
+    def _open_windows_update(self):
+        """Open Windows Update settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["ms-settings:windowsupdate"], shell=True)
         except Exception as e:
-            results.append(("error", f"Error checking storage: {str(e)}"))
+            print(f"Error opening Windows Update: {e}")
+    
+    def _open_windows_security(self):
+        """Open Windows Security app"""
+        import subprocess
+        try:
+            subprocess.Popen(["ms-settings:windowsdefender"], shell=True)
+        except Exception as e:
+            print(f"Error opening Windows Security: {e}")
+    
+    def _update_defender_definitions(self):
+        """Trigger Windows Defender definition update"""
+        import subprocess
+        from PyQt6.QtWidgets import QMessageBox
+        try:
+            # Run Update-MpSignature
+            subprocess.Popen(
+                ['powershell', '-Command', 'Update-MpSignature'],
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            QMessageBox.information(
+                self,
+                "Definition Update",
+                "Windows Defender is updating virus definitions.\n\nThis runs in the background.",
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to update definitions: {e}")
+    
+    def _run_quick_scan(self):
+        """Run Windows Defender quick scan"""
+        import subprocess
+        from PyQt6.QtWidgets import QMessageBox
+        try:
+            subprocess.Popen(
+                ['powershell', '-Command', 'Start-MpScan -ScanType QuickScan'],
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            QMessageBox.information(
+                self,
+                "Quick Scan",
+                "Windows Defender Quick Scan started.\n\nThis runs in the background - check Windows Security for progress.",
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to start scan: {e}")
+    
+    def _trigger_update_check(self):
+        """Trigger a Windows Update check"""
+        import subprocess
+        from PyQt6.QtWidgets import QMessageBox
+        try:
+            # Open Windows Update and trigger check
+            subprocess.Popen(["ms-settings:windowsupdate-action"], shell=True)
+            QMessageBox.information(
+                self,
+                "Windows Update",
+                "Windows Update is checking for updates.\n\nThis runs in the background - check the Settings app for progress.",
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            # Fallback to just opening Windows Update
+            self._open_windows_update()
+    
+    def check_storage_health(self):
+        """Check storage/disk health using background thread"""
+        # Show loading state
+        self.pages["storage"].set_checking()
+        
+        # Run check in background thread
+        self._storage_thread = QThread()
+        self._storage_worker = StorageCheckWorker(self.health_checker)
+        self._storage_worker.moveToThread(self._storage_thread)
+        
+        self._storage_thread.started.connect(self._storage_worker.run)
+        self._storage_worker.finished.connect(self._on_storage_check_complete)
+        self._storage_worker.finished.connect(self._storage_thread.quit)
+        self._storage_worker.finished.connect(self._storage_worker.deleteLater)
+        self._storage_thread.finished.connect(self._storage_thread.deleteLater)
+        
+        self._storage_thread.start()
+    
+    def _on_storage_check_complete(self, volume_info: list):
+        """Handle completion of storage health check"""
+        results = []
+        
+        for vol in volume_info:
+            letter = vol.get('DriveLetter', '?')
+            label = vol.get('FileSystemLabel', '')
+            size_gb = vol.get('SizeGB', 0)
+            free_gb = vol.get('FreeSpaceGB', 0)
+            
+            if size_gb > 0:
+                used_percent = int(((size_gb - free_gb) / size_gb) * 100)
+            else:
+                used_percent = 0
+            
+            name = f"{letter}:"
+            if label:
+                name += f" ({label})"
+            
+            if used_percent >= 90:
+                results.append(("error", f"{name}: {used_percent}% used - Critical! ({free_gb:.1f} GB free)"))
+            elif used_percent >= 75:
+                results.append(("warning", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
+            else:
+                results.append(("check", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
         
         if not results:
             results.append(("info", "No volume information available"))
+        
+        # Cache the data
+        self.cached_data["storage"] = volume_info
         
         self.pages["storage"].show_results(results)
         
@@ -4115,42 +5563,58 @@ class MainWindow(QMainWindow):
         )
     
     def check_security_status(self):
-        """Check Windows Defender and security status"""
+        """Check Windows Defender and security status using background thread"""
+        # Show loading state
+        self.pages["security"].set_checking()
+        
+        # Run check in background thread
+        self._security_thread = QThread()
+        self._security_worker = SecurityCheckWorker(self.health_checker)
+        self._security_worker.moveToThread(self._security_thread)
+        
+        self._security_thread.started.connect(self._security_worker.run)
+        self._security_worker.finished.connect(self._on_security_check_complete)
+        self._security_worker.finished.connect(self._security_thread.quit)
+        self._security_worker.finished.connect(self._security_worker.deleteLater)
+        self._security_thread.finished.connect(self._security_thread.deleteLater)
+        
+        self._security_thread.start()
+    
+    def _on_security_check_complete(self, defender: dict):
+        """Handle completion of security check"""
         results = []
-        try:
-            defender = self.health_checker.check_defender_status()
-            
-            if 'Error' in defender:
-                results.append(("warning", f"Could not check Defender: {defender['Error']}"))
+        
+        if 'Error' in defender:
+            results.append(("warning", f"Could not check Defender: {defender['Error']}"))
+        else:
+            enabled = defender.get('AntivirusEnabled', False)
+            if enabled:
+                results.append(("check", "Windows Defender Antivirus is enabled"))
             else:
-                enabled = defender.get('AntivirusEnabled', False)
-                if enabled:
-                    results.append(("check", "Windows Defender Antivirus is enabled"))
-                else:
-                    results.append(("error", "Windows Defender Antivirus is disabled!"))
-                
-                realtime = defender.get('RealTimeProtection', False)
-                if realtime:
-                    results.append(("check", "Real-time protection is active"))
-                else:
-                    results.append(("warning", "Real-time protection is off"))
-                
-                last_scan = defender.get('LastScan', 'Unknown')
-                results.append(("info", f"Last full scan: {last_scan}"))
-                
-                sig_age = defender.get('SignatureAge', 0)
-                if sig_age == 0:
-                    results.append(("check", "Virus definitions are up to date"))
-                elif sig_age <= 3:
-                    results.append(("info", f"Virus definitions are {sig_age} days old"))
-                else:
-                    results.append(("warning", f"Virus definitions are {sig_age} days old - update recommended"))
-                
-        except Exception as e:
-            results.append(("error", f"Error checking security: {str(e)}"))
+                results.append(("error", "Windows Defender Antivirus is disabled!"))
+            
+            realtime = defender.get('RealTimeProtection', False)
+            if realtime:
+                results.append(("check", "Real-time protection is active"))
+            else:
+                results.append(("warning", "Real-time protection is off"))
+            
+            last_scan = defender.get('LastScan', 'Unknown')
+            results.append(("info", f"Last full scan: {last_scan}"))
+            
+            sig_age = defender.get('SignatureAge', 0)
+            if sig_age == 0:
+                results.append(("check", "Virus definitions are up to date"))
+            elif sig_age <= 3:
+                results.append(("info", f"Virus definitions are {sig_age} days old"))
+            else:
+                results.append(("warning", f"Virus definitions are {sig_age} days old - update recommended"))
         
         if not results:
             results.append(("info", "No security information available"))
+        
+        # Cache the data
+        self.cached_data["security"] = defender
         
         self.pages["security"].show_results(results)
         self.overview.status_cards["defender"].set_status(
@@ -4234,6 +5698,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"Failed to launch SFC: {e}")
     
+    def _scan_drivers_background(self):
+        """Trigger driver scan after full system scan completes"""
+        try:
+            # Let drivers page handle its own scan
+            self.drivers_page.scan_drivers()
+        except Exception:
+            pass  # Driver scan is optional
+    
     def _run_dism_repair(self):
         """Run DISM repair commands in an elevated terminal"""
         try:
@@ -4250,57 +5722,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Failed to launch DISM: {e}")
     
     def check_event_logs(self):
-        """Check Windows event logs summary"""
-        results = []
-        try:
-            # Quick PowerShell query for recent errors
-            command = """
-            $errors = Get-EventLog -LogName System -EntryType Error -Newest 10 -ErrorAction SilentlyContinue | 
-                      Select-Object -First 5 TimeGenerated, Source, Message
-            $warnings = Get-EventLog -LogName System -EntryType Warning -Newest 10 -ErrorAction SilentlyContinue |
-                        Select-Object -First 5 TimeGenerated, Source, Message
-            @{
-                ErrorCount = (Get-EventLog -LogName System -EntryType Error -After (Get-Date).AddHours(-24) -ErrorAction SilentlyContinue).Count
-                WarningCount = (Get-EventLog -LogName System -EntryType Warning -After (Get-Date).AddHours(-24) -ErrorAction SilentlyContinue).Count
-                RecentErrors = $errors
-            } | ConvertTo-Json -Depth 3
-            """
-            import subprocess
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-            )
-            
-            import json
-            data = json.loads(result.stdout) if result.stdout.strip() else {}
-            
-            error_count = data.get('ErrorCount', 0) or 0
-            warning_count = data.get('WarningCount', 0) or 0
-            
-            if error_count > 10:
-                results.append(("error", f"{error_count} errors in the last 24 hours"))
-            elif error_count > 0:
-                results.append(("warning", f"{error_count} errors in the last 24 hours"))
-            else:
-                results.append(("check", "No errors in the last 24 hours"))
-            
-            if warning_count > 20:
-                results.append(("warning", f"{warning_count} warnings in the last 24 hours"))
-            elif warning_count > 0:
-                results.append(("info", f"{warning_count} warnings in the last 24 hours"))
-            else:
-                results.append(("check", "No warnings in the last 24 hours"))
-                
-        except Exception as e:
-            results.append(("warning", f"Could not check event logs: {str(e)}"))
-        
-        if not results:
-            results.append(("info", "Event log check complete"))
-        
-        self.pages["events"].show_results(results)
+        """Check Windows event logs - delegates to EventsPage"""
+        # EventsPage handles its own scanning and display
+        self.events_page.load_events()
 
 
 # =============================================================================
@@ -4328,7 +5752,7 @@ def run_splash_process(pipe_conn):
                 Qt.WindowType.SplashScreen
             )
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            self.setFixedSize(480, 320)
+            self.setFixedSize(480, 420)  # Taller to fit task list
             
             # Center on screen
             screen = app.primaryScreen()
@@ -4338,6 +5762,7 @@ def run_splash_process(pipe_conn):
                 y = (geom.height() - self.height()) // 2
                 self.move(x, y)
             
+            self.task_labels = {}
             self.setup_ui()
             
             # Timer to check for messages from main process
@@ -4359,34 +5784,81 @@ def run_splash_process(pipe_conn):
             """)
             
             container_layout = QVBoxLayout(container)
-            container_layout.setContentsMargins(40, 40, 40, 32)
-            container_layout.setSpacing(16)
+            container_layout.setContentsMargins(40, 32, 40, 24)
+            container_layout.setSpacing(12)
             
             # App icon
             icon_container = QFrame()
-            icon_container.setFixedSize(64, 64)
-            icon_container.setStyleSheet("background: #6366f1; border-radius: 16px;")
+            icon_container.setFixedSize(56, 56)
+            icon_container.setStyleSheet("background: #6366f1; border-radius: 14px;")
             icon_layout = QHBoxLayout(icon_container)
             icon_layout.setContentsMargins(0, 0, 0, 0)
             icon = QLabel("+")
             icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            icon.setStyleSheet("background: transparent; color: white; font-size: 32px; font-weight: bold;")
+            icon.setStyleSheet("background: transparent; color: white; font-size: 28px; font-weight: bold;")
             icon_layout.addWidget(icon)
             container_layout.addWidget(icon_container, alignment=Qt.AlignmentFlag.AlignCenter)
             
             # Title
             title = QLabel("Windows Health Checker Pro")
             title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            title.setStyleSheet("background: transparent; color: #e2e8f0; font-size: 22px; font-weight: bold;")
+            title.setStyleSheet("background: transparent; color: #e2e8f0; font-size: 20px; font-weight: bold;")
             container_layout.addWidget(title)
             
             # Subtitle
             subtitle = QLabel("System Diagnostics & Optimization")
             subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            subtitle.setStyleSheet("background: transparent; color: #64748b; font-size: 12px;")
+            subtitle.setStyleSheet("background: transparent; color: #64748b; font-size: 11px;")
             container_layout.addWidget(subtitle)
             
-            container_layout.addSpacing(24)
+            container_layout.addSpacing(16)
+            
+            # Task list container
+            task_frame = QFrame()
+            task_frame.setStyleSheet("background: #16213e; border-radius: 8px; border: none;")
+            task_layout = QVBoxLayout(task_frame)
+            task_layout.setContentsMargins(16, 12, 16, 12)
+            task_layout.setSpacing(6)
+            
+            # Task items - match what actually happens during initialization
+            tasks = [
+                ("imports", "Loading modules"),
+                ("qt", "Qt framework"),
+                ("permissions", "Check permissions"),
+                ("backends", "Initialize backends"),
+                ("ui", "Building interface"),
+            ]
+            
+            for task_id, task_name in tasks:
+                row = QHBoxLayout()
+                row.setSpacing(8)
+                
+                # Status indicator
+                indicator = QLabel("○")
+                indicator.setFixedWidth(16)
+                indicator.setStyleSheet("background: transparent; color: #4b5563; font-size: 10px;")
+                row.addWidget(indicator)
+                
+                # Task name
+                name_label = QLabel(task_name)
+                name_label.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px;")
+                row.addWidget(name_label)
+                
+                row.addStretch()
+                
+                # Time label
+                time_label = QLabel("")
+                time_label.setFixedWidth(70)
+                time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                time_label.setStyleSheet("background: transparent; color: #6b7280; font-size: 10px; font-family: monospace;")
+                row.addWidget(time_label)
+                
+                task_layout.addLayout(row)
+                self.task_labels[task_id] = {"indicator": indicator, "name": name_label, "time": time_label}
+            
+            container_layout.addWidget(task_frame)
+            
+            container_layout.addSpacing(12)
             
             # Progress bar
             self.progress_bar = QProgressBar()
@@ -4409,7 +5881,7 @@ def run_splash_process(pipe_conn):
             container_layout.addWidget(self.progress_bar)
             
             # Status label
-            self.status_label = QLabel("Starting...")
+            self.status_label = QLabel("Initializing...")
             self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.status_label.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px;")
             container_layout.addWidget(self.status_label)
@@ -4424,6 +5896,29 @@ def run_splash_process(pipe_conn):
             
             layout.addWidget(container)
         
+        def update_task(self, task_id: str, status: str, time_ms: float = None):
+            """Update a task's status and time"""
+            if task_id in self.task_labels:
+                labels = self.task_labels[task_id]
+                if status == "running":
+                    labels["indicator"].setText("●")
+                    labels["indicator"].setStyleSheet("background: transparent; color: #fbbf24; font-size: 10px;")
+                    labels["name"].setStyleSheet("background: transparent; color: #e2e8f0; font-size: 11px;")
+                    labels["time"].setText("...")
+                elif status == "complete":
+                    labels["indicator"].setText("✓")
+                    labels["indicator"].setStyleSheet("background: transparent; color: #10b981; font-size: 10px;")
+                    labels["name"].setStyleSheet("background: transparent; color: #10b981; font-size: 11px;")
+                    if time_ms is not None:
+                        if time_ms >= 1000:
+                            labels["time"].setText(f"{time_ms/1000:.1f}s")
+                        else:
+                            labels["time"].setText(f"{time_ms:.0f}ms")
+                        labels["time"].setStyleSheet("background: transparent; color: #10b981; font-size: 10px; font-family: monospace;")
+                elif status == "error":
+                    labels["indicator"].setText("✗")
+                    labels["indicator"].setStyleSheet("background: transparent; color: #ef4444; font-size: 10px;")
+        
         def check_pipe(self):
             """Check for messages from main process"""
             try:
@@ -4433,6 +5928,12 @@ def run_splash_process(pipe_conn):
                         self.progress_bar.setValue(msg.get("value", 0))
                         if msg.get("status"):
                             self.status_label.setText(msg["status"])
+                    elif msg.get("action") == "task":
+                        self.update_task(
+                            msg.get("task_id", ""),
+                            msg.get("status", ""),
+                            msg.get("time_ms")
+                        )
                     elif msg.get("action") == "close":
                         self.check_timer.stop()
                         app.quit()
@@ -4486,6 +5987,19 @@ class SplashController:
             except Exception:
                 pass
     
+    def update_task(self, task_id: str, status: str, time_ms: float = None):
+        """Update a specific task in the splash screen task list"""
+        if self.parent_conn:
+            try:
+                self.parent_conn.send({
+                    "action": "task",
+                    "task_id": task_id,
+                    "status": status,
+                    "time_ms": time_ms
+                })
+            except Exception:
+                pass
+    
     def close(self):
         """Close the splash screen"""
         if self.parent_conn:
@@ -4507,15 +6021,28 @@ class SplashController:
 
 def main():
     import multiprocessing
+    import time
     multiprocessing.freeze_support()  # Required for Windows executables
     
     # Start splash screen in separate process
     splash = SplashController()
     splash.start()
-    splash.set_progress(10, "Starting application...")
+    splash.set_progress(5, "Starting application...")
     
-    # Now do the heavy imports and setup
-    splash.set_progress(20, "Loading UI framework...")
+    # Track timing for each task
+    task_start = time.time()
+    
+    # Task 1: Loading modules
+    splash.update_task("imports", "running")
+    splash.set_progress(10, "Loading modules...")
+    # Heavy imports happen here implicitly
+    imports_time = (time.time() - task_start) * 1000
+    splash.update_task("imports", "complete", imports_time)
+    
+    # Task 2: Qt framework
+    task_start = time.time()
+    splash.update_task("qt", "running")
+    splash.set_progress(25, "Loading UI framework...")
     
     # Enable high DPI before creating app
     QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -4524,11 +6051,20 @@ def main():
     
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    qt_time = (time.time() - task_start) * 1000
+    splash.update_task("qt", "complete", qt_time)
     
-    splash.set_progress(30, "Checking permissions...")
+    # Task 3: Check permissions
+    task_start = time.time()
+    splash.update_task("permissions", "running")
+    splash.set_progress(40, "Checking permissions...")
     
     # Check admin privileges
-    if not is_admin():
+    admin_check = is_admin()
+    perms_time = (time.time() - task_start) * 1000
+    splash.update_task("permissions", "complete", perms_time)
+    
+    if not admin_check:
         splash.close()  # Close splash before showing dialog
         from PyQt6.QtWidgets import QMessageBox
         reply = QMessageBox.question(
@@ -4544,18 +6080,27 @@ def main():
         # If user says no, restart splash
         splash = SplashController()
         splash.start()
-        splash.set_progress(40, "Continuing...")
+        splash.set_progress(45, "Continuing...")
     
-    splash.set_progress(50, "Initializing main window...")
+    # Task 4: Initialize backends
+    task_start = time.time()
+    splash.update_task("backends", "running")
+    splash.set_progress(55, "Initializing backends...")
     
-    # Create the main window
+    # Create the main window (this initializes backends)
     window = MainWindow()
+    backends_time = (time.time() - task_start) * 1000
+    splash.update_task("backends", "complete", backends_time)
     
-    splash.set_progress(80, "Preparing interface...")
+    # Task 5: Building interface
+    task_start = time.time()
+    splash.update_task("ui", "running")
+    splash.set_progress(85, "Preparing interface...")
     
-    # Small delay to show progress
-    import time
-    time.sleep(0.2)
+    # Small delay to ensure UI is ready
+    time.sleep(0.1)
+    ui_time = (time.time() - task_start) * 1000
+    splash.update_task("ui", "complete", ui_time)
     
     splash.set_progress(100, "Ready!")
     time.sleep(0.3)

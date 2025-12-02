@@ -908,19 +908,97 @@ class HealthChecker:
             return ""
     
     def check_defender_status(self) -> dict:
-        """Check Windows Defender status"""
+        """Check Windows Defender and comprehensive security status"""
         self.log("Checking Windows Defender status...")
         command = """
         try {
+            $result = @{}
+            
+            # Get Defender status
             $defender = Get-MpComputerStatus -ErrorAction Stop
-            @{
-                RealTimeProtection = $defender.RealTimeProtectionEnabled
-                AntivirusEnabled = $defender.AntivirusEnabled
-                AntispywareEnabled = $defender.AntispywareEnabled
-                SignatureAge = $defender.AntivirusSignatureAge
-                LastScan = $defender.LastFullScanEndTime.ToString("yyyy-MM-dd HH:mm")
-                QuickScanAge = $defender.QuickScanAge
-            } | ConvertTo-Json
+            if ($null -ne $defender) {
+                $lastFullScan = "Never"
+                $lastQuickScan = "Never"
+                if ($defender.LastFullScanEndTime) {
+                    try { $lastFullScan = $defender.LastFullScanEndTime.ToString("yyyy-MM-dd HH:mm") } catch {}
+                }
+                if ($defender.QuickScanEndTime) {
+                    try { $lastQuickScan = $defender.QuickScanEndTime.ToString("yyyy-MM-dd HH:mm") } catch {}
+                }
+                
+                $result.RealTimeProtection = [bool]$defender.RealTimeProtectionEnabled
+                $result.AntivirusEnabled = [bool]$defender.AntivirusEnabled
+                $result.AntispywareEnabled = [bool]$defender.AntispywareEnabled
+                $result.BehaviorMonitor = [bool]$defender.BehaviorMonitorEnabled
+                $result.IoavProtection = [bool]$defender.IoavProtectionEnabled
+                $result.NISEnabled = [bool]$defender.NISEnabled
+                $result.OnAccessProtection = [bool]$defender.OnAccessProtectionEnabled
+                $result.SignatureAge = if ($defender.AntivirusSignatureAge) { $defender.AntivirusSignatureAge } else { 0 }
+                $result.LastScan = $lastFullScan
+                $result.LastQuickScan = $lastQuickScan
+                $result.QuickScanAge = if ($defender.QuickScanAge) { $defender.QuickScanAge } else { -1 }
+                $result.FullScanAge = if ($defender.FullScanAge) { $defender.FullScanAge } else { -1 }
+                $result.SignatureVersion = $defender.AntivirusSignatureVersion
+                $result.EngineVersion = $defender.AMEngineVersion
+                $result.ProductVersion = $defender.AMProductVersion
+            }
+            
+            # Check Firewall status
+            try {
+                $fw = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+                if ($fw) {
+                    $result.FirewallDomain = ($fw | Where-Object { $_.Name -eq 'Domain' }).Enabled
+                    $result.FirewallPrivate = ($fw | Where-Object { $_.Name -eq 'Private' }).Enabled
+                    $result.FirewallPublic = ($fw | Where-Object { $_.Name -eq 'Public' }).Enabled
+                }
+            } catch {}
+            
+            # Check UAC status
+            try {
+                $uac = Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System" -ErrorAction SilentlyContinue
+                if ($uac) {
+                    $result.UACEnabled = [bool]$uac.EnableLUA
+                    $result.UACLevel = $uac.ConsentPromptBehaviorAdmin
+                }
+            } catch {}
+            
+            # Check Secure Boot
+            try {
+                $sb = Confirm-SecureBootUEFI -ErrorAction SilentlyContinue
+                $result.SecureBoot = $sb
+            } catch {
+                $result.SecureBoot = "Unknown"
+            }
+            
+            # Check BitLocker on system drive
+            try {
+                $bl = Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction SilentlyContinue
+                if ($bl) {
+                    $result.BitLockerStatus = $bl.ProtectionStatus.ToString()
+                    $result.BitLockerEncryption = $bl.EncryptionPercentage
+                }
+            } catch {
+                $result.BitLockerStatus = "Unknown"
+            }
+            
+            # Check Windows Security Center status
+            try {
+                $wsc = Get-CimInstance -Namespace "root/SecurityCenter2" -ClassName AntivirusProduct -ErrorAction SilentlyContinue
+                if ($wsc) {
+                    $result.InstalledAV = ($wsc | Select-Object -ExpandProperty displayName) -join ", "
+                }
+            } catch {}
+            
+            # Check Credential Guard
+            try {
+                $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace "root\\Microsoft\\Windows\\DeviceGuard" -ErrorAction SilentlyContinue
+                if ($dg) {
+                    $result.CredentialGuard = $dg.SecurityServicesRunning -contains 1
+                    $result.HVCIRunning = $dg.SecurityServicesRunning -contains 2
+                }
+            } catch {}
+            
+            $result | ConvertTo-Json
         } catch {
             @{ Error = $_.Exception.Message } | ConvertTo-Json
         }
