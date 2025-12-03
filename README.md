@@ -176,19 +176,18 @@ The executable will be created in the `dist` folder.
 
 ## 📋 Changelog
 
-### v2.0.1 (Latest)
+### v2.0.2 (Latest)
+- Updated README with comprehensive documentation
+
+### v2.0.1
 - Fixed console window briefly appearing during scans
 - All background operations now fully hidden
-
-### v2.1.0
-- Added Firewall rules viewer with protocol/port details
-- Enhanced Security page with 3-tab layout
-- Improved UI consistency and color coding across all pages
-- Fixed Windows Update status check performance
 
 ### v2.0.0
 - Complete UI redesign with modern dark theme
 - Parallel scanning - all checks run simultaneously
+- Added Firewall rules viewer with protocol/port details
+- Enhanced Security page with 3-tab layout
 - Added Event log analysis with error/warning breakdown
 - Enhanced hardware monitoring with live graphs
 - Added restore point management
@@ -196,9 +195,6 @@ The executable will be created in the `dist` folder.
 
 ### v1.0.0
 - Initial release
-- Basic system scanning
-- Driver and startup management
-- SFC/DISM integration
 
 ---
 
