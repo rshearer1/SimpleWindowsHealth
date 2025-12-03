@@ -13,14 +13,15 @@ Run a comprehensive health check that analyzes all aspects of your system **in p
 
 | Module | Description |
 |--------|-------------|
-| **Windows Updates** | Check for pending updates and update history |
-| **Security** | Windows Defender, Firewall, UAC, Secure Boot, BitLocker status |
-| **Storage** | Drive usage, health status, and free space warnings |
-| **Hardware** | CPU, GPU, RAM, and storage device information |
-| **Events** | System event log analysis for errors and warnings |
-| **System Files** | Integrity verification with SFC/DISM tools |
-| **Startup Items** | Manage programs that run at startup |
 | **Drivers** | Scan for outdated or problematic drivers |
+| **Startup Items** | Manage programs that run at startup |
+| **Windows Updates** | Check for pending updates and update history |
+| **Storage** | Drive usage, health status, and free space warnings |
+| **Security** | Windows Defender, Firewall profiles & rules, UAC status |
+| **Hardware** | CPU, GPU, RAM, and storage device information with live graphs |
+| **System** | OS info, SFC/DISM integrity verification |
+| **Events** | System event log analysis for errors and warnings |
+| **Audio** | Audio device status and troubleshooting |
 
 ### ⚡ Performance Optimized
 - **Parallel scanning** - All 7 checks run simultaneously
@@ -78,14 +79,15 @@ python driver_updater_qt_mk5.py
 | Page | Features |
 |------|----------|
 | **Overview** | Health score dashboard, quick actions, real-time graphs |
-| **Windows Update** | Update status, pending count, check/install updates |
-| **Security** | Defender, Firewall profiles, UAC, Secure Boot, BitLocker, Credential Guard |
-| **Storage** | Drive usage bars, health status, free space warnings |
-| **Hardware** | CPU, GPU, RAM details with real-time monitoring |
-| **Events** | Critical/Error/Warning counts, recent event details |
-| **System Files** | Run SFC and DISM scans with one click |
-| **Startup** | Enable/disable startup programs, view impact |
 | **Drivers** | Driver status, signing info, problem detection |
+| **Startup** | Enable/disable startup programs, view impact |
+| **Windows Update** | Update status, pending count, check/install updates |
+| **Storage** | Drive usage bars, health status, free space warnings |
+| **Security** | Windows Defender, Firewall Status & Rules (3 tabs), UAC status |
+| **Hardware** | CPU, GPU, RAM details with real-time monitoring graphs |
+| **System** | OS info, system file integrity checks (SFC/DISM) |
+| **Events** | Critical/Error/Warning counts, recent event details |
+| **Audio** | Audio device status and troubleshooting |
 
 ## Building from Source
 
@@ -101,7 +103,21 @@ The executable will be created in the `dist` folder.
 
 ## Version History
 
+### v2.1.0 (December 2025)
+
+- **Consistent UI styling** - Standardized stats sections across all pages
+- **Enhanced Security page** - 3-tab layout: Windows Defender, Firewall Status, Firewall Rules
+- **Firewall visibility** - View enabled/disabled status per profile (Domain/Private/Public)
+- **Firewall rules display** - See active rules with direction, action, protocol, and port info
+- **Larger stat values** - 24-28px fonts with meaningful colors per category
+- **Visual dividers** - Stats separated with elegant vertical dividers
+- **Shadow effects** - Cards have subtle shadows for depth
+- **Hardware page colors** - CPU (blue), GPU (purple), RAM (green), Storage (amber)
+- **Fixed Windows Update hang** - Fast registry-based approach instead of slow COM object
+- **Fixed widget sizing** - HardwareInfoCard status chips now properly sized
+
 ### v2.0.0 (December 2025)
+
 - **Parallel full system scan** - All checks run simultaneously
 - **Parallel startup scanner** - 59s → 8s startup time
 - **Enhanced splash screen** with task timing display
@@ -113,6 +129,7 @@ The executable will be created in the `dist` folder.
 - Fixed Windows Update button functionality
 
 ### v1.0.0 (December 2025)
+
 - Initial release
 - Modern dark theme UI
 - Real-time system monitoring
