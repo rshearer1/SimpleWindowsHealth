@@ -63,7 +63,13 @@ except ImportError:
 # =============================================================================
 
 class Theme:
-    """Color palette following UI Specification - Minimalist Version"""
+    """Color palette following UI Specification - Minimalist Version
+    
+    Enhanced with modern UI effects inspired by QT-PyQt-PySide-Custom-Widgets:
+    - Shadow effects for depth and elevation
+    - Gradient support for visual interest
+    - Animation timing constants
+    """
     # Background Layers (from spec)
     BG_WINDOW = "#1b1b1f"      # Window Background (Near black with warmth)
     BG_SIDEBAR = "#232328"     # Sidebar Background (Slightly elevated)
@@ -105,6 +111,65 @@ class Theme:
     RADIUS_SM = 6               # Button radius
     RADIUS_MD = 8               # Card radius (spec)
     RADIUS_LG = 8               # Same as card radius for consistency
+    
+    # =========================================================================
+    # MODERN UI ENHANCEMENTS - Shadow Effects
+    # =========================================================================
+    SHADOW_COLOR = "#000000"   # Base shadow color
+    SHADOW_OPACITY = 80        # Shadow alpha (0-255)
+    SHADOW_BLUR_SM = 8         # Small blur for subtle depth
+    SHADOW_BLUR_MD = 16        # Medium blur for cards
+    SHADOW_BLUR_LG = 24        # Large blur for modals/dialogs
+    SHADOW_OFFSET_Y = 4        # Vertical offset for light-from-top effect
+    
+    # Animation Timing
+    ANIM_DURATION_FAST = 150   # Fast transitions (hover)
+    ANIM_DURATION_NORMAL = 250 # Normal transitions
+    ANIM_DURATION_SLOW = 400   # Slow transitions (page changes)
+    
+    # Gradient Presets (for buttons and accents)
+    GRADIENT_ACCENT = f"qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {ACCENT}, stop:1 {ACCENT_LIGHT})"
+    GRADIENT_DARK = f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {BG_ELEVATED}, stop:1 {BG_CARD})"
+    
+    @staticmethod
+    def apply_shadow(widget, blur_radius=16, offset_x=0, offset_y=4, color=None, opacity=80):
+        """Apply a drop shadow effect to a widget.
+        
+        Args:
+            widget: The QWidget to apply shadow to
+            blur_radius: Blur radius in pixels (default: 16)
+            offset_x: Horizontal offset (default: 0)
+            offset_y: Vertical offset (default: 4)
+            color: Shadow color (default: Theme.SHADOW_COLOR)
+            opacity: Shadow opacity 0-255 (default: 80)
+        
+        Returns:
+            The QGraphicsDropShadowEffect instance
+        """
+        shadow = QGraphicsDropShadowEffect(widget)
+        shadow_color = QColor(color if color else Theme.SHADOW_COLOR)
+        shadow_color.setAlpha(opacity)
+        shadow.setColor(shadow_color)
+        shadow.setBlurRadius(blur_radius)
+        shadow.setXOffset(offset_x)
+        shadow.setYOffset(offset_y)
+        widget.setGraphicsEffect(shadow)
+        return shadow
+    
+    @staticmethod
+    def apply_card_shadow(widget):
+        """Apply standard card shadow effect."""
+        return Theme.apply_shadow(widget, blur_radius=Theme.SHADOW_BLUR_MD, 
+                                   offset_y=Theme.SHADOW_OFFSET_Y, opacity=Theme.SHADOW_OPACITY)
+    
+    @staticmethod
+    def apply_button_shadow(widget, on_hover=False):
+        """Apply button shadow effect (smaller, more subtle)."""
+        if on_hover:
+            return Theme.apply_shadow(widget, blur_radius=12, offset_y=3, opacity=100)
+        else:
+            return Theme.apply_shadow(widget, blur_radius=Theme.SHADOW_BLUR_SM, 
+                                       offset_y=2, opacity=60)
 
 
 # =============================================================================
@@ -535,6 +600,540 @@ class StatusIcon(QWidget):
             painter.drawEllipse(4, 4, self.icon_size-8, self.icon_size-8)
 
 
+# =============================================================================
+# MODERN ANIMATED WIDGETS (Inspired by QT-PyQt-PySide-Custom-Widgets)
+# =============================================================================
+
+class AnimatedButton(QPushButton):
+    """Modern animated button with hover effects and optional shadow.
+    
+    Features:
+    - Smooth color transitions on hover
+    - Optional drop shadow effect (animates on hover)
+    - Primary (accent) and secondary (muted) variants
+    """
+    
+    def __init__(self, text: str, variant: str = "primary", parent=None):
+        super().__init__(text, parent)
+        self.variant = variant
+        self._current_bg = QColor(Theme.ACCENT if variant == "primary" else Theme.BG_ELEVATED)
+        self._target_bg = self._current_bg
+        self._shadow = None
+        self._hover_shadow_blur = 16
+        self._normal_shadow_blur = 8
+        
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._setup_animation()
+        self._apply_style()
+    
+    def _setup_animation(self):
+        """Setup color transition animation"""
+        self._bg_animation = QPropertyAnimation(self, b"")
+        self._bg_animation.setDuration(Theme.ANIM_DURATION_FAST)
+        self._bg_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+    
+    def enable_shadow(self, enabled: bool = True):
+        """Enable or disable shadow effect"""
+        if enabled:
+            self._shadow = Theme.apply_button_shadow(self)
+        else:
+            self.setGraphicsEffect(None)
+            self._shadow = None
+    
+    def _apply_style(self):
+        """Apply button styling based on variant"""
+        if self.variant == "primary":
+            self.setStyleSheet(f"""
+                AnimatedButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    border-radius: {Theme.RADIUS_SM}px;
+                    padding: 10px 24px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+                AnimatedButton:hover {{
+                    background: {Theme.ACCENT_HOVER};
+                }}
+                AnimatedButton:pressed {{
+                    background: {Theme.ACCENT};
+                }}
+                AnimatedButton:disabled {{
+                    background: {Theme.BG_ELEVATED};
+                    color: {Theme.TEXT_DISABLED};
+                }}
+            """)
+        else:  # secondary
+            self.setStyleSheet(f"""
+                AnimatedButton {{
+                    background: {Theme.BG_ELEVATED};
+                    color: {Theme.TEXT_PRIMARY};
+                    border: 1px solid {Theme.BORDER};
+                    border-radius: {Theme.RADIUS_SM}px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }}
+                AnimatedButton:hover {{
+                    background: {Theme.BG_CARD_HOVER};
+                    border-color: {Theme.TEXT_TERTIARY};
+                }}
+                AnimatedButton:pressed {{
+                    background: {Theme.BG_CARD};
+                }}
+                AnimatedButton:disabled {{
+                    background: {Theme.BG_CARD};
+                    color: {Theme.TEXT_DISABLED};
+                    border-color: {Theme.BORDER};
+                }}
+            """)
+    
+    def enterEvent(self, event):
+        """Animate shadow on hover"""
+        if self._shadow:
+            self._shadow.setBlurRadius(self._hover_shadow_blur)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Reset shadow on leave"""
+        if self._shadow:
+            self._shadow.setBlurRadius(self._normal_shadow_blur)
+        super().leaveEvent(event)
+
+
+class ModernSpinner(QWidget):
+    """Modern loading spinner with smooth arc animation.
+    
+    Features:
+    - Smooth spinning arc animation
+    - Customizable colors, size, and line width
+    - Optional bounce animation type
+    """
+    
+    def __init__(self, size: int = 40, line_width: int = 3, color: str = None, parent=None):
+        super().__init__(parent)
+        self.spinner_size = size
+        self.line_width = line_width
+        self.color = QColor(color if color else Theme.ACCENT)
+        self._angle = 0
+        self._span = 90  # Arc span in degrees
+        self._is_running = False
+        
+        self.setFixedSize(size, size)
+        
+        # Setup animation timer
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._rotate)
+    
+    def start(self):
+        """Start the spinning animation"""
+        self._is_running = True
+        self._timer.start(16)  # ~60fps
+        self.show()
+    
+    def stop(self):
+        """Stop the spinning animation"""
+        self._is_running = False
+        self._timer.stop()
+    
+    def _rotate(self):
+        """Update rotation angle"""
+        self._angle = (self._angle + 6) % 360
+        self.update()
+    
+    def set_color(self, color: str):
+        """Change spinner color"""
+        self.color = QColor(color)
+        self.update()
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Calculate drawing area
+        margin = self.line_width
+        rect_size = self.spinner_size - 2 * margin
+        
+        # Setup pen
+        pen = QPen(self.color)
+        pen.setWidth(self.line_width)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        
+        # Draw arc (rotating)
+        # Qt uses 1/16th of a degree for arc angles
+        start_angle = int(self._angle * 16)
+        span_angle = int(self._span * 16)
+        painter.drawArc(margin, margin, rect_size, rect_size, start_angle, span_angle)
+        
+        # Draw trailing arc (faded)
+        faded_color = QColor(self.color)
+        faded_color.setAlphaF(0.3)
+        pen.setColor(faded_color)
+        painter.setPen(pen)
+        trail_start = int((self._angle + self._span) * 16)
+        trail_span = int((360 - self._span - 20) * 16)
+        painter.drawArc(margin, margin, rect_size, rect_size, trail_start, trail_span)
+
+
+class GlowButton(QPushButton):
+    """Button with glow effect on hover - for action buttons.
+    
+    Uses a subtle glow effect that intensifies on hover.
+    """
+    
+    def __init__(self, text: str, glow_color: str = None, parent=None):
+        super().__init__(text, parent)
+        self.glow_color = glow_color if glow_color else Theme.ACCENT
+        self._glow_effect = None
+        self._is_hovering = False
+        
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._apply_style()
+        self._setup_glow()
+    
+    def _apply_style(self):
+        self.setStyleSheet(f"""
+            GlowButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+                padding: 12px 28px;
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            GlowButton:hover {{
+                background: {Theme.ACCENT_LIGHT};
+            }}
+            GlowButton:pressed {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
+    
+    def _setup_glow(self):
+        """Setup initial subtle glow"""
+        self._glow_effect = QGraphicsDropShadowEffect(self)
+        glow_qcolor = QColor(self.glow_color)
+        glow_qcolor.setAlpha(100)
+        self._glow_effect.setColor(glow_qcolor)
+        self._glow_effect.setBlurRadius(12)
+        self._glow_effect.setOffset(0, 2)
+        self.setGraphicsEffect(self._glow_effect)
+    
+    def enterEvent(self, event):
+        """Intensify glow on hover"""
+        if self._glow_effect:
+            glow_qcolor = QColor(self.glow_color)
+            glow_qcolor.setAlpha(180)
+            self._glow_effect.setColor(glow_qcolor)
+            self._glow_effect.setBlurRadius(24)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Reset glow on leave"""
+        if self._glow_effect:
+            glow_qcolor = QColor(self.glow_color)
+            glow_qcolor.setAlpha(100)
+            self._glow_effect.setColor(glow_qcolor)
+            self._glow_effect.setBlurRadius(12)
+        super().leaveEvent(event)
+
+
+class ModernListRow(QFrame):
+    """Modern styled list row with improved readability.
+    
+    Features:
+    - Card-like appearance with subtle background
+    - Alternating row colors for easier scanning
+    - Smooth hover effects
+    - Status indicator integration
+    - Better spacing and visual hierarchy
+    """
+    
+    clicked = pyqtSignal()
+    
+    def __init__(self, 
+                 title: str = "",
+                 subtitle: str = "",
+                 status: str = "ok",  # ok, warning, error, info
+                 status_text: str = "",
+                 is_alternate: bool = False,
+                 show_chevron: bool = False,
+                 parent=None):
+        super().__init__(parent)
+        self.is_alternate = is_alternate
+        self.status = status
+        self._setup_ui(title, subtitle, status, status_text, show_chevron)
+        self._apply_style()
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def _setup_ui(self, title: str, subtitle: str, status: str, status_text: str, show_chevron: bool):
+        self.main_layout = QHBoxLayout(self)
+        self.main_layout.setContentsMargins(16, 14, 16, 14)
+        self.main_layout.setSpacing(14)
+        
+        # Status icon
+        icon_type = {
+            "ok": "check",
+            "warning": "warning", 
+            "error": "error",
+            "info": "info"
+        }.get(status, "check")
+        self.status_icon = StatusIcon(icon_type, 18)
+        self.main_layout.addWidget(self.status_icon)
+        
+        # Content area
+        content = QVBoxLayout()
+        content.setSpacing(4)
+        
+        self.title_label = QLabel(title)
+        self.title_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 14px;
+            font-weight: 500;
+        """)
+        content.addWidget(self.title_label)
+        
+        if subtitle:
+            self.subtitle_label = QLabel(subtitle)
+            self.subtitle_label.setStyleSheet(f"""
+                background: transparent;
+                color: {Theme.TEXT_TERTIARY};
+                font-size: 12px;
+            """)
+            content.addWidget(self.subtitle_label)
+        
+        self.main_layout.addLayout(content, 1)
+        
+        # Status text/badge
+        if status_text:
+            self.status_badge = QLabel(status_text)
+            status_color = {
+                "ok": Theme.SUCCESS,
+                "warning": Theme.WARNING,
+                "error": Theme.ERROR,
+                "info": Theme.ACCENT_LIGHT
+            }.get(status, Theme.TEXT_SECONDARY)
+            status_bg = {
+                "ok": Theme.SUCCESS_BG,
+                "warning": Theme.WARNING_BG,
+                "error": Theme.ERROR_BG,
+                "info": Theme.INFO_BG
+            }.get(status, "transparent")
+            self.status_badge.setStyleSheet(f"""
+                background: {status_bg};
+                color: {status_color};
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 4px;
+            """)
+            self.main_layout.addWidget(self.status_badge)
+        
+        # Chevron for clickable items
+        if show_chevron:
+            chevron = QLabel("›")
+            chevron.setStyleSheet(f"""
+                background: transparent;
+                color: {Theme.TEXT_TERTIARY};
+                font-size: 18px;
+                font-weight: 300;
+            """)
+            self.main_layout.addWidget(chevron)
+        
+        # Placeholder for action buttons
+        self.action_layout = QHBoxLayout()
+        self.action_layout.setSpacing(8)
+        self.main_layout.addLayout(self.action_layout)
+    
+    def add_action_button(self, text: str, callback, primary: bool = False) -> QPushButton:
+        """Add an action button to the row"""
+        btn = QPushButton(text)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFixedHeight(28)
+        if primary:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    padding: 4px 14px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.ACCENT_HOVER};
+                }}
+            """)
+        else:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.BG_ELEVATED};
+                    color: {Theme.TEXT_SECONDARY};
+                    border: 1px solid {Theme.BORDER};
+                    padding: 4px 14px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-weight: 500;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.BG_CARD_HOVER};
+                    color: {Theme.TEXT_PRIMARY};
+                    border-color: {Theme.ACCENT};
+                }}
+            """)
+        btn.clicked.connect(callback)
+        self.action_layout.addWidget(btn)
+        return btn
+    
+    def _apply_style(self):
+        bg = Theme.BG_CARD if not self.is_alternate else "#292930"
+        hover_bg = Theme.BG_CARD_HOVER
+        
+        self.setStyleSheet(f"""
+            ModernListRow {{
+                background: {bg};
+                border: none;
+                border-radius: 0px;
+            }}
+            ModernListRow:hover {{
+                background: {hover_bg};
+            }}
+        """)
+    
+    def set_title(self, title: str):
+        self.title_label.setText(title)
+    
+    def set_subtitle(self, subtitle: str):
+        if hasattr(self, 'subtitle_label'):
+            self.subtitle_label.setText(subtitle)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class ModernCategoryHeader(QFrame):
+    """Category header for grouping list items with a modern look."""
+    
+    def __init__(self, title: str, count: int = 0, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(48)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 0, 20, 0)
+        
+        # Category title - larger and bolder
+        title_label = QLabel(title.upper())
+        title_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+        """)
+        layout.addWidget(title_label)
+        
+        # Count badge
+        if count > 0:
+            count_label = QLabel(f"({count})")
+            count_label.setStyleSheet(f"""
+                background: transparent;
+                color: {Theme.TEXT_TERTIARY};
+                font-size: 12px;
+                font-weight: 600;
+            """)
+            layout.addWidget(count_label)
+        
+        layout.addStretch()
+        
+        self.setStyleSheet(f"""
+            ModernCategoryHeader {{
+                background: {Theme.BG_SIDEBAR};
+                border: none;
+                border-top: 2px solid {Theme.BORDER};
+                border-bottom: 1px solid {Theme.BORDER};
+            }}
+        """)
+
+
+class ModernListContainer(QFrame):
+    """Container for modern list items with proper styling and borders."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.items_layout = QVBoxLayout(self)
+        self.items_layout.setContentsMargins(0, 0, 0, 0)
+        self.items_layout.setSpacing(0)
+        self.item_count = 0
+        
+        self.setStyleSheet(f"""
+            ModernListContainer {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        # Apply subtle shadow
+        Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=50)
+    
+    def add_category(self, title: str, count: int = 0) -> ModernCategoryHeader:
+        """Add a category header"""
+        header = ModernCategoryHeader(title, count)
+        self.items_layout.addWidget(header)
+        self.item_count = 0  # Reset alternating count for new category
+        return header
+    
+    def add_row(self, title: str, subtitle: str = "", status: str = "ok", 
+                status_text: str = "", show_chevron: bool = False) -> ModernListRow:
+        """Add a list row"""
+        row = ModernListRow(
+            title=title,
+            subtitle=subtitle,
+            status=status,
+            status_text=status_text,
+            is_alternate=(self.item_count % 2 == 1),
+            show_chevron=show_chevron
+        )
+        self.items_layout.addWidget(row)
+        self.item_count += 1
+        return row
+    
+    def add_separator(self):
+        """Add a visual separator"""
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        self.items_layout.addWidget(sep)
+    
+    def add_more_label(self, text: str):
+        """Add a 'more items' label"""
+        label = QLabel(text)
+        label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 12px;
+            padding: 12px 16px;
+            font-style: italic;
+        """)
+        self.items_layout.addWidget(label)
+    
+    def clear(self):
+        """Remove all items"""
+        while self.items_layout.count():
+            item = self.items_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.item_count = 0
+
+
 class NavIcon(QWidget):
     """Navigation icon widget"""
     
@@ -693,6 +1292,27 @@ class NavIcon(QWidget):
             # Exhaust flames
             painter.drawLine(m + 1, s - m - 1, m + 4, s - m - 4)
             painter.drawLine(m + 3, s - m + 1, m + 6, s - m - 2)
+        
+        elif self.icon_name == "speaker":
+            # Speaker/audio icon
+            import math
+            # Speaker cone
+            path = QPainterPath()
+            path.moveTo(m + 2, s // 2 - 3)
+            path.lineTo(m + 5, s // 2 - 3)
+            path.lineTo(m + 9, s // 2 - 6)
+            path.lineTo(m + 9, s // 2 + 6)
+            path.lineTo(m + 5, s // 2 + 3)
+            path.lineTo(m + 2, s // 2 + 3)
+            path.closeSubpath()
+            painter.drawPath(path)
+            # Sound waves
+            for i, radius in enumerate([4, 7]):
+                cx = m + 9
+                cy = s // 2
+                start_angle = -45
+                span_angle = 90
+                painter.drawArc(cx, cy - radius, radius * 2, radius * 2, start_angle * 16, span_angle * 16)
 
 
 class SidebarItem(QFrame):
@@ -846,7 +1466,7 @@ class ScoreRing(QWidget):
 
 
 class StatusCard(QFrame):
-    """Quick status card for overview grid"""
+    """Quick status card for overview grid with modern shadow effect"""
     
     clicked = pyqtSignal()  # Signal when card is clicked
     
@@ -857,6 +1477,11 @@ class StatusCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setup_ui()
         self._apply_style()
+        self._setup_shadow()
+    
+    def _setup_shadow(self):
+        """Apply subtle shadow for depth"""
+        Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=60)
     
     def setup_ui(self):
         layout = QHBoxLayout(self)
@@ -911,11 +1536,16 @@ class StatusCard(QFrame):
 
 
 class HealthSummaryCard(QFrame):
-    """Large health score summary card"""
+    """Large health score summary card with modern shadow effect"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
+        self._setup_shadow()
+    
+    def _setup_shadow(self):
+        """Apply card shadow for elevation"""
+        Theme.apply_card_shadow(self)
     
     def setup_ui(self):
         self.setStyleSheet(f"""
@@ -960,13 +1590,14 @@ class HealthSummaryCard(QFrame):
         info_layout.addStretch()
         layout.addLayout(info_layout, 1)
         
-        # Scan button
+        # Scan button with gradient and glow effect
         self.scan_btn = QPushButton("Run Full Scan")
         self.scan_btn.setFixedSize(140, 44)
         self.scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.scan_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.ACCENT};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {Theme.ACCENT}, stop:1 {Theme.ACCENT_LIGHT});
                 color: white;
                 border: none;
                 border-radius: {Theme.RADIUS_MD}px;
@@ -974,12 +1605,16 @@ class HealthSummaryCard(QFrame):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background: {Theme.ACCENT_HOVER};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {Theme.ACCENT_LIGHT}, stop:1 {Theme.ACCENT});
             }}
             QPushButton:pressed {{
-                background: {Theme.ACCENT};
+                background: {Theme.ACCENT_HOVER};
             }}
         """)
+        # Add glow effect to scan button
+        Theme.apply_shadow(self.scan_btn, blur_radius=16, offset_y=4, 
+                           color=Theme.ACCENT, opacity=120)
         layout.addWidget(self.scan_btn, 0, Qt.AlignmentFlag.AlignTop)
     
     def set_score(self, score: int, passed: int, warnings: int, errors: int):
@@ -1078,7 +1713,7 @@ def get_simulated_boot_security() -> dict:
 # =============================================================================
 
 class StartupProgramsCard(QFrame):
-    """Card showing startup programs status"""
+    """Card showing startup programs status with modern shadow effect"""
     
     manage_clicked = pyqtSignal()  # Signal to navigate to startup page
     
@@ -1086,6 +1721,11 @@ class StartupProgramsCard(QFrame):
         super().__init__(parent)
         self.setup_ui()
         self.load_data()
+        self._setup_shadow()
+    
+    def _setup_shadow(self):
+        """Apply card shadow for elevation"""
+        Theme.apply_card_shadow(self)
     
     def setup_ui(self):
         self.setStyleSheet(f"""
@@ -1263,12 +1903,17 @@ class StartupProgramsCard(QFrame):
 
 
 class BootSecurityCard(QFrame):
-    """Card showing Secure Boot and BIOS mode status"""
+    """Card showing Secure Boot and BIOS mode status with modern shadow effect"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
         self.load_data()
+        self._setup_shadow()
+    
+    def _setup_shadow(self):
+        """Apply card shadow for elevation"""
+        Theme.apply_card_shadow(self)
     
     def setup_ui(self):
         self.setStyleSheet(f"""
@@ -1621,8 +2266,8 @@ class OverviewPage(QWidget):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         layout.addWidget(title)
         
@@ -1753,8 +2398,8 @@ class ModulePage(QWidget):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         header.addWidget(title)
         
@@ -1767,7 +2412,7 @@ class ModulePage(QWidget):
                 background: {Theme.ACCENT};
                 color: white;
                 border: none;
-                padding: 10px 20px;
+                padding: 10px 24px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
                 font-weight: 600;
@@ -1927,7 +2572,7 @@ class ModulePage(QWidget):
 
 
 class DriversPage(QWidget):
-    """Dedicated drivers management page"""
+    """Dedicated drivers management page with modern list design"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1954,8 +2599,8 @@ class DriversPage(QWidget):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         header.addWidget(title)
         
@@ -1968,7 +2613,7 @@ class DriversPage(QWidget):
                 background: {Theme.ACCENT};
                 color: white;
                 border: none;
-                padding: 10px 20px;
+                padding: 12px 28px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
                 font-weight: 600;
@@ -1982,25 +2627,32 @@ class DriversPage(QWidget):
         
         self.content_layout.addLayout(header)
         
-        # Summary stats
+        # Summary stats card with improved styling
         self.stats_frame = QFrame()
         self.stats_frame.setStyleSheet(f"""
-            background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
-            border-radius: {Theme.RADIUS_MD}px;
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
         """)
-        stats_layout = QHBoxLayout(self.stats_frame)
-        stats_layout.setContentsMargins(20, 16, 20, 16)
-        stats_layout.setSpacing(40)
+        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
         
-        self.stat_total = self._create_stat("Total Drivers", "—")
-        self.stat_ok = self._create_stat("OK", "—")
-        self.stat_updates = self._create_stat("Updates Available", "—")
-        self.stat_problems = self._create_stat("Problems", "—")
+        stats_layout = QHBoxLayout(self.stats_frame)
+        stats_layout.setContentsMargins(24, 20, 24, 20)
+        stats_layout.setSpacing(0)
+        
+        self.stat_total = self._create_stat("Total Drivers", "—", Theme.TEXT_PRIMARY)
+        self.stat_ok = self._create_stat("OK", "—", Theme.SUCCESS)
+        self.stat_updates = self._create_stat("Updates Available", "—", Theme.WARNING)
+        self.stat_problems = self._create_stat("Problems", "—", Theme.ERROR)
         
         stats_layout.addWidget(self.stat_total)
+        self._add_stat_divider(stats_layout)
         stats_layout.addWidget(self.stat_ok)
+        self._add_stat_divider(stats_layout)
         stats_layout.addWidget(self.stat_updates)
+        self._add_stat_divider(stats_layout)
         stats_layout.addWidget(self.stat_problems)
         stats_layout.addStretch()
         
@@ -2012,18 +2664,10 @@ class DriversPage(QWidget):
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.content_layout.addWidget(self.status_label)
         
-        # Drivers list container
-        self.drivers_container = QFrame()
-        self.drivers_container.setStyleSheet(f"""
-            background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
-            border-radius: {Theme.RADIUS_MD}px;
-        """)
-        self.drivers_layout = QVBoxLayout(self.drivers_container)
-        self.drivers_layout.setContentsMargins(0, 0, 0, 0)
-        self.drivers_layout.setSpacing(0)
-        self.drivers_container.setVisible(False)
-        self.content_layout.addWidget(self.drivers_container)
+        # Modern drivers list container
+        self.drivers_list = ModernListContainer()
+        self.drivers_list.setVisible(False)
+        self.content_layout.addWidget(self.drivers_list)
         
         self.content_layout.addStretch()
         
@@ -2033,21 +2677,45 @@ class DriversPage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
     
-    def _create_stat(self, label: str, value: str):
-        """Create a stat display widget"""
+    def _add_stat_divider(self, layout):
+        """Add a vertical divider between stats"""
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(40)
+        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addSpacing(24)
+        layout.addWidget(divider)
+        layout.addSpacing(24)
+    
+    def _create_stat(self, label: str, value: str, color: str = None):
+        """Create an improved stat display widget"""
         frame = QFrame()
         frame.setStyleSheet("background: transparent;")
+        frame.setMinimumWidth(100)
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         
         val_label = QLabel(value)
         val_label.setObjectName("stat_value")
-        val_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 24px; font-weight: bold;")
+        actual_color = color or Theme.TEXT_PRIMARY
+        val_label.setStyleSheet(f"""
+            background: transparent;
+            color: {actual_color};
+            font-size: 24px;
+            font-weight: 700;
+        """)
         layout.addWidget(val_label)
         
         name_label = QLabel(label)
-        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        name_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        """)
         layout.addWidget(name_label)
         
         return frame
@@ -2064,7 +2732,7 @@ class DriversPage(QWidget):
         self.scan_btn.setText("Scanning...")
         self.status_label.setText("Scanning installed drivers...")
         self.status_label.setVisible(True)
-        self.drivers_container.setVisible(False)
+        self.drivers_list.setVisible(False)
         
         # Use timer to allow UI to update
         QTimer.singleShot(100, self._do_scan)
@@ -2085,14 +2753,12 @@ class DriversPage(QWidget):
             self._update_stat(self.stat_updates, "0")  # Will update after online check
             self._update_stat(self.stat_problems, str(problem_count))
             
-            # Clear old driver widgets
-            for widget in self.driver_widgets:
-                widget.deleteLater()
-            self.driver_widgets.clear()
+            # Clear and rebuild the list
+            self.drivers_list.clear()
             
             # Show driver list
             self.status_label.setVisible(False)
-            self.drivers_container.setVisible(True)
+            self.drivers_list.setVisible(True)
             
             # Add drivers to list (group by category)
             categories = {}
@@ -2103,28 +2769,25 @@ class DriversPage(QWidget):
                 categories[cat].append(driver)
             
             for category, cat_drivers in sorted(categories.items()):
-                # Category header
-                cat_header = QLabel(f"  {category} ({len(cat_drivers)})")
-                cat_header.setStyleSheet(f"""
-                    background: {Theme.BG_CARD_HOVER};
-                    color: {Theme.TEXT_SECONDARY};
-                    font-size: 12px;
-                    font-weight: 600;
-                    padding: 8px 12px;
-                """)
-                self.drivers_layout.addWidget(cat_header)
-                self.driver_widgets.append(cat_header)
+                # Add category header
+                self.drivers_list.add_category(category, len(cat_drivers))
                 
-                for driver in cat_drivers[:5]:  # Limit to 5 per category for performance
-                    row = self._create_driver_row(driver)
-                    self.drivers_layout.addWidget(row)
-                    self.driver_widgets.append(row)
+                # Add driver rows (limit to 5 per category for performance)
+                for i, driver in enumerate(cat_drivers[:5]):
+                    status = "ok" if driver.status == "OK" else "warning" if driver.status == "Unsigned" else "error"
+                    row = self.drivers_list.add_row(
+                        title=driver.device_name,
+                        subtitle=f"{driver.manufacturer} • v{driver.driver_version} • {driver.driver_date}",
+                        status=status,
+                        status_text=driver.status
+                    )
+                    
+                    # Add fix button for problematic drivers
+                    if driver.status != "OK":
+                        row.add_action_button("Fix", lambda checked, d=driver: self._fix_driver(d), primary=True)
                 
                 if len(cat_drivers) > 5:
-                    more = QLabel(f"    ... and {len(cat_drivers) - 5} more")
-                    more.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; padding: 8px 16px;")
-                    self.drivers_layout.addWidget(more)
-                    self.driver_widgets.append(more)
+                    self.drivers_list.add_more_label(f"... and {len(cat_drivers) - 5} more drivers")
             
         except Exception as e:
             self.status_label.setText(f"Error scanning drivers: {str(e)}")
@@ -2132,72 +2795,6 @@ class DriversPage(QWidget):
         
         self.scan_btn.setEnabled(True)
         self.scan_btn.setText("Scan Drivers")
-    
-    def _create_driver_row(self, driver):
-        """Create a row widget for a driver"""
-        row = QFrame()
-        row.setStyleSheet(f"""
-            QFrame {{
-                background: transparent;
-                border-bottom: 1px solid {Theme.BORDER};
-            }}
-            QFrame:hover {{
-                background: {Theme.BG_CARD_HOVER};
-            }}
-        """)
-        
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(16, 10, 16, 10)
-        layout.setSpacing(12)
-        
-        # Status icon
-        status = "check" if driver.status == "OK" else "warning" if driver.status == "Unsigned" else "error"
-        icon = StatusIcon(status, 16)
-        layout.addWidget(icon)
-        
-        # Device info
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(2)
-        
-        name = QLabel(driver.device_name)
-        name.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px;")
-        info_layout.addWidget(name)
-        
-        details = QLabel(f"{driver.manufacturer} • v{driver.driver_version} • {driver.driver_date}")
-        details.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
-        info_layout.addWidget(details)
-        
-        layout.addLayout(info_layout, 1)
-        
-        # Status text
-        status_text = QLabel(driver.status)
-        color = Theme.SUCCESS if driver.status == "OK" else Theme.WARNING if driver.status == "Unsigned" else Theme.ERROR
-        status_text.setStyleSheet(f"background: transparent; color: {color}; font-size: 11px; font-weight: 600;")
-        layout.addWidget(status_text)
-        
-        # Action button for problematic drivers
-        if driver.status != "OK":
-            action_btn = QPushButton("Fix")
-            action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            action_btn.setFixedWidth(50)
-            action_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: {Theme.ACCENT};
-                    color: white;
-                    border: none;
-                    padding: 5px 10px;
-                    border-radius: {Theme.RADIUS_SM}px;
-                    font-size: 11px;
-                    font-weight: 600;
-                }}
-                QPushButton:hover {{
-                    background: {Theme.ACCENT_HOVER};
-                }}
-            """)
-            action_btn.clicked.connect(lambda checked, d=driver: self._fix_driver(d))
-            layout.addWidget(action_btn)
-        
-        return row
     
     def _fix_driver(self, driver):
         """Open Device Manager to fix a problematic driver"""
@@ -2276,13 +2873,14 @@ app_settings = AppSettings()
 
 
 class StartupPage(QWidget):
-    """Page for managing startup programs"""
+    """Page for managing startup programs with modern design"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.startup_items = []
         self.item_widgets = []
         self.loaded = False  # Track if data has been loaded
+        self.current_filter = "all"  # all, enabled, disabled
         self.setup_ui()
     
     def setup_ui(self):
@@ -2293,18 +2891,18 @@ class StartupPage(QWidget):
         content = QWidget()
         self.content_layout = QVBoxLayout(content)
         self.content_layout.setContentsMargins(32, 28, 32, 28)
-        self.content_layout.setSpacing(20)
+        self.content_layout.setSpacing(24)
         
         # Header row
         header = QHBoxLayout()
-        header.setSpacing(16)
+        header.setSpacing(12)
         
         title = QLabel("Startup Programs")
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         header.addWidget(title)
         header.addStretch()
@@ -2315,17 +2913,16 @@ class StartupPage(QWidget):
         self.refresh_btn.clicked.connect(self.load_startup_items)
         self.refresh_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.BG_CARD};
-                color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
-                padding: 8px 16px;
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 12px 28px;
                 border-radius: {Theme.RADIUS_SM}px;
-                font-size: 12px;
-                font-weight: 500;
+                font-size: 13px;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
+                background: {Theme.ACCENT_HOVER};
             }}
         """)
         header.addWidget(self.refresh_btn)
@@ -2336,72 +2933,83 @@ class StartupPage(QWidget):
         self.taskmgr_btn.clicked.connect(self.open_task_manager)
         self.taskmgr_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.ACCENT};
-                color: white;
-                border: none;
-                padding: 8px 16px;
+                background: transparent;
+                color: {Theme.TEXT_SECONDARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 12px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
-                font-size: 12px;
-                font-weight: 600;
+                font-size: 13px;
             }}
             QPushButton:hover {{
-                background: {Theme.ACCENT_HOVER};
+                background: {Theme.BG_CARD_HOVER};
             }}
         """)
         header.addWidget(self.taskmgr_btn)
         
         self.content_layout.addLayout(header)
         
-        # Info text
-        info = QLabel("Manage programs that run automatically when Windows starts. Disabling unnecessary startup programs can improve boot time.")
-        info.setWordWrap(True)
-        info.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
-        self.content_layout.addWidget(info)
-        
-        # Stats row
+        # Summary stats card with improved styling
         self.stats_frame = QFrame()
         self.stats_frame.setStyleSheet(f"""
-            background: {Theme.BG_CARD};
-            border-radius: {Theme.RADIUS_MD}px;
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
         """)
+        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        
         stats_layout = QHBoxLayout(self.stats_frame)
-        stats_layout.setContentsMargins(20, 16, 20, 16)
-        stats_layout.setSpacing(40)
+        stats_layout.setContentsMargins(24, 20, 24, 20)
+        stats_layout.setSpacing(0)
         
-        self.stat_total = self._create_stat("Total", "0")
+        self.stat_total = self._create_stat("Total", "—", Theme.TEXT_PRIMARY)
+        self.stat_enabled = self._create_stat("Enabled", "—", Theme.SUCCESS)
+        self.stat_disabled = self._create_stat("Disabled", "—", Theme.TEXT_TERTIARY)
+        self.stat_high_impact = self._create_stat("High Impact", "—", Theme.WARNING)
+        
         stats_layout.addWidget(self.stat_total)
-        
-        self.stat_enabled = self._create_stat("Enabled", "0")
+        self._add_stat_divider(stats_layout)
         stats_layout.addWidget(self.stat_enabled)
-        
-        self.stat_disabled = self._create_stat("Disabled", "0")
+        self._add_stat_divider(stats_layout)
         stats_layout.addWidget(self.stat_disabled)
-        
-        self.stat_high_impact = self._create_stat("High Impact", "0")
+        self._add_stat_divider(stats_layout)
         stats_layout.addWidget(self.stat_high_impact)
-        
         stats_layout.addStretch()
         
         self.content_layout.addWidget(self.stats_frame)
         
+        # Filter tabs
+        filter_frame = QFrame()
+        filter_frame.setStyleSheet("background: transparent;")
+        filter_layout = QHBoxLayout(filter_frame)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.setSpacing(8)
+        
+        self.filter_buttons = {}
+        for filter_id, filter_name in [("all", "All"), ("enabled", "Enabled"), ("disabled", "Disabled")]:
+            btn = QPushButton(filter_name)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setCheckable(True)
+            btn.setChecked(filter_id == "all")
+            btn.clicked.connect(lambda checked, fid=filter_id: self._set_filter(fid))
+            self.filter_buttons[filter_id] = btn
+            filter_layout.addWidget(btn)
+        
+        filter_layout.addStretch()
+        self._update_filter_styles()
+        self.content_layout.addWidget(filter_frame)
+        
         # Status label
-        self.status_label = QLabel("Click 'Refresh' to scan startup programs")
+        self.status_label = QLabel("Loading startup programs...")
         self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 14px;")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.content_layout.addWidget(self.status_label)
         
-        # Startup items container
-        self.items_container = QFrame()
-        self.items_container.setStyleSheet(f"""
-            background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
-            border-radius: {Theme.RADIUS_MD}px;
-        """)
-        self.items_layout = QVBoxLayout(self.items_container)
-        self.items_layout.setContentsMargins(0, 0, 0, 0)
-        self.items_layout.setSpacing(0)
-        self.items_container.setVisible(False)
-        self.content_layout.addWidget(self.items_container)
+        # Modern items list container
+        self.items_list = ModernListContainer()
+        self.items_list.setVisible(False)
+        self.content_layout.addWidget(self.items_list)
         
         self.content_layout.addStretch()
         
@@ -2411,21 +3019,88 @@ class StartupPage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
     
-    def _create_stat(self, label: str, value: str):
-        """Create a stat display widget"""
+    def _add_stat_divider(self, layout):
+        """Add a vertical divider between stats"""
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(40)
+        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addSpacing(24)
+        layout.addWidget(divider)
+        layout.addSpacing(24)
+    
+    def _update_filter_styles(self):
+        """Update filter button styles based on current selection"""
+        for filter_id, btn in self.filter_buttons.items():
+            if filter_id == self.current_filter:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: {Theme.ACCENT};
+                        color: white;
+                        border: none;
+                        padding: 10px 24px;
+                        border-radius: {Theme.RADIUS_SM}px;
+                        font-size: 13px;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background: {Theme.ACCENT_HOVER};
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: {Theme.BG_CARD};
+                        color: {Theme.TEXT_SECONDARY};
+                        border: 1px solid {Theme.BORDER};
+                        padding: 10px 24px;
+                        border-radius: {Theme.RADIUS_SM}px;
+                        font-size: 13px;
+                        font-weight: 500;
+                    }}
+                    QPushButton:hover {{
+                        background: {Theme.BG_CARD_HOVER};
+                        color: {Theme.TEXT_PRIMARY};
+                    }}
+                """)
+    
+    def _set_filter(self, filter_id: str):
+        """Set the current filter and refresh the display"""
+        self.current_filter = filter_id
+        for fid, btn in self.filter_buttons.items():
+            btn.setChecked(fid == filter_id)
+        self._update_filter_styles()
+        self._display_items()
+    
+    def _create_stat(self, label: str, value: str, color: str = None):
+        """Create an improved stat display widget"""
         frame = QFrame()
         frame.setStyleSheet("background: transparent;")
+        frame.setMinimumWidth(100)
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         
         val_label = QLabel(value)
         val_label.setObjectName("stat_value")
-        val_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 24px; font-weight: bold;")
+        actual_color = color or Theme.TEXT_PRIMARY
+        val_label.setStyleSheet(f"""
+            background: transparent;
+            color: {actual_color};
+            font-size: 24px;
+            font-weight: 700;
+        """)
         layout.addWidget(val_label)
         
         name_label = QLabel(label)
-        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        name_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        """)
         layout.addWidget(name_label)
         
         return frame
@@ -2468,28 +3143,41 @@ class StartupPage(QWidget):
         self.startup_items = items
         
         # Update stats
-        total = len(self.startup_items)
-        enabled = sum(1 for item in self.startup_items if item["enabled"])
-        disabled = total - enabled
-        high_impact = sum(1 for item in self.startup_items if item["impact"] == "High")
+        self._update_summary_counts()
         
-        self._update_stat(self.stat_total, str(total))
-        self._update_stat(self.stat_enabled, str(enabled))
-        self._update_stat(self.stat_disabled, str(disabled))
-        self._update_stat(self.stat_high_impact, str(high_impact))
+        # Display items with current filter
+        self._display_items()
+        
+        self.refresh_btn.setEnabled(True)
+        self.refresh_btn.setText("Refresh")
+        self.loaded = True
+    
+    def _display_items(self):
+        """Display startup items based on current filter"""
+        # Filter items based on current selection
+        if self.current_filter == "enabled":
+            filtered_items = [item for item in self.startup_items if item.get("enabled", False)]
+        elif self.current_filter == "disabled":
+            filtered_items = [item for item in self.startup_items if not item.get("enabled", False)]
+        else:
+            filtered_items = self.startup_items
         
         # Clear old widgets
-        for widget in self.item_widgets:
-            widget.deleteLater()
-        self.item_widgets.clear()
+        self.items_list.clear()
+        
+        if not filtered_items:
+            self.status_label.setText("No startup items to display")
+            self.status_label.setVisible(True)
+            self.items_list.setVisible(False)
+            return
         
         # Show items container
         self.status_label.setVisible(False)
-        self.items_container.setVisible(True)
+        self.items_list.setVisible(True)
         
         # Group by impact
         by_impact = {"High": [], "Medium": [], "Low": [], "Not measured": []}
-        for item in self.startup_items:
+        for item in filtered_items:
             impact = item.get("impact", "Not measured")
             if impact in by_impact:
                 by_impact[impact].append(item)
@@ -2497,118 +3185,42 @@ class StartupPage(QWidget):
                 by_impact["Not measured"].append(item)
         
         # Add items grouped by impact
+        row_idx = 0
         for impact_level in ["High", "Medium", "Low", "Not measured"]:
-            items = by_impact.get(impact_level, [])
-            if not items:
+            impact_items = by_impact.get(impact_level, [])
+            if not impact_items:
                 continue
             
-            # Category header
-            impact_color = Theme.ERROR if impact_level == "High" else Theme.WARNING if impact_level == "Medium" else Theme.TEXT_TERTIARY
-            header = QLabel(f"  {impact_level} Impact ({len(items)})")
-            header.setStyleSheet(f"""
-                background: {Theme.BG_CARD_HOVER};
-                color: {impact_color};
-                font-size: 12px;
-                font-weight: 600;
-                padding: 8px 12px;
-            """)
-            self.items_layout.addWidget(header)
-            self.item_widgets.append(header)
+            # Add category header
+            self.items_list.add_category(f"{impact_level} Impact", len(impact_items))
             
-            for item in items:
-                row = self._create_item_row(item)
-                self.items_layout.addWidget(row)
-                self.item_widgets.append(row)
-        
-        self.refresh_btn.setEnabled(True)
-        self.refresh_btn.setText("Refresh")
-        self.loaded = True
+            for item in impact_items:
+                # Determine status colors
+                status = "ok" if item.get("enabled", False) else "disabled"
+                status_text = "Enabled" if item.get("enabled", False) else "Disabled"
+                
+                # Create subtitle with publisher and location
+                subtitle = f"{item.get('publisher', 'Unknown')} • {item.get('location', 'Unknown')}"
+                
+                row = self.items_list.add_row(
+                    title=item.get("name", "Unknown"),
+                    subtitle=subtitle,
+                    status=status,
+                    status_text=status_text
+                )
+                
+                # Add toggle button
+                btn_text = "Disable" if item.get("enabled", False) else "Enable"
+                is_primary = not item.get("enabled", False)  # Enable button is primary
+                row.add_action_button(
+                    btn_text, 
+                    lambda checked, i=item, r=row: self._toggle_startup_item(i, r),
+                    primary=is_primary
+                )
+                
+                row_idx += 1
     
-    def _create_item_row(self, item: dict):
-        """Create a row widget for a startup item"""
-        row = QFrame()
-        row.setStyleSheet(f"""
-            QFrame {{
-                background: transparent;
-                border-bottom: 1px solid {Theme.BORDER};
-            }}
-            QFrame:hover {{
-                background: {Theme.BG_CARD_HOVER};
-            }}
-        """)
-        
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(12)
-        
-        # Status icon
-        status = "check" if item["enabled"] else "disabled"
-        icon_text = "✓" if item["enabled"] else "○"
-        icon_color = Theme.SUCCESS if item["enabled"] else Theme.TEXT_TERTIARY
-        icon = QLabel(icon_text)
-        icon.setFixedWidth(20)
-        icon.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 14px; font-weight: bold;")
-        layout.addWidget(icon)
-        
-        # Item info
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(2)
-        
-        name = QLabel(item["name"])
-        name.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 500;")
-        info_layout.addWidget(name)
-        
-        details = QLabel(f"{item['publisher']} • {item['location']}")
-        details.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
-        info_layout.addWidget(details)
-        
-        layout.addLayout(info_layout, 1)
-        
-        # Impact badge
-        impact = item.get("impact", "Not measured")
-        impact_color = Theme.ERROR if impact == "High" else Theme.WARNING if impact == "Medium" else Theme.TEXT_TERTIARY
-        impact_label = QLabel(impact)
-        impact_label.setStyleSheet(f"""
-            background: transparent;
-            color: {impact_color};
-            font-size: 11px;
-            font-weight: 500;
-        """)
-        layout.addWidget(impact_label)
-        
-        # Status text
-        status_text = "Enabled" if item["enabled"] else "Disabled"
-        status_color = Theme.SUCCESS if item["enabled"] else Theme.TEXT_TERTIARY
-        status_label = QLabel(status_text)
-        status_label.setStyleSheet(f"background: transparent; color: {status_color}; font-size: 11px; font-weight: 600;")
-        status_label.setFixedWidth(60)
-        layout.addWidget(status_label)
-        
-        # Toggle button
-        toggle_btn = QPushButton("Disable" if item["enabled"] else "Enable")
-        toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        toggle_btn.setFixedWidth(70)
-        btn_color = Theme.WARNING if item["enabled"] else Theme.SUCCESS
-        toggle_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {btn_color};
-                color: white;
-                border: none;
-                padding: 6px 12px;
-                border-radius: {Theme.RADIUS_SM}px;
-                font-size: 11px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                opacity: 0.9;
-            }}
-        """)
-        toggle_btn.clicked.connect(lambda checked, i=item: self._toggle_startup_item(i, row))
-        layout.addWidget(toggle_btn)
-        
-        return row
-    
-    def _toggle_startup_item(self, item: dict, row_widget: QFrame):
+    def _toggle_startup_item(self, item: dict, row_widget):
         """Toggle a startup item's enabled/disabled state"""
         try:
             from startup_scanner import toggle_startup_item
@@ -2644,22 +3256,6 @@ class StartupPage(QWidget):
                     # Update the item's state
                     item["enabled"] = new_state
                     
-                    # Update the button text
-                    for child in row_widget.findChildren(QPushButton):
-                        if "Disable" in child.text() or "Enable" in child.text():
-                            child.setText("Disable" if new_state else "Enable")
-                            break
-                    
-                    # Update status label
-                    for child in row_widget.findChildren(QLabel):
-                        if child.text() in ("Enabled", "Disabled"):
-                            child.setText("Enabled" if new_state else "Disabled")
-                            child.setStyleSheet(f"""
-                                color: {"#27ae60" if new_state else "#95a5a6"};
-                                font-size: 11px;
-                            """)
-                            break
-                    
                     # Show success message
                     QMessageBox.information(
                         self,
@@ -2668,8 +3264,9 @@ class StartupPage(QWidget):
                         QMessageBox.StandardButton.Ok
                     )
                     
-                    # Refresh the count in the summary
+                    # Refresh the count in the summary and redisplay items
                     self._update_summary_counts()
+                    self._display_items()
                 else:
                     QMessageBox.warning(
                         self,
@@ -2771,8 +3368,8 @@ class EventsPage(QWidget):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         header.addWidget(title)
         header.addStretch()
@@ -2786,9 +3383,9 @@ class EventsPage(QWidget):
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
                 border: 1px solid {Theme.BORDER};
-                padding: 8px 16px;
+                padding: 10px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
@@ -2807,9 +3404,9 @@ class EventsPage(QWidget):
                 background: {Theme.ACCENT};
                 color: white;
                 border: none;
-                padding: 8px 16px;
+                padding: 10px 24px;
                 border-radius: {Theme.RADIUS_SM}px;
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: 600;
             }}
             QPushButton:hover {{
@@ -2826,23 +3423,29 @@ class EventsPage(QWidget):
         info.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
         self.content_layout.addWidget(info)
         
-        # Summary stats row
+        # Summary stats row - matching DriversPage styling
         self.stats_frame = QFrame()
         self.stats_frame.setStyleSheet(f"""
-            background: {Theme.BG_CARD};
-            border-radius: {Theme.RADIUS_MD}px;
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
         """)
+        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
         stats_layout = QHBoxLayout(self.stats_frame)
-        stats_layout.setContentsMargins(20, 16, 20, 16)
-        stats_layout.setSpacing(40)
+        stats_layout.setContentsMargins(24, 20, 24, 20)
+        stats_layout.setSpacing(0)
         
-        self.stat_critical = self._create_stat("Critical", "0", Theme.ERROR)
+        self.stat_critical = self._create_stat("Critical", "—", Theme.ERROR)
         stats_layout.addWidget(self.stat_critical)
+        self._add_stat_divider(stats_layout)
         
-        self.stat_errors = self._create_stat("Errors", "0", Theme.WARNING)
+        self.stat_errors = self._create_stat("Errors", "—", Theme.WARNING)
         stats_layout.addWidget(self.stat_errors)
+        self._add_stat_divider(stats_layout)
         
-        self.stat_warnings = self._create_stat("Warnings", "0", "#f4b400")
+        self.stat_warnings = self._create_stat("Warnings", "—", "#f4b400")
         stats_layout.addWidget(self.stat_warnings)
         
         stats_layout.addStretch()
@@ -2871,29 +3474,52 @@ class EventsPage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
     
+    def _add_stat_divider(self, layout):
+        """Add a vertical divider between stats"""
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(40)
+        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addSpacing(24)
+        layout.addWidget(divider)
+        layout.addSpacing(24)
+    
     def _create_stat(self, label: str, value: str, color: str = None):
-        """Create a stat display widget"""
+        """Create an improved stat display widget matching DriversPage"""
         frame = QFrame()
         frame.setStyleSheet("background: transparent;")
+        frame.setMinimumWidth(100)
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         
         value_label = QLabel(value)
-        value_label.setObjectName("value")
+        value_label.setObjectName("stat_value")
         value_color = color or Theme.TEXT_PRIMARY
-        value_label.setStyleSheet(f"background: transparent; color: {value_color}; font-size: 24px; font-weight: bold;")
+        value_label.setStyleSheet(f"""
+            background: transparent;
+            color: {value_color};
+            font-size: 24px;
+            font-weight: 700;
+        """)
         layout.addWidget(value_label)
         
         text_label = QLabel(label)
-        text_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        text_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        """)
         layout.addWidget(text_label)
         
         return frame
     
     def _update_stat(self, stat_widget: QFrame, value: str):
         """Update a stat widget's value"""
-        value_label = stat_widget.findChild(QLabel, "value")
+        value_label = stat_widget.findChild(QLabel, "stat_value")
         if value_label:
             value_label.setText(value)
     
@@ -3293,6 +3919,3560 @@ class EventsPage(QWidget):
 
 
 # =============================================================================
+# AUDIO PAGE - Audio Device Testing with Oscilloscope
+# =============================================================================
+
+class AudioOscilloscope(QFrame):
+    """Real-time audio waveform oscilloscope visualization"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.sample_data = [0.0] * 256
+        self.is_active = False
+        self.amplitude = 0.0
+        self.setFixedHeight(180)
+        self.setMinimumWidth(400)
+        self.setup_ui()
+        
+        # Animation timer for demo/test mode
+        self._demo_timer = QTimer()
+        self._demo_timer.timeout.connect(self._update_demo_waveform)
+        self._demo_phase = 0.0
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            AudioOscilloscope {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+    
+    def start(self, demo_mode: bool = True):
+        """Start the oscilloscope visualization"""
+        self.is_active = True
+        if demo_mode:
+            self._demo_timer.start(33)  # ~30 FPS
+    
+    def stop(self):
+        """Stop the oscilloscope"""
+        self.is_active = False
+        self._demo_timer.stop()
+        self.sample_data = [0.0] * 256
+        self.amplitude = 0.0
+        self.update()
+    
+    def set_amplitude(self, amplitude: float):
+        """Set amplitude for waveform (0.0 - 1.0)"""
+        self.amplitude = max(0.0, min(1.0, amplitude))
+    
+    def _update_demo_waveform(self):
+        """Generate demo sine wave visualization"""
+        import math
+        self._demo_phase += 0.15
+        
+        # Create a composite waveform
+        for i in range(256):
+            t = i / 256.0 * math.pi * 4 + self._demo_phase
+            # Main wave + harmonics
+            value = math.sin(t) * 0.6
+            value += math.sin(t * 2) * 0.25 * self.amplitude
+            value += math.sin(t * 3) * 0.15 * self.amplitude
+            # Add some noise for realism
+            import random
+            value += (random.random() - 0.5) * 0.1 * self.amplitude
+            self.sample_data[i] = value * self.amplitude
+        
+        self.update()
+    
+    def update_samples(self, samples: list):
+        """Update with real audio samples"""
+        if len(samples) >= 256:
+            self.sample_data = samples[:256]
+        else:
+            # Pad or interpolate
+            self.sample_data = samples + [0.0] * (256 - len(samples))
+        self.update()
+    
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Dimensions
+        padding = 16
+        title_height = 28
+        graph_left = padding
+        graph_top = padding + title_height
+        graph_width = self.width() - (padding * 2)
+        graph_height = self.height() - graph_top - padding
+        center_y = graph_top + graph_height // 2
+        
+        # Draw title
+        painter.setPen(QColor(Theme.TEXT_SECONDARY))
+        painter.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        painter.drawText(padding, padding + 16, "Audio Waveform")
+        
+        # Status indicator
+        status_text = "ACTIVE" if self.is_active else "INACTIVE"
+        status_color = Theme.SUCCESS if self.is_active else Theme.TEXT_TERTIARY
+        painter.setPen(QColor(status_color))
+        painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        status_width = painter.fontMetrics().horizontalAdvance(status_text)
+        painter.drawText(self.width() - padding - status_width, padding + 16, status_text)
+        
+        # Draw graph background
+        painter.fillRect(graph_left, graph_top, graph_width, graph_height, QColor(Theme.BG_CARD_HOVER))
+        
+        # Draw center line
+        painter.setPen(QPen(QColor(Theme.BORDER), 1))
+        painter.drawLine(graph_left, center_y, graph_left + graph_width, center_y)
+        
+        # Draw grid lines
+        painter.setPen(QPen(QColor(Theme.BORDER), 1, Qt.PenStyle.DotLine))
+        for i in [1, 3]:
+            y = graph_top + (graph_height * i // 4)
+            painter.drawLine(graph_left, y, graph_left + graph_width, y)
+        
+        # Draw waveform
+        if self.is_active and any(s != 0 for s in self.sample_data):
+            # Create gradient for waveform
+            wave_color = QColor(Theme.ACCENT)
+            wave_color_light = QColor(Theme.ACCENT_LIGHT)
+            
+            # Draw waveform path
+            path = QPainterPath()
+            point_spacing = graph_width / (len(self.sample_data) - 1)
+            
+            first_y = center_y - (self.sample_data[0] * graph_height * 0.45)
+            path.moveTo(graph_left, first_y)
+            
+            for i, sample in enumerate(self.sample_data[1:], 1):
+                x = graph_left + (i * point_spacing)
+                y = center_y - (sample * graph_height * 0.45)
+                path.lineTo(x, y)
+            
+            # Draw glow effect
+            glow_pen = QPen(wave_color_light, 4)
+            glow_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(glow_pen)
+            painter.drawPath(path)
+            
+            # Draw main line
+            painter.setPen(QPen(wave_color, 2))
+            painter.drawPath(path)
+        else:
+            # Draw flat line when inactive
+            painter.setPen(QPen(QColor(Theme.TEXT_TERTIARY), 1, Qt.PenStyle.DashLine))
+            painter.drawLine(graph_left, center_y, graph_left + graph_width, center_y)
+            
+            # Draw "No Signal" text
+            painter.setPen(QColor(Theme.TEXT_TERTIARY))
+            painter.setFont(QFont("Segoe UI", 12))
+            text = "No Signal"
+            text_width = painter.fontMetrics().horizontalAdvance(text)
+            painter.drawText(graph_left + (graph_width - text_width) // 2, center_y + 5, text)
+
+
+class AudioDeviceCard(QFrame):
+    """Card for displaying an audio device with controls"""
+    
+    test_clicked = pyqtSignal(str, str)  # device_id, device_type
+    
+    def __init__(self, device_name: str, device_id: str, device_type: str, 
+                 is_default: bool = False, parent=None):
+        super().__init__(parent)
+        self.device_name = device_name
+        self.device_id = device_id
+        self.device_type = device_type  # "output" or "input"
+        self.is_default = is_default
+        self.is_testing = False
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            AudioDeviceCard {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+            AudioDeviceCard:hover {{
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
+        
+        # Icon
+        icon_char = "🔊" if self.device_type == "output" else "🎤"
+        icon = QLabel(icon_char)
+        icon.setStyleSheet(f"background: transparent; font-size: 24px;")
+        icon.setFixedWidth(32)
+        layout.addWidget(icon)
+        
+        # Info
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(2)
+        
+        name_row = QHBoxLayout()
+        name_row.setSpacing(8)
+        
+        name = QLabel(self.device_name)
+        name.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 600;")
+        name_row.addWidget(name)
+        
+        if self.is_default:
+            default_badge = QLabel("Default")
+            default_badge.setStyleSheet(f"""
+                background: {Theme.SUCCESS_BG};
+                color: {Theme.SUCCESS};
+                padding: 2px 8px;
+                border-radius: 8px;
+                font-size: 10px;
+                font-weight: 600;
+            """)
+            name_row.addWidget(default_badge)
+        
+        name_row.addStretch()
+        info_layout.addLayout(name_row)
+        
+        type_text = "Audio Output Device" if self.device_type == "output" else "Audio Input Device"
+        type_label = QLabel(type_text)
+        type_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        info_layout.addWidget(type_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Level meter (simple bar)
+        self.level_bar = QFrame()
+        self.level_bar.setFixedSize(60, 8)
+        self.level_bar.setStyleSheet(f"""
+            background: {Theme.BG_CARD_HOVER};
+            border-radius: 4px;
+        """)
+        layout.addWidget(self.level_bar)
+        
+        # Test button
+        self.test_btn = QPushButton("Test")
+        self.test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.test_btn.clicked.connect(self._on_test_clicked)
+        self.test_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 6px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT};
+                border-color: {Theme.ACCENT};
+                color: white;
+            }}
+        """)
+        layout.addWidget(self.test_btn)
+    
+    def _on_test_clicked(self):
+        self.test_clicked.emit(self.device_id, self.device_type)
+    
+    def set_testing(self, testing: bool):
+        self.is_testing = testing
+        if testing:
+            self.test_btn.setText("Testing...")
+            self.test_btn.setEnabled(False)
+        else:
+            self.test_btn.setText("Test")
+            self.test_btn.setEnabled(True)
+    
+    def set_level(self, level: float):
+        """Set the level meter (0.0 - 1.0)"""
+        fill_width = int(60 * min(1.0, max(0.0, level)))
+        color = Theme.SUCCESS if level < 0.8 else Theme.WARNING if level < 0.95 else Theme.ERROR
+        self.level_bar.setStyleSheet(f"""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 {color}, stop:{level} {color},
+                stop:{level + 0.01} {Theme.BG_CARD_HOVER}, stop:1 {Theme.BG_CARD_HOVER});
+            border-radius: 4px;
+        """)
+
+
+class AudioTestWorker(QObject):
+    """Background worker for audio testing"""
+    finished = pyqtSignal(dict)
+    progress = pyqtSignal(str)
+    
+    def __init__(self, test_type: str = "all"):
+        super().__init__()
+        self.test_type = test_type
+    
+    def run(self):
+        import subprocess
+        try:
+            # Get audio devices using PowerShell
+            command = '''
+            $result = @{
+                OutputDevices = @()
+                InputDevices = @()
+                DefaultOutput = ""
+                DefaultInput = ""
+            }
+            
+            # Get audio devices using Windows Audio API via PowerShell
+            try {
+                Add-Type -AssemblyName System.Speech
+                
+                # Get playback devices
+                $outputDevices = Get-WmiObject Win32_SoundDevice | Where-Object { $_.Status -eq 'OK' }
+                foreach ($device in $outputDevices) {
+                    $result.OutputDevices += @{
+                        Name = $device.Name
+                        Id = $device.DeviceID
+                        Status = $device.Status
+                        Manufacturer = $device.Manufacturer
+                    }
+                }
+                
+                # Get recording devices - use alternative method
+                $audioEndpoints = Get-WmiObject -Query "SELECT * FROM Win32_PnPEntity WHERE PNPClass = 'AudioEndpoint'" -ErrorAction SilentlyContinue
+                if ($audioEndpoints) {
+                    foreach ($endpoint in $audioEndpoints) {
+                        if ($endpoint.Name -match 'Microphone|Line In|Recording|Input') {
+                            $result.InputDevices += @{
+                                Name = $endpoint.Name
+                                Id = $endpoint.DeviceID
+                                Status = if ($endpoint.Status -eq 'OK') { 'OK' } else { 'Unknown' }
+                            }
+                        }
+                    }
+                }
+                
+                # Fallback - add default devices if none found
+                if ($result.OutputDevices.Count -eq 0) {
+                    $result.OutputDevices += @{
+                        Name = "Default Audio Output"
+                        Id = "default_output"
+                        Status = "OK"
+                    }
+                }
+                if ($result.InputDevices.Count -eq 0) {
+                    $result.InputDevices += @{
+                        Name = "Default Microphone"
+                        Id = "default_input"
+                        Status = "OK"
+                    }
+                }
+                
+                $result.DefaultOutput = if ($result.OutputDevices.Count -gt 0) { $result.OutputDevices[0].Id } else { "" }
+                $result.DefaultInput = if ($result.InputDevices.Count -gt 0) { $result.InputDevices[0].Id } else { "" }
+                
+            } catch {
+                $result.Error = $_.Exception.Message
+            }
+            
+            $result | ConvertTo-Json -Depth 4
+            '''
+            
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                data = json.loads(result.stdout)
+                self.finished.emit(data)
+            else:
+                self.finished.emit({
+                    "OutputDevices": [{"Name": "System Default Speaker", "Id": "default", "Status": "OK"}],
+                    "InputDevices": [{"Name": "System Default Microphone", "Id": "default", "Status": "OK"}],
+                    "DefaultOutput": "default",
+                    "DefaultInput": "default"
+                })
+        except Exception as e:
+            self.finished.emit({
+                "Error": str(e),
+                "OutputDevices": [{"Name": "Audio Device", "Id": "default", "Status": "Unknown"}],
+                "InputDevices": [{"Name": "Microphone", "Id": "default", "Status": "Unknown"}],
+                "DefaultOutput": "default",
+                "DefaultInput": "default"
+            })
+
+
+class AudioPage(QWidget):
+    """Page for testing audio input and output devices with oscilloscope"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.audio_devices = {}
+        self.device_cards = []
+        self.is_testing = False
+        self.setup_ui()
+    
+    def setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        content = QWidget()
+        self.content_layout = QVBoxLayout(content)
+        self.content_layout.setContentsMargins(32, 28, 32, 28)
+        self.content_layout.setSpacing(20)
+        
+        # Header
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        
+        title = QLabel("Audio Devices")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 28px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Refresh button
+        self.refresh_btn = QPushButton("Refresh Devices")
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_btn.clicked.connect(self.scan_devices)
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(self.refresh_btn)
+        
+        # Sound Settings button
+        sound_btn = QPushButton("Sound Settings")
+        sound_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        sound_btn.clicked.connect(self._open_sound_settings)
+        sound_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 24px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
+        header.addWidget(sound_btn)
+        
+        self.content_layout.addLayout(header)
+        
+        # Info text
+        info = QLabel("Test your audio input and output devices. Use the oscilloscope to visualize audio signals in real-time.")
+        info.setWordWrap(True)
+        info.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        self.content_layout.addWidget(info)
+        
+        # Oscilloscope section
+        scope_header = QLabel("Oscilloscope")
+        scope_header.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 18px;
+            font-weight: 600;
+        """)
+        self.content_layout.addWidget(scope_header)
+        
+        # Oscilloscope controls row
+        scope_controls = QHBoxLayout()
+        scope_controls.setSpacing(12)
+        
+        self.oscilloscope = AudioOscilloscope()
+        
+        # Amplitude slider simulation (using buttons for simplicity)
+        amp_frame = QFrame()
+        amp_frame.setStyleSheet(f"""
+            background: {Theme.BG_CARD};
+            border: 1px solid {Theme.BORDER};
+            border-radius: {Theme.RADIUS_MD}px;
+        """)
+        amp_layout = QVBoxLayout(amp_frame)
+        amp_layout.setContentsMargins(16, 12, 16, 12)
+        amp_layout.setSpacing(8)
+        
+        amp_label = QLabel("Test Signal")
+        amp_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
+        amp_layout.addWidget(amp_label)
+        
+        self.amp_value = QLabel("OFF")
+        self.amp_value.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        amp_layout.addWidget(self.amp_value)
+        
+        amp_btn_layout = QHBoxLayout()
+        amp_btn_layout.setSpacing(6)
+        
+        self.start_scope_btn = QPushButton("Start")
+        self.start_scope_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.start_scope_btn.clicked.connect(self._start_oscilloscope)
+        self.start_scope_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.SUCCESS};
+                color: white;
+                border: none;
+                padding: 6px 14px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: #0db25f;
+            }}
+        """)
+        amp_btn_layout.addWidget(self.start_scope_btn)
+        
+        self.stop_scope_btn = QPushButton("Stop")
+        self.stop_scope_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.stop_scope_btn.clicked.connect(self._stop_oscilloscope)
+        self.stop_scope_btn.setEnabled(False)
+        self.stop_scope_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ERROR};
+                color: white;
+                border: none;
+                padding: 6px 14px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: #c0392b;
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        amp_btn_layout.addWidget(self.stop_scope_btn)
+        
+        amp_layout.addLayout(amp_btn_layout)
+        
+        # Frequency selector
+        freq_layout = QVBoxLayout()
+        freq_layout.setSpacing(4)
+        freq_label = QLabel("Frequency")
+        freq_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 10px;")
+        freq_layout.addWidget(freq_label)
+        
+        self.freq_btns = []
+        for freq in ["Low", "Mid", "High"]:
+            btn = QPushButton(freq)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {Theme.TEXT_SECONDARY};
+                    border: 1px solid {Theme.BORDER};
+                    padding: 4px 10px;
+                    border-radius: 4px;
+                    font-size: 10px;
+                }}
+                QPushButton:checked {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border-color: {Theme.ACCENT};
+                }}
+                QPushButton:hover {{
+                    border-color: {Theme.ACCENT};
+                }}
+            """)
+            if freq == "Mid":
+                btn.setChecked(True)
+            btn.clicked.connect(lambda c, f=freq: self._set_frequency(f))
+            freq_layout.addWidget(btn)
+            self.freq_btns.append(btn)
+        
+        amp_layout.addLayout(freq_layout)
+        
+        scope_row = QHBoxLayout()
+        scope_row.setSpacing(16)
+        scope_row.addWidget(self.oscilloscope, 1)
+        scope_row.addWidget(amp_frame)
+        
+        self.content_layout.addLayout(scope_row)
+        
+        # Output Devices section
+        output_header = QLabel("Output Devices (Speakers)")
+        output_header.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 8px;
+        """)
+        self.content_layout.addWidget(output_header)
+        
+        self.output_container = QFrame()
+        self.output_container.setStyleSheet("background: transparent;")
+        self.output_layout = QVBoxLayout(self.output_container)
+        self.output_layout.setContentsMargins(0, 0, 0, 0)
+        self.output_layout.setSpacing(8)
+        self.content_layout.addWidget(self.output_container)
+        
+        # Input Devices section
+        input_header = QLabel("Input Devices (Microphones)")
+        input_header.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 8px;
+        """)
+        self.content_layout.addWidget(input_header)
+        
+        self.input_container = QFrame()
+        self.input_container.setStyleSheet("background: transparent;")
+        self.input_layout = QVBoxLayout(self.input_container)
+        self.input_layout.setContentsMargins(0, 0, 0, 0)
+        self.input_layout.setSpacing(8)
+        self.content_layout.addWidget(self.input_container)
+        
+        # Status label
+        self.status_label = QLabel("Click 'Refresh Devices' to scan for audio devices")
+        self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.content_layout.addWidget(self.status_label)
+        
+        # Test tone section
+        test_section = QFrame()
+        test_section.setStyleSheet(f"""
+            background: {Theme.BG_CARD};
+            border: 1px solid {Theme.BORDER};
+            border-radius: {Theme.RADIUS_MD}px;
+        """)
+        test_layout = QVBoxLayout(test_section)
+        test_layout.setContentsMargins(20, 16, 20, 16)
+        test_layout.setSpacing(12)
+        
+        test_header = QLabel("Quick Audio Test")
+        test_header.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;")
+        test_layout.addWidget(test_header)
+        
+        test_desc = QLabel("Play test tones through your speakers to verify audio output is working correctly.")
+        test_desc.setWordWrap(True)
+        test_desc.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        test_layout.addWidget(test_desc)
+        
+        test_btn_row = QHBoxLayout()
+        test_btn_row.setSpacing(12)
+        
+        self.play_tone_btn = QPushButton("▶ Play Test Tone")
+        self.play_tone_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.play_tone_btn.clicked.connect(self._play_test_tone)
+        self.play_tone_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
+        test_btn_row.addWidget(self.play_tone_btn)
+        
+        self.play_left_btn = QPushButton("Left Channel")
+        self.play_left_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.play_left_btn.clicked.connect(lambda: self._play_channel_test("left"))
+        self.play_left_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        test_btn_row.addWidget(self.play_left_btn)
+        
+        self.play_right_btn = QPushButton("Right Channel")
+        self.play_right_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.play_right_btn.clicked.connect(lambda: self._play_channel_test("right"))
+        self.play_right_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        test_btn_row.addWidget(self.play_right_btn)
+        
+        test_btn_row.addStretch()
+        test_layout.addLayout(test_btn_row)
+        
+        self.content_layout.addWidget(test_section)
+        
+        self.content_layout.addStretch()
+        
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+        
+        # Background worker
+        self._worker = None
+        self._thread = None
+    
+    def scan_devices(self):
+        """Scan for audio devices"""
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.setText("Scanning...")
+        self.status_label.setText("Scanning audio devices...")
+        self.status_label.setVisible(True)
+        
+        self._thread = QThread()
+        self._worker = AudioTestWorker()
+        self._worker.moveToThread(self._thread)
+        
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_scan_complete)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        
+        self._thread.start()
+    
+    def _on_scan_complete(self, data: dict):
+        """Handle scan completion"""
+        self.refresh_btn.setEnabled(True)
+        self.refresh_btn.setText("Refresh Devices")
+        self.audio_devices = data
+        
+        # Clear existing cards
+        for card in self.device_cards:
+            card.deleteLater()
+        self.device_cards = []
+        
+        # Clear layouts
+        while self.output_layout.count():
+            item = self.output_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        while self.input_layout.count():
+            item = self.input_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Add output devices
+        output_devices = data.get("OutputDevices", [])
+        default_output = data.get("DefaultOutput", "")
+        
+        for device in output_devices:
+            is_default = device.get("Id") == default_output or len(output_devices) == 1
+            card = AudioDeviceCard(
+                device.get("Name", "Unknown"),
+                device.get("Id", ""),
+                "output",
+                is_default
+            )
+            card.test_clicked.connect(self._test_device)
+            self.output_layout.addWidget(card)
+            self.device_cards.append(card)
+        
+        # Add input devices
+        input_devices = data.get("InputDevices", [])
+        default_input = data.get("DefaultInput", "")
+        
+        for device in input_devices:
+            is_default = device.get("Id") == default_input or len(input_devices) == 1
+            card = AudioDeviceCard(
+                device.get("Name", "Unknown"),
+                device.get("Id", ""),
+                "input",
+                is_default
+            )
+            card.test_clicked.connect(self._test_device)
+            self.input_layout.addWidget(card)
+            self.device_cards.append(card)
+        
+        self.status_label.setVisible(False)
+    
+    def _test_device(self, device_id: str, device_type: str):
+        """Test a specific device"""
+        if device_type == "output":
+            self._play_test_tone()
+        else:
+            # Start oscilloscope for input test
+            self._start_oscilloscope()
+    
+    def _start_oscilloscope(self):
+        """Start the oscilloscope visualization"""
+        self.oscilloscope.set_amplitude(0.7)
+        self.oscilloscope.start(demo_mode=True)
+        self.start_scope_btn.setEnabled(False)
+        self.stop_scope_btn.setEnabled(True)
+        self.amp_value.setText("ACTIVE")
+        self.amp_value.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 18px; font-weight: 600;")
+    
+    def _stop_oscilloscope(self):
+        """Stop the oscilloscope"""
+        self.oscilloscope.stop()
+        self.start_scope_btn.setEnabled(True)
+        self.stop_scope_btn.setEnabled(False)
+        self.amp_value.setText("OFF")
+        self.amp_value.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+    
+    def _set_frequency(self, freq: str):
+        """Set oscilloscope frequency display"""
+        for btn in self.freq_btns:
+            btn.setChecked(btn.text() == freq)
+        
+        # Adjust amplitude based on frequency for visual effect
+        if freq == "Low":
+            self.oscilloscope.set_amplitude(0.5)
+        elif freq == "Mid":
+            self.oscilloscope.set_amplitude(0.7)
+        else:
+            self.oscilloscope.set_amplitude(0.9)
+    
+    def _play_test_tone(self):
+        """Play a test tone using Windows built-in beep"""
+        import subprocess
+        try:
+            # Use PowerShell to play a beep tone
+            command = '''
+            [console]::beep(440, 500)
+            Start-Sleep -Milliseconds 200
+            [console]::beep(554, 500)
+            Start-Sleep -Milliseconds 200  
+            [console]::beep(659, 500)
+            '''
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+        except Exception as e:
+            print(f"Error playing tone: {e}")
+    
+    def _play_channel_test(self, channel: str):
+        """Play test tone for a specific channel"""
+        import subprocess
+        try:
+            freq = 440 if channel == "left" else 554
+            command = f'[console]::beep({freq}, 1000)'
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+        except Exception as e:
+            print(f"Error playing channel test: {e}")
+    
+    def _open_sound_settings(self):
+        """Open Windows Sound Settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["control", "mmsys.cpl", "sounds"])
+        except Exception as e:
+            print(f"Error opening sound settings: {e}")
+
+
+# =============================================================================
+# WINDOWS UPDATE PAGE - Comprehensive Windows Update Management
+# =============================================================================
+
+class WindowsUpdatePage(QWidget):
+    """Dedicated page for Windows Update management with detailed information"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.update_data = {}
+        self.widgets = []
+        self.is_loading = False
+        self._thread = None
+        self._worker = None
+        self.setup_ui()
+    
+    def setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        content = QWidget()
+        self.content_layout = QVBoxLayout(content)
+        self.content_layout.setContentsMargins(32, 28, 32, 28)
+        self.content_layout.setSpacing(20)
+        
+        # Header row
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        
+        title = QLabel("Windows Update")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 28px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Last checked label
+        self.last_checked = QLabel("Not checked yet")
+        self.last_checked.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        header.addWidget(self.last_checked)
+        
+        # Refresh button
+        self.refresh_btn = QPushButton("Check for Updates")
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_btn.clicked.connect(self.check_updates)
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        header.addWidget(self.refresh_btn)
+        
+        # Open Windows Update button
+        open_btn = QPushButton("Open Windows Update")
+        open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        open_btn.clicked.connect(self._open_windows_update)
+        open_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(open_btn)
+        
+        self.content_layout.addLayout(header)
+        
+        # Status/loading indicator
+        self.status_label = QLabel("Click 'Check for Updates' to scan for available updates")
+        self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.content_layout.addWidget(self.status_label)
+        
+        # Summary stats row - matching DriversPage styling
+        self.stats_frame = QFrame()
+        self.stats_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        self.stats_frame.setVisible(False)
+        stats_layout = QHBoxLayout(self.stats_frame)
+        stats_layout.setContentsMargins(24, 20, 24, 20)
+        stats_layout.setSpacing(0)
+        
+        self.stat_pending = self._create_stat("Pending", "—", Theme.WARNING)
+        stats_layout.addWidget(self.stat_pending)
+        self._add_stat_divider(stats_layout)
+        
+        self.stat_downloaded = self._create_stat("Downloaded", "—", Theme.SUCCESS)
+        stats_layout.addWidget(self.stat_downloaded)
+        self._add_stat_divider(stats_layout)
+        
+        self.stat_failed = self._create_stat("Failed", "—", Theme.ERROR)
+        stats_layout.addWidget(self.stat_failed)
+        self._add_stat_divider(stats_layout)
+        
+        # Service status as a stat widget
+        self.stat_service = self._create_stat("Service Status", "—", Theme.TEXT_PRIMARY)
+        stats_layout.addWidget(self.stat_service)
+        
+        stats_layout.addStretch()
+        
+        self.content_layout.addWidget(self.stats_frame)
+        
+        # Reboot required banner
+        self.reboot_banner = QFrame()
+        self.reboot_banner.setStyleSheet(f"""
+            background: {Theme.WARNING};
+            border-radius: {Theme.RADIUS_SM}px;
+        """)
+        self.reboot_banner.setVisible(False)
+        reboot_layout = QHBoxLayout(self.reboot_banner)
+        reboot_layout.setContentsMargins(16, 12, 16, 12)
+        
+        reboot_icon = QLabel("⚠")
+        reboot_icon.setStyleSheet("background: transparent; color: #000; font-size: 16px;")
+        reboot_layout.addWidget(reboot_icon)
+        
+        reboot_text = QLabel("A restart is required to complete the installation of updates")
+        reboot_text.setStyleSheet("background: transparent; color: #000; font-size: 13px; font-weight: 500;")
+        reboot_layout.addWidget(reboot_text)
+        reboot_layout.addStretch()
+        
+        self.content_layout.addWidget(self.reboot_banner)
+        
+        # Main content container
+        self.main_container = QFrame()
+        self.main_container.setStyleSheet("background: transparent;")
+        self.main_layout = QVBoxLayout(self.main_container)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(20)
+        self.main_container.setVisible(False)
+        self.content_layout.addWidget(self.main_container)
+        
+        self.content_layout.addStretch()
+        
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+    
+    def _add_stat_divider(self, layout):
+        """Add a vertical divider between stats"""
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(40)
+        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addSpacing(24)
+        layout.addWidget(divider)
+        layout.addSpacing(24)
+    
+    def _create_stat(self, label: str, value: str, color: str = None):
+        """Create an improved stat display widget matching DriversPage"""
+        frame = QFrame()
+        frame.setStyleSheet("background: transparent;")
+        frame.setMinimumWidth(100)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        value_label = QLabel(value)
+        value_label.setObjectName("stat_value")
+        value_color = color or Theme.TEXT_PRIMARY
+        value_label.setStyleSheet(f"""
+            background: transparent;
+            color: {value_color};
+            font-size: 24px;
+            font-weight: 700;
+        """)
+        layout.addWidget(value_label)
+        
+        text_label = QLabel(label)
+        text_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        """)
+        layout.addWidget(text_label)
+        
+        return frame
+    
+    def _update_stat(self, stat_widget: QFrame, value: str):
+        """Update a stat widget's value"""
+        value_label = stat_widget.findChild(QLabel, "stat_value")
+        if value_label:
+            value_label.setText(value)
+    
+    def check_updates(self):
+        """Check for Windows updates using background thread"""
+        if self.is_loading:
+            return
+        
+        self.is_loading = True
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.setText("Checking...")
+        self.status_label.setText("Checking for updates...")
+        self.status_label.setVisible(True)
+        self.main_container.setVisible(False)
+        
+        # Run in background thread
+        self._thread = QThread()
+        self._worker = WindowsUpdateDetailWorker()
+        self._worker.moveToThread(self._thread)
+        
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_check_complete)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        
+        self._thread.start()
+    
+    def _on_check_complete(self, data: dict):
+        """Handle update check completion"""
+        self.is_loading = False
+        self.refresh_btn.setEnabled(True)
+        self.refresh_btn.setText("Check for Updates")
+        
+        if not data or data.get('Error'):
+            self.status_label.setText(f"Error: {data.get('Error', 'Unknown error')}")
+            self.status_label.setVisible(True)
+            return
+        
+        self.update_data = data
+        self._display_updates()
+    
+    def display_cached_data(self, data: dict):
+        """Display update info from cached data (from full scan)"""
+        if not data:
+            return
+        
+        # If we have basic data, trigger a full check for detailed info
+        if not self.update_data and not self.is_loading:
+            self.check_updates()
+    
+    def _display_updates(self):
+        """Display the update information"""
+        self.status_label.setVisible(False)
+        self.stats_frame.setVisible(True)
+        self.main_container.setVisible(True)
+        
+        # Clear old widgets
+        for widget in self.widgets:
+            widget.deleteLater()
+        self.widgets.clear()
+        
+        # Clear main layout
+        while self.main_layout.count():
+            item = self.main_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Update stats
+        pending = self.update_data.get('PendingUpdates', [])
+        if isinstance(pending, list):
+            pending_count = len(pending)
+            downloaded_count = sum(1 for u in pending if u.get('IsDownloaded', False))
+        else:
+            pending_count = 0
+            downloaded_count = 0
+        
+        # Count failed from history
+        history = self.update_data.get('RecentHistory', [])
+        failed_count = sum(1 for h in history if h.get('Result') == 'Failed')
+        
+        self._update_stat(self.stat_pending, str(pending_count))
+        self._update_stat(self.stat_downloaded, str(downloaded_count))
+        self._update_stat(self.stat_failed, str(failed_count))
+        
+        # Update service status
+        service = self.update_data.get('ServiceStatus', 'Unknown')
+        self._update_stat(self.stat_service, service)
+        
+        # Show reboot banner if needed
+        self.reboot_banner.setVisible(self.update_data.get('PendingReboot', False))
+        
+        # Update last checked
+        last_check = self.update_data.get('LastCheck', 'Unknown')
+        self.last_checked.setText(f"Last check: {last_check}")
+        
+        # Pending Updates Section
+        if pending_count > 0:
+            pending_card = self._create_updates_card("Available Updates", pending, "pending")
+            self.main_layout.addWidget(pending_card)
+            self.widgets.append(pending_card)
+        else:
+            # Show "up to date" message
+            up_to_date = QFrame()
+            up_to_date.setStyleSheet(f"""
+                background: {Theme.BG_CARD};
+                border-radius: {Theme.RADIUS_MD}px;
+                border-left: 4px solid {Theme.SUCCESS};
+            """)
+            up_to_date_layout = QHBoxLayout(up_to_date)
+            up_to_date_layout.setContentsMargins(16, 20, 16, 20)
+            
+            check_icon = QLabel("✓")
+            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 20px; font-weight: bold;")
+            up_to_date_layout.addWidget(check_icon)
+            
+            up_to_date_text = QLabel("Your device is up to date")
+            up_to_date_text.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
+            up_to_date_layout.addWidget(up_to_date_text)
+            up_to_date_layout.addStretch()
+            
+            last_install = self.update_data.get('LastInstall', 'Unknown')
+            install_label = QLabel(f"Last installed: {last_install}")
+            install_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+            up_to_date_layout.addWidget(install_label)
+            
+            self.main_layout.addWidget(up_to_date)
+            self.widgets.append(up_to_date)
+        
+        # Update History Section
+        if history:
+            history_card = self._create_history_card("Recent Update History", history)
+            self.main_layout.addWidget(history_card)
+            self.widgets.append(history_card)
+    
+    def _create_updates_card(self, title: str, updates: list, card_type: str):
+        """Create a card showing available updates"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        header.addWidget(title_label)
+        header.addStretch()
+        
+        count_label = QLabel(f"{len(updates)} update(s)")
+        count_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        header.addWidget(count_label)
+        
+        layout.addLayout(header)
+        
+        # Separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addWidget(sep)
+        
+        # Updates list
+        for update in updates[:10]:  # Limit to 10
+            update_row = self._create_update_row(update)
+            layout.addWidget(update_row)
+        
+        if len(updates) > 10:
+            more_label = QLabel(f"... and {len(updates) - 10} more updates")
+            more_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+            more_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(more_label)
+        
+        return card
+    
+    def _create_update_row(self, update: dict):
+        """Create a row for a single update"""
+        row = QFrame()
+        row.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_ELEVATED};
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+        
+        # Top row: title and category
+        top_row = QHBoxLayout()
+        
+        # Downloaded indicator
+        if update.get('IsDownloaded'):
+            dl_icon = QLabel("⬇")
+            dl_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+            dl_icon.setToolTip("Downloaded")
+            top_row.addWidget(dl_icon)
+        
+        title = update.get('Title', 'Unknown Update')
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 500;")
+        title_label.setWordWrap(True)
+        top_row.addWidget(title_label, 1)
+        
+        # Category badge
+        category = update.get('Category', 'Other')
+        cat_color = Theme.ACCENT if 'Security' in category else Theme.TEXT_SECONDARY
+        cat_label = QLabel(category)
+        cat_label.setStyleSheet(f"""
+            background: transparent;
+            color: {cat_color};
+            font-size: 11px;
+            padding: 2px 8px;
+            border: 1px solid {cat_color};
+            border-radius: 10px;
+        """)
+        top_row.addWidget(cat_label)
+        
+        layout.addLayout(top_row)
+        
+        # Bottom row: KB, size, severity
+        bottom_row = QHBoxLayout()
+        
+        kb = update.get('KBArticleIDs', '')
+        if kb:
+            kb_label = QLabel(f"KB{kb}")
+            kb_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+            bottom_row.addWidget(kb_label)
+        
+        size = update.get('SizeMB', 0)
+        if size > 0:
+            size_label = QLabel(f"{size} MB")
+            size_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+            bottom_row.addWidget(size_label)
+        
+        severity = update.get('Severity', '')
+        if severity and severity != 'Unspecified':
+            sev_color = Theme.ERROR if severity == 'Critical' else Theme.WARNING if severity == 'Important' else Theme.TEXT_TERTIARY
+            sev_label = QLabel(severity)
+            sev_label.setStyleSheet(f"background: transparent; color: {sev_color}; font-size: 11px; font-weight: 500;")
+            bottom_row.addWidget(sev_label)
+        
+        bottom_row.addStretch()
+        
+        if update.get('IsMandatory'):
+            mandatory = QLabel("Required")
+            mandatory.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 11px;")
+            bottom_row.addWidget(mandatory)
+        
+        layout.addLayout(bottom_row)
+        
+        return row
+    
+    def _create_history_card(self, title: str, history: list):
+        """Create a card showing update history"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;")
+        header.addWidget(title_label)
+        header.addStretch()
+        layout.addLayout(header)
+        
+        # Separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addWidget(sep)
+        
+        # History list
+        for entry in history[:15]:  # Limit to 15
+            history_row = self._create_history_row(entry)
+            layout.addWidget(history_row)
+        
+        return card
+    
+    def _create_history_row(self, entry: dict):
+        """Create a row for a history entry"""
+        row = QFrame()
+        row.setStyleSheet("background: transparent;")
+        
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(12)
+        
+        # Result icon
+        result = entry.get('Result', 'Unknown')
+        if result == 'Succeeded':
+            icon = "✓"
+            icon_color = Theme.SUCCESS
+        elif result == 'Failed':
+            icon = "✗"
+            icon_color = Theme.ERROR
+        else:
+            icon = "○"
+            icon_color = Theme.TEXT_TERTIARY
+        
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 14px; font-weight: bold;")
+        icon_label.setFixedWidth(20)
+        layout.addWidget(icon_label)
+        
+        # Title
+        title = entry.get('Title', 'Unknown')
+        if len(title) > 80:
+            title = title[:80] + "..."
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
+        title_label.setWordWrap(True)
+        layout.addWidget(title_label, 1)
+        
+        # Date
+        date = entry.get('Date', '')
+        date_label = QLabel(date)
+        date_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        layout.addWidget(date_label)
+        
+        return row
+    
+    def _open_windows_update(self):
+        """Open Windows Update settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:windowsupdate"], 
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except Exception as e:
+            print(f"Error opening Windows Update: {e}")
+
+
+class WindowsUpdateDetailWorker(QObject):
+    """Worker to fetch detailed Windows Update info in background"""
+    finished = pyqtSignal(dict)
+    
+    def run(self):
+        try:
+            from driver_backend import HealthChecker
+            checker = HealthChecker()
+            data = checker.get_windows_update_details()
+            self.finished.emit(data)
+        except Exception as e:
+            self.finished.emit({"Error": str(e)})
+
+
+# =============================================================================
+# STORAGE PAGE - Comprehensive Storage Management
+# =============================================================================
+
+class StoragePage(QWidget):
+    """Dedicated page for storage management with detailed drive information"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.storage_data = {}
+        self.widgets = []
+        self.is_loading = False
+        self._thread = None
+        self._worker = None
+        self.setup_ui()
+    
+    def setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        content = QWidget()
+        self.content_layout = QVBoxLayout(content)
+        self.content_layout.setContentsMargins(32, 28, 32, 28)
+        self.content_layout.setSpacing(20)
+        
+        # Header row
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        
+        title = QLabel("Storage Health")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 28px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Refresh button
+        self.refresh_btn = QPushButton("Scan Storage")
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_btn.clicked.connect(self.scan_storage)
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        header.addWidget(self.refresh_btn)
+        
+        # Disk Cleanup button
+        cleanup_btn = QPushButton("Disk Cleanup")
+        cleanup_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cleanup_btn.clicked.connect(self._open_disk_cleanup)
+        cleanup_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(cleanup_btn)
+        
+        # Storage Settings button
+        settings_btn = QPushButton("Storage Settings")
+        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings_btn.clicked.connect(self._open_storage_settings)
+        settings_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(settings_btn)
+        
+        self.content_layout.addLayout(header)
+        
+        # Status label
+        self.status_label = QLabel("Click 'Scan Storage' to analyze your drives")
+        self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.content_layout.addWidget(self.status_label)
+        
+        # Summary stats row - matching DriversPage styling
+        self.stats_frame = QFrame()
+        self.stats_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        self.stats_frame.setVisible(False)
+        stats_layout = QHBoxLayout(self.stats_frame)
+        stats_layout.setContentsMargins(24, 20, 24, 20)
+        stats_layout.setSpacing(0)
+        
+        self.stat_total = self._create_stat("Total Space", "—", Theme.TEXT_PRIMARY)
+        stats_layout.addWidget(self.stat_total)
+        self._add_stat_divider(stats_layout)
+        
+        self.stat_used = self._create_stat("Used", "—", Theme.WARNING)
+        stats_layout.addWidget(self.stat_used)
+        self._add_stat_divider(stats_layout)
+        
+        self.stat_free = self._create_stat("Free", "—", Theme.SUCCESS)
+        stats_layout.addWidget(self.stat_free)
+        self._add_stat_divider(stats_layout)
+        
+        self.stat_disks = self._create_stat("Drives", "—", Theme.ACCENT)
+        stats_layout.addWidget(self.stat_disks)
+        
+        stats_layout.addStretch()
+        
+        self.content_layout.addWidget(self.stats_frame)
+        
+        # Main content container
+        self.main_container = QFrame()
+        self.main_container.setStyleSheet("background: transparent;")
+        self.main_layout = QVBoxLayout(self.main_container)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(20)
+        self.main_container.setVisible(False)
+        self.content_layout.addWidget(self.main_container)
+        
+        self.content_layout.addStretch()
+        
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+    
+    def _add_stat_divider(self, layout):
+        """Add a vertical divider between stats"""
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(40)
+        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addSpacing(24)
+        layout.addWidget(divider)
+        layout.addSpacing(24)
+    
+    def _create_stat(self, label: str, value: str, color: str):
+        """Create an improved stat display widget matching DriversPage"""
+        frame = QFrame()
+        frame.setStyleSheet("background: transparent;")
+        frame.setMinimumWidth(100)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        value_label = QLabel(value)
+        value_label.setObjectName("stat_value")
+        value_label.setStyleSheet(f"""
+            background: transparent;
+            color: {color};
+            font-size: 24px;
+            font-weight: 700;
+        """)
+        layout.addWidget(value_label)
+        
+        text_label = QLabel(label)
+        text_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        """)
+        layout.addWidget(text_label)
+        
+        return frame
+    
+    def _update_stat(self, stat_widget: QFrame, value: str):
+        """Update a stat widget's value"""
+        value_label = stat_widget.findChild(QLabel, "stat_value")
+        if value_label:
+            value_label.setText(value)
+    
+    def scan_storage(self):
+        """Scan storage using background thread"""
+        if self.is_loading:
+            return
+        
+        self.is_loading = True
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.setText("Scanning...")
+        self.status_label.setText("Analyzing storage...")
+        self.status_label.setVisible(True)
+        self.main_container.setVisible(False)
+        
+        # Run in background thread
+        self._thread = QThread()
+        self._worker = StorageDetailWorker()
+        self._worker.moveToThread(self._thread)
+        
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_scan_complete)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        
+        self._thread.start()
+    
+    def _on_scan_complete(self, data: dict):
+        """Handle storage scan completion"""
+        self.is_loading = False
+        self.refresh_btn.setEnabled(True)
+        self.refresh_btn.setText("Scan Storage")
+        
+        if not data or data.get('Error'):
+            self.status_label.setText(f"Error: {data.get('Error', 'Unknown error')}")
+            self.status_label.setVisible(True)
+            return
+        
+        self.storage_data = data
+        self._display_storage()
+    
+    def display_cached_data(self, data):
+        """Display storage info from cached data (from full scan)"""
+        if not data:
+            return
+        # If we have basic volume data, trigger a full scan for detailed info
+        if not self.storage_data and not self.is_loading:
+            self.scan_storage()
+    
+    def _display_storage(self):
+        """Display the storage information"""
+        self.status_label.setVisible(False)
+        self.stats_frame.setVisible(True)
+        self.main_container.setVisible(True)
+        
+        # Clear old widgets
+        for widget in self.widgets:
+            widget.deleteLater()
+        self.widgets.clear()
+        
+        # Clear main layout
+        while self.main_layout.count():
+            item = self.main_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Update summary stats
+        total = self.storage_data.get('TotalSpace', 0)
+        used = self.storage_data.get('TotalUsed', 0)
+        free = self.storage_data.get('TotalFree', 0)
+        disks = len(self.storage_data.get('Disks', []))
+        
+        self._update_stat(self.stat_total, f"{total:.1f} GB")
+        self._update_stat(self.stat_used, f"{used:.1f} GB")
+        self._update_stat(self.stat_free, f"{free:.1f} GB")
+        self._update_stat(self.stat_disks, str(disks))
+        
+        # Volumes section with visual bars
+        volumes = self.storage_data.get('Volumes', [])
+        if volumes:
+            volumes_card = self._create_volumes_card(volumes)
+            self.main_layout.addWidget(volumes_card)
+            self.widgets.append(volumes_card)
+        
+        # Physical disks section
+        disks_data = self.storage_data.get('Disks', [])
+        if disks_data:
+            disks_card = self._create_disks_card(disks_data)
+            self.main_layout.addWidget(disks_card)
+            self.widgets.append(disks_card)
+        
+        # Cleanup suggestions
+        cleanup_card = self._create_cleanup_card()
+        self.main_layout.addWidget(cleanup_card)
+        self.widgets.append(cleanup_card)
+    
+    def _create_volumes_card(self, volumes: list):
+        """Create a card showing volume information with progress bars"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+        
+        # Header
+        title = QLabel("Volumes")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        # Volume rows
+        for vol in volumes:
+            vol_widget = self._create_volume_row(vol)
+            layout.addWidget(vol_widget)
+        
+        return card
+    
+    def _create_volume_row(self, vol: dict):
+        """Create a row for a volume with progress bar"""
+        row = QFrame()
+        row.setStyleSheet("background: transparent;")
+        
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(8)
+        
+        # Top row: drive letter, label, and sizes
+        top_row = QHBoxLayout()
+        
+        drive_letter = vol.get('DriveLetter', '?')
+        label = vol.get('Label', '')
+        drive_name = f"{drive_letter}:"
+        if label:
+            drive_name += f" ({label})"
+        
+        name_label = QLabel(drive_name)
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;")
+        top_row.addWidget(name_label)
+        
+        # Drive type badge
+        drive_type = vol.get('DriveType', 'Unknown')
+        type_label = QLabel(drive_type)
+        type_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            padding: 2px 8px;
+            border: 1px solid {Theme.BORDER};
+            border-radius: 10px;
+        """)
+        top_row.addWidget(type_label)
+        
+        top_row.addStretch()
+        
+        # Size info
+        used = vol.get('UsedGB', 0)
+        total = vol.get('SizeGB', 0)
+        free = vol.get('FreeGB', 0)
+        size_text = f"{used:.1f} GB / {total:.1f} GB ({free:.1f} GB free)"
+        size_label = QLabel(size_text)
+        size_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        top_row.addWidget(size_label)
+        
+        layout.addLayout(top_row)
+        
+        # Progress bar
+        used_percent = vol.get('UsedPercent', 0)
+        progress_container = QFrame()
+        progress_container.setFixedHeight(8)
+        progress_container.setStyleSheet(f"""
+            background: {Theme.BG_ELEVATED};
+            border-radius: 4px;
+        """)
+        
+        progress_layout = QHBoxLayout(progress_container)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(0)
+        
+        # Determine color based on usage
+        if used_percent >= 90:
+            bar_color = Theme.ERROR
+        elif used_percent >= 75:
+            bar_color = Theme.WARNING
+        else:
+            bar_color = Theme.ACCENT
+        
+        progress_bar = QFrame()
+        progress_bar.setStyleSheet(f"background: {bar_color}; border-radius: 4px;")
+        progress_bar.setFixedWidth(int((progress_container.width() or 400) * (used_percent / 100)))
+        
+        # Use a percentage-based approach
+        progress_container.setLayout(QHBoxLayout())
+        progress_container.layout().setContentsMargins(0, 0, 0, 0)
+        
+        inner_bar = QFrame()
+        inner_bar.setStyleSheet(f"background: {bar_color}; border-radius: 4px;")
+        progress_container.layout().addWidget(inner_bar, int(used_percent))
+        
+        spacer = QFrame()
+        spacer.setStyleSheet("background: transparent;")
+        progress_container.layout().addWidget(spacer, int(100 - used_percent))
+        
+        layout.addWidget(progress_container)
+        
+        # Bottom row: health status and file system
+        bottom_row = QHBoxLayout()
+        
+        health = vol.get('HealthStatus', 'Unknown')
+        health_color = Theme.SUCCESS if health == 'Healthy' else Theme.WARNING
+        health_label = QLabel(f"● {health}")
+        health_label.setStyleSheet(f"background: transparent; color: {health_color}; font-size: 11px;")
+        bottom_row.addWidget(health_label)
+        
+        fs = vol.get('FileSystem', 'Unknown')
+        fs_label = QLabel(f"File System: {fs}")
+        fs_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        bottom_row.addWidget(fs_label)
+        
+        bottom_row.addStretch()
+        
+        # Percentage label
+        pct_color = Theme.ERROR if used_percent >= 90 else Theme.WARNING if used_percent >= 75 else Theme.TEXT_SECONDARY
+        pct_label = QLabel(f"{used_percent:.0f}% used")
+        pct_label.setStyleSheet(f"background: transparent; color: {pct_color}; font-size: 12px; font-weight: 500;")
+        bottom_row.addWidget(pct_label)
+        
+        layout.addLayout(bottom_row)
+        
+        return row
+    
+    def _create_disks_card(self, disks: list):
+        """Create a card showing physical disk information"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # Header
+        title = QLabel("Physical Disks")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        # Disk rows
+        for disk in disks:
+            disk_row = self._create_disk_row(disk)
+            layout.addWidget(disk_row)
+        
+        return card
+    
+    def _create_disk_row(self, disk: dict):
+        """Create a row for a physical disk"""
+        row = QFrame()
+        row.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_ELEVATED};
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+        """)
+        
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(16)
+        
+        # Disk icon based on type
+        media_type = disk.get('MediaType', 'Unknown')
+        icon_text = "💾" if 'SSD' in media_type else "💿"
+        icon = QLabel(icon_text)
+        icon.setStyleSheet("background: transparent; font-size: 24px;")
+        layout.addWidget(icon)
+        
+        # Disk info
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
+        
+        model = disk.get('Model', 'Unknown Disk')
+        model_label = QLabel(model)
+        model_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 500;")
+        info_layout.addWidget(model_label)
+        
+        details = f"{disk.get('SizeGB', 0):.0f} GB • {media_type} • {disk.get('InterfaceType', 'Unknown')}"
+        details_label = QLabel(details)
+        details_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        info_layout.addWidget(details_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Status
+        status = disk.get('Status', 'Unknown')
+        status_color = Theme.SUCCESS if status == 'OK' else Theme.WARNING
+        status_label = QLabel(f"● {status}")
+        status_label.setStyleSheet(f"background: transparent; color: {status_color}; font-size: 12px;")
+        layout.addWidget(status_label)
+        
+        return row
+    
+    def _create_cleanup_card(self):
+        """Create a card showing cleanup suggestions"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("Cleanup Suggestions")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        header.addWidget(title)
+        header.addStretch()
+        layout.addLayout(header)
+        
+        # Cleanup items
+        temp_size = self.storage_data.get('TempFilesSize', 0)
+        recycle_size = self.storage_data.get('RecycleBinSize', 0)
+        downloads_size = self.storage_data.get('DownloadsSize', 0)
+        
+        total_cleanable = temp_size + recycle_size
+        
+        # Summary
+        if total_cleanable > 100:
+            summary = QLabel(f"You can potentially free up {total_cleanable:.0f} MB")
+            summary.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 13px;")
+            layout.addWidget(summary)
+        
+        # Cleanup items
+        cleanup_items = [
+            ("Temporary Files", temp_size, self._clear_temp_files),
+            ("Recycle Bin", recycle_size, self._empty_recycle_bin),
+            ("Downloads Folder", downloads_size, self._open_downloads),
+        ]
+        
+        for name, size, action in cleanup_items:
+            item_row = QFrame()
+            item_row.setStyleSheet("background: transparent;")
+            item_layout = QHBoxLayout(item_row)
+            item_layout.setContentsMargins(0, 4, 0, 4)
+            
+            item_name = QLabel(name)
+            item_name.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px;")
+            item_layout.addWidget(item_name)
+            
+            if size > 0:
+                size_label = QLabel(f"{size:.0f} MB" if size < 1024 else f"{size/1024:.1f} GB")
+                size_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+                item_layout.addWidget(size_label)
+            
+            item_layout.addStretch()
+            
+            if size > 0 or name == "Downloads Folder":
+                action_btn = QPushButton("Clean" if name != "Downloads Folder" else "Open")
+                action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                action_btn.clicked.connect(action)
+                action_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: transparent;
+                        color: {Theme.ACCENT};
+                        border: 1px solid {Theme.ACCENT};
+                        padding: 4px 12px;
+                        border-radius: {Theme.RADIUS_SM}px;
+                        font-size: 11px;
+                    }}
+                    QPushButton:hover {{
+                        background: {Theme.ACCENT};
+                        color: white;
+                    }}
+                """)
+                item_layout.addWidget(action_btn)
+            
+            layout.addWidget(item_row)
+        
+        return card
+    
+    def _open_disk_cleanup(self):
+        """Open Windows Disk Cleanup"""
+        import subprocess
+        try:
+            subprocess.Popen(["cleanmgr"], creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except Exception as e:
+            print(f"Error opening Disk Cleanup: {e}")
+    
+    def _open_storage_settings(self):
+        """Open Windows Storage Settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:storagesense"], 
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except Exception as e:
+            print(f"Error opening Storage Settings: {e}")
+    
+    def _clear_temp_files(self):
+        """Clear temporary files"""
+        import subprocess
+        try:
+            # Use cleanmgr with temp files preset
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:storagesense"], 
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    def _empty_recycle_bin(self):
+        """Empty the recycle bin"""
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Empty Recycle Bin",
+            "Are you sure you want to permanently delete all items in the Recycle Bin?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            import subprocess
+            try:
+                subprocess.run(
+                    ["powershell", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
+                # Refresh the scan
+                self.scan_storage()
+            except Exception as e:
+                print(f"Error emptying recycle bin: {e}")
+    
+    def _open_downloads(self):
+        """Open the Downloads folder"""
+        import subprocess
+        import os
+        downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+        try:
+            subprocess.Popen(["explorer", downloads_path])
+        except Exception as e:
+            print(f"Error opening Downloads: {e}")
+
+
+class StorageDetailWorker(QObject):
+    """Worker to fetch detailed storage info in background"""
+    finished = pyqtSignal(dict)
+    
+    def run(self):
+        try:
+            from driver_backend import HealthChecker
+            checker = HealthChecker()
+            data = checker.get_storage_details()
+            self.finished.emit(data)
+        except Exception as e:
+            self.finished.emit({"Error": str(e)})
+
+
+# =============================================================================
+# SECURITY PAGE - Windows Defender, Firewall, and System Security
+# =============================================================================
+
+class FirewallRulesWorker(QObject):
+    """Worker to fetch firewall rules in background"""
+    finished = pyqtSignal(list)
+    
+    def run(self):
+        try:
+            from driver_backend import HealthChecker
+            checker = HealthChecker()
+            rules = checker.get_firewall_rules(enabled_only=True, max_rules=100)
+            self.finished.emit(rules)
+        except Exception as e:
+            self.finished.emit([])
+
+
+class FirewallStatusWorker(QObject):
+    """Worker to fetch firewall status in background"""
+    finished = pyqtSignal(dict)
+    
+    def run(self):
+        try:
+            from driver_backend import HealthChecker
+            checker = HealthChecker()
+            status = checker.get_firewall_status()
+            self.finished.emit(status)
+        except Exception as e:
+            self.finished.emit({"Error": str(e)})
+
+
+class SecurityPage(QWidget):
+    """Dedicated security page with tabs for Defender, Firewall Status, and Firewall Rules"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.cached_defender_data = {}
+        self.cached_firewall_status = {}
+        self.cached_firewall_rules = []
+        self._thread = None
+        self._worker = None
+        self.setup_ui()
+    
+    def setup_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(32, 28, 32, 28)
+        main_layout.setSpacing(20)
+        
+        # Header row
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        
+        title = QLabel("Security Status")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 28px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Open Windows Security button
+        security_btn = QPushButton("Open Windows Security")
+        security_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        security_btn.clicked.connect(self._open_windows_security)
+        security_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
+        header.addWidget(security_btn)
+        
+        main_layout.addLayout(header)
+        
+        # Tab bar
+        tab_bar = QHBoxLayout()
+        tab_bar.setSpacing(0)
+        
+        self.tabs = {}
+        tab_items = [
+            ("defender", "Windows Defender"),
+            ("firewall", "Firewall Status"),
+            ("rules", "Firewall Rules"),
+        ]
+        
+        for tab_id, tab_label in tab_items:
+            btn = QPushButton(tab_label)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, tid=tab_id: self._switch_tab(tid))
+            btn.setStyleSheet(self._get_tab_style(False))
+            self.tabs[tab_id] = btn
+            tab_bar.addWidget(btn)
+        
+        tab_bar.addStretch()
+        main_layout.addLayout(tab_bar)
+        
+        # Select first tab by default
+        self.tabs["defender"].setChecked(True)
+        self.tabs["defender"].setStyleSheet(self._get_tab_style(True))
+        self.current_tab = "defender"
+        
+        # Content stack for different tabs
+        self.content_stack = QStackedWidget()
+        
+        # Defender tab content
+        self.defender_scroll = QScrollArea()
+        self.defender_scroll.setWidgetResizable(True)
+        self.defender_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.defender_content = QWidget()
+        self.defender_layout = QVBoxLayout(self.defender_content)
+        self.defender_layout.setContentsMargins(0, 16, 0, 16)
+        self.defender_layout.setSpacing(12)
+        self.defender_layout.addStretch()
+        self.defender_scroll.setWidget(self.defender_content)
+        self.content_stack.addWidget(self.defender_scroll)
+        
+        # Firewall Status tab content
+        self.firewall_scroll = QScrollArea()
+        self.firewall_scroll.setWidgetResizable(True)
+        self.firewall_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.firewall_content = QWidget()
+        self.firewall_layout = QVBoxLayout(self.firewall_content)
+        self.firewall_layout.setContentsMargins(0, 16, 0, 16)
+        self.firewall_layout.setSpacing(12)
+        self.firewall_layout.addStretch()
+        self.firewall_scroll.setWidget(self.firewall_content)
+        self.content_stack.addWidget(self.firewall_scroll)
+        
+        # Firewall Rules tab content
+        self.rules_scroll = QScrollArea()
+        self.rules_scroll.setWidgetResizable(True)
+        self.rules_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.rules_content = QWidget()
+        self.rules_layout = QVBoxLayout(self.rules_content)
+        self.rules_layout.setContentsMargins(0, 16, 0, 16)
+        self.rules_layout.setSpacing(8)
+        self.rules_layout.addStretch()
+        self.rules_scroll.setWidget(self.rules_content)
+        self.content_stack.addWidget(self.rules_scroll)
+        
+        main_layout.addWidget(self.content_stack)
+        
+        # Show placeholder
+        self._show_placeholder("Click 'Open Windows Security' or run a full system scan to see security status")
+    
+    def _get_tab_style(self, is_active: bool) -> str:
+        if is_active:
+            return f"""
+                QPushButton {{
+                    background: {Theme.BG_CARD};
+                    color: {Theme.TEXT_PRIMARY};
+                    border: none;
+                    border-bottom: 2px solid {Theme.ACCENT};
+                    padding: 12px 24px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+            """
+        else:
+            return f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {Theme.TEXT_SECONDARY};
+                    border: none;
+                    border-bottom: 2px solid transparent;
+                    padding: 12px 24px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }}
+                QPushButton:hover {{
+                    color: {Theme.TEXT_PRIMARY};
+                    background: {Theme.BG_CARD};
+                }}
+            """
+    
+    def _switch_tab(self, tab_id: str):
+        # Update tab styles
+        for tid, btn in self.tabs.items():
+            is_active = tid == tab_id
+            btn.setChecked(is_active)
+            btn.setStyleSheet(self._get_tab_style(is_active))
+        
+        self.current_tab = tab_id
+        
+        # Switch content
+        if tab_id == "defender":
+            self.content_stack.setCurrentWidget(self.defender_scroll)
+        elif tab_id == "firewall":
+            self.content_stack.setCurrentWidget(self.firewall_scroll)
+            # Load firewall status if not loaded
+            if not self.cached_firewall_status:
+                self._load_firewall_status()
+        elif tab_id == "rules":
+            self.content_stack.setCurrentWidget(self.rules_scroll)
+            # Load rules if not loaded
+            if not self.cached_firewall_rules:
+                self._load_firewall_rules()
+    
+    def _show_placeholder(self, text: str):
+        """Show placeholder in defender tab"""
+        self._clear_layout(self.defender_layout)
+        
+        label = QLabel(text)
+        label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setWordWrap(True)
+        self.defender_layout.insertWidget(0, label)
+    
+    def _clear_layout(self, layout):
+        """Clear all widgets from a layout"""
+        while layout.count() > 1:  # Keep the stretch
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+    
+    def display_defender_data(self, defender: dict):
+        """Display Windows Defender status"""
+        self.cached_defender_data = defender
+        self._clear_layout(self.defender_layout)
+        
+        if not defender or 'Error' in defender:
+            self._show_placeholder("Unable to retrieve security status")
+            return
+        
+        # Create sections
+        sections = []
+        
+        # Defender Status Section
+        defender_items = []
+        
+        enabled = defender.get('AntivirusEnabled', False)
+        if enabled:
+            defender_items.append(("check", "Windows Defender Antivirus is enabled"))
+        else:
+            defender_items.append(("error", "Windows Defender Antivirus is DISABLED!"))
+        
+        realtime = defender.get('RealTimeProtection', False)
+        if realtime:
+            defender_items.append(("check", "Real-time protection is active"))
+        else:
+            defender_items.append(("warning", "Real-time protection is OFF"))
+        
+        if defender.get('BehaviorMonitor', False):
+            defender_items.append(("check", "Behavior monitoring enabled"))
+        else:
+            defender_items.append(("warning", "Behavior monitoring disabled"))
+        
+        # Signature info
+        sig_age = defender.get('SignatureAge', 0)
+        if sig_age == 0:
+            defender_items.append(("check", "Virus definitions are up to date"))
+        elif sig_age <= 3:
+            defender_items.append(("check", f"Virus definitions: {sig_age} day(s) old"))
+        elif sig_age <= 7:
+            defender_items.append(("warning", f"Virus definitions: {sig_age} days old - Update recommended"))
+        else:
+            defender_items.append(("error", f"Virus definitions: {sig_age} days old - Update required!"))
+        
+        if defender.get('SignatureVersion'):
+            defender_items.append(("info", f"Signature version: {defender.get('SignatureVersion')}"))
+        
+        defender_items.append(("info", f"Last full scan: {defender.get('LastScan', 'Never')}"))
+        defender_items.append(("info", f"Last quick scan: {defender.get('LastQuickScan', 'Never')}"))
+        
+        sections.append(("Windows Defender", defender_items))
+        
+        # System Security Section
+        security_items = []
+        
+        if defender.get('UACEnabled', False):
+            security_items.append(("check", "User Account Control (UAC) is enabled"))
+        else:
+            security_items.append(("error", "User Account Control (UAC) is DISABLED!"))
+        
+        secure_boot = defender.get('SecureBoot')
+        if secure_boot is True:
+            security_items.append(("check", "Secure Boot is enabled"))
+        elif secure_boot is False:
+            security_items.append(("warning", "Secure Boot is disabled"))
+        else:
+            security_items.append(("info", "Secure Boot: Unable to determine"))
+        
+        bl_status = defender.get('BitLockerStatus', 'Unknown')
+        if bl_status == 'On':
+            enc = defender.get('BitLockerEncryption', 100)
+            if enc == 100:
+                security_items.append(("check", "BitLocker: System drive fully encrypted"))
+            else:
+                security_items.append(("warning", f"BitLocker: Encrypting ({enc}% complete)"))
+        elif bl_status == 'Off':
+            security_items.append(("info", "BitLocker: Not enabled on system drive"))
+        else:
+            security_items.append(("info", f"BitLocker: {bl_status}"))
+        
+        if defender.get('CredentialGuard', False):
+            security_items.append(("check", "Credential Guard is running"))
+        
+        if defender.get('HVCIRunning', False):
+            security_items.append(("check", "Hypervisor-protected Code Integrity (HVCI) is active"))
+        
+        if defender.get('InstalledAV'):
+            security_items.append(("info", f"Installed security products: {defender.get('InstalledAV')}"))
+        
+        sections.append(("System Security", security_items))
+        
+        # Add sections to layout
+        for section_title, items in sections:
+            self._add_section(self.defender_layout, section_title, items)
+        
+        # Add action buttons
+        actions_frame = QFrame()
+        actions_frame.setStyleSheet(f"background: {Theme.BG_CARD}; border-radius: {Theme.RADIUS_MD}px;")
+        actions_layout = QHBoxLayout(actions_frame)
+        actions_layout.setContentsMargins(16, 12, 16, 12)
+        actions_layout.setSpacing(12)
+        
+        for text, callback in [
+            ("Update Definitions", self._update_defender_definitions),
+            ("Quick Scan", self._run_quick_scan),
+            ("Open Windows Security", self._open_windows_security),
+        ]:
+            btn = QPushButton(text)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(callback)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.BG_ELEVATED};
+                    color: {Theme.TEXT_PRIMARY};
+                    border: 1px solid {Theme.BORDER};
+                    padding: 8px 16px;
+                    border-radius: {Theme.RADIUS_SM}px;
+                    font-size: 12px;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.BG_CARD_HOVER};
+                    border-color: {Theme.ACCENT};
+                }}
+            """)
+            actions_layout.addWidget(btn)
+        
+        actions_layout.addStretch()
+        self.defender_layout.insertWidget(self.defender_layout.count() - 1, actions_frame)
+    
+    def _add_section(self, layout, title: str, items: list):
+        """Add a section with title and items to the layout"""
+        # Section header
+        header = QLabel(title)
+        header.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 14px;
+            font-weight: 600;
+            padding: 8px 0;
+        """)
+        layout.insertWidget(layout.count() - 1, header)
+        
+        # Section container
+        container = ModernListContainer()
+        
+        for status, text in items:
+            if status == "header":
+                continue  # Skip nested headers
+            row = container.add_row(text, status=status if status != "info" else "ok")
+            if status == "info":
+                row.status_icon.setVisible(False)
+        
+        layout.insertWidget(layout.count() - 1, container)
+    
+    def _load_firewall_status(self):
+        """Load firewall status in background"""
+        self._clear_layout(self.firewall_layout)
+        
+        loading = QLabel("Loading firewall status...")
+        loading.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        loading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.firewall_layout.insertWidget(0, loading)
+        
+        # Run in background
+        self._fw_status_thread = QThread()
+        self._fw_status_worker = FirewallStatusWorker()
+        self._fw_status_worker.moveToThread(self._fw_status_thread)
+        
+        self._fw_status_thread.started.connect(self._fw_status_worker.run)
+        self._fw_status_worker.finished.connect(self._on_firewall_status_loaded)
+        self._fw_status_worker.finished.connect(self._fw_status_thread.quit)
+        self._fw_status_worker.finished.connect(self._fw_status_worker.deleteLater)
+        self._fw_status_thread.finished.connect(self._fw_status_thread.deleteLater)
+        
+        self._fw_status_thread.start()
+    
+    def _on_firewall_status_loaded(self, status: dict):
+        """Handle firewall status load complete"""
+        self.cached_firewall_status = status
+        self._clear_layout(self.firewall_layout)
+        
+        if 'Error' in status:
+            label = QLabel(f"Error: {status['Error']}")
+            label.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 13px;")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.firewall_layout.insertWidget(0, label)
+            return
+        
+        profiles = status.get('Profiles', [])
+        if not profiles:
+            label = QLabel("No firewall profiles found")
+            label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.firewall_layout.insertWidget(0, label)
+            return
+        
+        # Create a card for each profile
+        for profile in profiles:
+            card = self._create_firewall_profile_card(profile)
+            self.firewall_layout.insertWidget(self.firewall_layout.count() - 1, card)
+        
+        # Add action button
+        actions_frame = QFrame()
+        actions_frame.setStyleSheet("background: transparent;")
+        actions_layout = QHBoxLayout(actions_frame)
+        actions_layout.setContentsMargins(0, 12, 0, 0)
+        
+        firewall_btn = QPushButton("Open Windows Firewall Settings")
+        firewall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        firewall_btn.clicked.connect(self._open_firewall_settings)
+        firewall_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        actions_layout.addWidget(firewall_btn)
+        actions_layout.addStretch()
+        
+        self.firewall_layout.insertWidget(self.firewall_layout.count() - 1, actions_frame)
+    
+    def _create_firewall_profile_card(self, profile: dict) -> QFrame:
+        """Create a card for a firewall profile"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border-radius: {Theme.RADIUS_MD}px;
+                border: 1px solid {Theme.BORDER};
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+        
+        # Header with profile name and status
+        header = QHBoxLayout()
+        
+        name_label = QLabel(f"{profile.get('Name', 'Unknown')} Profile")
+        name_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 15px;
+            font-weight: 600;
+        """)
+        header.addWidget(name_label)
+        
+        header.addStretch()
+        
+        # Status badge
+        is_enabled = profile.get('Enabled', False)
+        status_badge = QLabel("Enabled" if is_enabled else "Disabled")
+        status_color = Theme.SUCCESS if is_enabled else Theme.ERROR
+        status_bg = Theme.SUCCESS_BG if is_enabled else Theme.ERROR_BG
+        status_badge.setStyleSheet(f"""
+            background: {status_bg};
+            color: {status_color};
+            padding: 4px 12px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        """)
+        header.addWidget(status_badge)
+        
+        layout.addLayout(header)
+        
+        # Details grid
+        details = QGridLayout()
+        details.setSpacing(8)
+        details.setColumnStretch(1, 1)
+        details.setColumnStretch(3, 1)
+        
+        row = 0
+        info_items = [
+            ("Inbound Default", profile.get('DefaultInboundAction', 'Unknown')),
+            ("Outbound Default", profile.get('DefaultOutboundAction', 'Unknown')),
+            ("Allow Inbound Rules", profile.get('AllowInboundRules', 'Unknown')),
+            ("Log Blocked", "Yes" if profile.get('LogBlocked') else "No"),
+        ]
+        
+        for i, (label, value) in enumerate(info_items):
+            col = (i % 2) * 2
+            if i % 2 == 0 and i > 0:
+                row += 1
+            
+            lbl = QLabel(f"{label}:")
+            lbl.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+            details.addWidget(lbl, row, col)
+            
+            val = QLabel(str(value))
+            # Color code the action
+            if value in ['Block', 'NotConfigured']:
+                color = Theme.WARNING
+            elif value in ['Allow']:
+                color = Theme.SUCCESS
+            else:
+                color = Theme.TEXT_PRIMARY
+            val.setStyleSheet(f"background: transparent; color: {color}; font-size: 12px; font-weight: 500;")
+            details.addWidget(val, row, col + 1)
+        
+        layout.addLayout(details)
+        
+        return card
+    
+    def _load_firewall_rules(self):
+        """Load firewall rules in background"""
+        self._clear_layout(self.rules_layout)
+        
+        loading = QLabel("Loading firewall rules (this may take a moment)...")
+        loading.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        loading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.rules_layout.insertWidget(0, loading)
+        
+        # Run in background
+        self._fw_rules_thread = QThread()
+        self._fw_rules_worker = FirewallRulesWorker()
+        self._fw_rules_worker.moveToThread(self._fw_rules_thread)
+        
+        self._fw_rules_thread.started.connect(self._fw_rules_worker.run)
+        self._fw_rules_worker.finished.connect(self._on_firewall_rules_loaded)
+        self._fw_rules_worker.finished.connect(self._fw_rules_thread.quit)
+        self._fw_rules_worker.finished.connect(self._fw_rules_worker.deleteLater)
+        self._fw_rules_thread.finished.connect(self._fw_rules_thread.deleteLater)
+        
+        self._fw_rules_thread.start()
+    
+    def _on_firewall_rules_loaded(self, rules: list):
+        """Handle firewall rules load complete"""
+        self.cached_firewall_rules = rules
+        self._clear_layout(self.rules_layout)
+        
+        if not rules:
+            label = QLabel("No firewall rules found or unable to retrieve rules")
+            label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.rules_layout.insertWidget(0, label)
+            return
+        
+        # Filter controls
+        filter_frame = QFrame()
+        filter_frame.setStyleSheet("background: transparent;")
+        filter_layout = QHBoxLayout(filter_frame)
+        filter_layout.setContentsMargins(0, 0, 0, 12)
+        filter_layout.setSpacing(8)
+        
+        filter_label = QLabel(f"Showing {len(rules)} enabled rules")
+        filter_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        filter_layout.addWidget(filter_label)
+        filter_layout.addStretch()
+        
+        self.rules_layout.insertWidget(0, filter_frame)
+        
+        # Group rules by direction
+        inbound_rules = [r for r in rules if r.get('Direction') == 'Inbound']
+        outbound_rules = [r for r in rules if r.get('Direction') == 'Outbound']
+        
+        # Inbound section
+        if inbound_rules:
+            header = QLabel(f"Inbound Rules ({len(inbound_rules)})")
+            header.setStyleSheet(f"""
+                background: transparent;
+                color: {Theme.TEXT_PRIMARY};
+                font-size: 14px;
+                font-weight: 600;
+                padding: 8px 0;
+            """)
+            self.rules_layout.insertWidget(self.rules_layout.count() - 1, header)
+            
+            container = ModernListContainer()
+            for rule in inbound_rules[:50]:  # Limit to 50 per section
+                self._add_rule_row(container, rule)
+            self.rules_layout.insertWidget(self.rules_layout.count() - 1, container)
+        
+        # Outbound section
+        if outbound_rules:
+            header = QLabel(f"Outbound Rules ({len(outbound_rules)})")
+            header.setStyleSheet(f"""
+                background: transparent;
+                color: {Theme.TEXT_PRIMARY};
+                font-size: 14px;
+                font-weight: 600;
+                padding: 8px 0;
+            """)
+            self.rules_layout.insertWidget(self.rules_layout.count() - 1, header)
+            
+            container = ModernListContainer()
+            for rule in outbound_rules[:50]:  # Limit to 50 per section
+                self._add_rule_row(container, rule)
+            self.rules_layout.insertWidget(self.rules_layout.count() - 1, container)
+    
+    def _add_rule_row(self, container: ModernListContainer, rule: dict):
+        """Add a firewall rule row to container"""
+        name = rule.get('Name', 'Unknown Rule')
+        action = rule.get('Action', 'Unknown')
+        protocol = rule.get('Protocol', 'Any')
+        local_port = rule.get('LocalPort', 'Any')
+        program = rule.get('Program', '')
+        
+        # Build subtitle
+        subtitle_parts = []
+        if protocol != 'Any':
+            subtitle_parts.append(f"{protocol}")
+        if local_port != 'Any' and local_port:
+            subtitle_parts.append(f"Port {local_port}")
+        if program and program != 'Any':
+            # Just show the filename
+            import os
+            program_name = os.path.basename(program) if '\\' in program else program
+            if len(program_name) > 40:
+                program_name = program_name[:37] + "..."
+            subtitle_parts.append(program_name)
+        
+        subtitle = " • ".join(subtitle_parts) if subtitle_parts else ""
+        
+        # Status based on action
+        status = "ok" if action == "Allow" else "warning"
+        status_text = action
+        
+        row = container.add_row(
+            title=name[:60] + "..." if len(name) > 60 else name,
+            subtitle=subtitle,
+            status=status,
+            status_text=status_text
+        )
+    
+    def _open_windows_security(self):
+        """Open Windows Security app"""
+        subprocess.Popen(["start", "windowsdefender:"], shell=True)
+    
+    def _open_firewall_settings(self):
+        """Open Windows Firewall settings"""
+        subprocess.Popen(["control", "firewall.cpl"])
+    
+    def _update_defender_definitions(self):
+        """Update Windows Defender definitions"""
+        subprocess.Popen(
+            ["powershell", "-Command", "Update-MpSignature"],
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        )
+    
+    def _run_quick_scan(self):
+        """Run a quick Windows Defender scan"""
+        subprocess.Popen(
+            ["powershell", "-Command", "Start-MpScan -ScanType QuickScan"],
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        )
+    
+    def set_checking(self):
+        """Show loading state"""
+        self._show_placeholder("Checking security status...")
+    
+    def show_results(self, results):
+        """Display results from legacy format (list of tuples)"""
+        # Convert legacy format to dict for display_defender_data
+        # This is called from _show_cached_data
+        pass
+    
+    def show_results_with_actions(self, results, actions):
+        """Display results from legacy format with actions"""
+        # Parse results and build defender dict from cached data
+        if self.cached_defender_data:
+            self.display_defender_data(self.cached_defender_data)
+
+
+# =============================================================================
+# SYSTEM FILES PAGE - System Integrity and Configuration
+# =============================================================================
+
+class SystemPage(QWidget):
+    """Dedicated page for system files, services, and configuration"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.system_data = {}
+        self.widgets = []
+        self.is_loading = False
+        self._thread = None
+        self._worker = None
+        self.setup_ui()
+    
+    def setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        content = QWidget()
+        self.content_layout = QVBoxLayout(content)
+        self.content_layout.setContentsMargins(32, 28, 32, 28)
+        self.content_layout.setSpacing(20)
+        
+        # Header row
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        
+        title = QLabel("System Files & Configuration")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 28px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Scan button
+        self.scan_btn = QPushButton("Scan System")
+        self.scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.scan_btn.clicked.connect(self.scan_system)
+        self.scan_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        header.addWidget(self.scan_btn)
+        
+        # SFC Scan button
+        sfc_btn = QPushButton("Run SFC Scan")
+        sfc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        sfc_btn.clicked.connect(self._run_sfc_scan)
+        sfc_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(sfc_btn)
+        
+        # DISM Repair button
+        dism_btn = QPushButton("DISM Repair")
+        dism_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        dism_btn.clicked.connect(self._run_dism_repair)
+        dism_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                border-color: {Theme.ACCENT};
+            }}
+        """)
+        header.addWidget(dism_btn)
+        
+        self.content_layout.addLayout(header)
+        
+        # Reboot required banner (hidden by default)
+        self.reboot_banner = QFrame()
+        self.reboot_banner.setStyleSheet(f"""
+            background: {Theme.WARNING}22;
+            border: 1px solid {Theme.WARNING};
+            border-radius: {Theme.RADIUS_SM}px;
+        """)
+        self.reboot_banner.setVisible(False)
+        banner_layout = QHBoxLayout(self.reboot_banner)
+        banner_layout.setContentsMargins(16, 12, 16, 12)
+        
+        banner_icon = QLabel("⚠️")
+        banner_icon.setStyleSheet("background: transparent; font-size: 18px;")
+        banner_layout.addWidget(banner_icon)
+        
+        self.reboot_text = QLabel("System restart required to complete pending operations")
+        self.reboot_text.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 13px; font-weight: 500;")
+        banner_layout.addWidget(self.reboot_text)
+        banner_layout.addStretch()
+        
+        self.content_layout.addWidget(self.reboot_banner)
+        
+        # Status label
+        self.status_label = QLabel("Click 'Scan System' to analyze system configuration")
+        self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.content_layout.addWidget(self.status_label)
+        
+        # System info card (always visible after scan)
+        self.info_card = QFrame()
+        self.info_card.setStyleSheet(f"""
+            background: {Theme.BG_CARD};
+            border: 1px solid {Theme.BORDER};
+            border-radius: {Theme.RADIUS_MD}px;
+        """)
+        self.info_card.setVisible(False)
+        info_layout = QVBoxLayout(self.info_card)
+        info_layout.setContentsMargins(20, 20, 20, 20)
+        info_layout.setSpacing(12)
+        
+        info_title = QLabel("System Information")
+        info_title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        info_layout.addWidget(info_title)
+        
+        self.info_grid = QGridLayout()
+        self.info_grid.setSpacing(8)
+        info_layout.addLayout(self.info_grid)
+        
+        self.content_layout.addWidget(self.info_card)
+        
+        # Main content container
+        self.main_container = QFrame()
+        self.main_container.setStyleSheet("background: transparent;")
+        self.main_layout = QVBoxLayout(self.main_container)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(20)
+        self.main_container.setVisible(False)
+        self.content_layout.addWidget(self.main_container)
+        
+        self.content_layout.addStretch()
+        
+        scroll.setWidget(content)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+    
+    def scan_system(self):
+        """Scan system configuration using background thread"""
+        if self.is_loading:
+            return
+        
+        self.is_loading = True
+        self.scan_btn.setEnabled(False)
+        self.scan_btn.setText("Scanning...")
+        self.status_label.setText("Analyzing system configuration...")
+        self.status_label.setVisible(True)
+        self.main_container.setVisible(False)
+        self.info_card.setVisible(False)
+        
+        # Run in background thread
+        self._thread = QThread()
+        self._worker = SystemDetailWorker()
+        self._worker.moveToThread(self._thread)
+        
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_scan_complete)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        
+        self._thread.start()
+    
+    def _on_scan_complete(self, data: dict):
+        """Handle system scan completion"""
+        self.is_loading = False
+        self.scan_btn.setEnabled(True)
+        self.scan_btn.setText("Scan System")
+        
+        if not data or data.get('Error'):
+            self.status_label.setText(f"Error: {data.get('Error', 'Unknown error')}")
+            self.status_label.setVisible(True)
+            return
+        
+        self.system_data = data
+        self._display_system_info()
+    
+    def display_cached_data(self, data):
+        """Display system info from cached data - trigger full scan for details"""
+        if not self.system_data and not self.is_loading:
+            self.scan_system()
+    
+    def _display_system_info(self):
+        """Display the system information"""
+        self.status_label.setVisible(False)
+        self.info_card.setVisible(True)
+        self.main_container.setVisible(True)
+        
+        # Clear old widgets
+        for widget in self.widgets:
+            widget.deleteLater()
+        self.widgets.clear()
+        
+        # Clear main layout
+        while self.main_layout.count():
+            item = self.main_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Clear info grid
+        while self.info_grid.count():
+            item = self.info_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Check for pending reboot
+        if self.system_data.get('PendingReboot'):
+            self.reboot_banner.setVisible(True)
+        else:
+            self.reboot_banner.setVisible(False)
+        
+        # Populate system info grid
+        sys_info = self.system_data.get('SystemInfo', {})
+        info_items = [
+            ("Computer Name", sys_info.get('ComputerName', 'Unknown')),
+            ("OS", sys_info.get('OSName', 'Unknown')),
+            ("Version", f"{sys_info.get('OSVersion', '')} (Build {sys_info.get('BuildNumber', '')})"),
+            ("Install Date", sys_info.get('InstallDate', 'Unknown')),
+            ("Last Boot", sys_info.get('LastBoot', 'Unknown')),
+            ("Uptime", f"{sys_info.get('UptimeDays', 0)} days, {sys_info.get('UptimeHours', 0)} hours"),
+            ("Memory", f"{sys_info.get('TotalMemoryGB', 0)} GB"),
+            ("System Drive", sys_info.get('SystemDrive', 'C:')),
+        ]
+        
+        for row, (label, value) in enumerate(info_items):
+            lbl = QLabel(label + ":")
+            lbl.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+            self.info_grid.addWidget(lbl, row // 2, (row % 2) * 2)
+            
+            val = QLabel(str(value))
+            val.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px; font-weight: 500;")
+            self.info_grid.addWidget(val, row // 2, (row % 2) * 2 + 1)
+        
+        # Critical services section
+        services = self.system_data.get('CriticalServices', [])
+        if services:
+            services_card = self._create_services_card(services)
+            self.main_layout.addWidget(services_card)
+            self.widgets.append(services_card)
+        
+        # Restore points section
+        restore_points = self.system_data.get('RestorePoints', [])
+        if restore_points:
+            restore_card = self._create_restore_points_card(restore_points)
+            self.main_layout.addWidget(restore_card)
+            self.widgets.append(restore_card)
+        
+        # Recent installs section
+        recent_installs = self.system_data.get('RecentInstalls', [])
+        if recent_installs:
+            installs_card = self._create_recent_installs_card(recent_installs)
+            self.main_layout.addWidget(installs_card)
+            self.widgets.append(installs_card)
+        
+        # Quick actions card
+        actions_card = self._create_actions_card()
+        self.main_layout.addWidget(actions_card)
+        self.widgets.append(actions_card)
+    
+    def _create_services_card(self, services: list):
+        """Create a card showing critical Windows services status"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("Critical Windows Services")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Count running/stopped
+        running = sum(1 for s in services if s.get('Status') == 'Running')
+        stopped = len(services) - running
+        
+        count_label = QLabel(f"{running} Running • {stopped} Stopped")
+        if stopped > 0:
+            count_label.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 12px;")
+        else:
+            count_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+        header.addWidget(count_label)
+        
+        layout.addLayout(header)
+        
+        # Services grid
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        
+        for idx, svc in enumerate(services):
+            name = svc.get('DisplayName', svc.get('Name', 'Unknown'))
+            status = svc.get('Status', 'Unknown')
+            start_type = svc.get('StartType', '')
+            
+            # Status indicator
+            if status == 'Running':
+                indicator = "🟢"
+                status_color = Theme.SUCCESS
+            elif status == 'Stopped':
+                indicator = "🔴"
+                status_color = Theme.ERROR
+            else:
+                indicator = "🟡"
+                status_color = Theme.WARNING
+            
+            row = idx // 2
+            col_base = (idx % 2) * 3
+            
+            ind_label = QLabel(indicator)
+            ind_label.setStyleSheet("background: transparent; font-size: 10px;")
+            grid.addWidget(ind_label, row, col_base)
+            
+            name_label = QLabel(name)
+            name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
+            name_label.setWordWrap(True)
+            grid.addWidget(name_label, row, col_base + 1)
+            
+            status_lbl = QLabel(status)
+            status_lbl.setStyleSheet(f"background: transparent; color: {status_color}; font-size: 11px;")
+            grid.addWidget(status_lbl, row, col_base + 2)
+        
+        layout.addLayout(grid)
+        
+        return card
+    
+    def _create_restore_points_card(self, restore_points: list):
+        """Create a card showing system restore points"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("System Restore Points")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Create restore point button
+        create_btn = QPushButton("Create Restore Point")
+        create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        create_btn.clicked.connect(self._open_system_protection)
+        create_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Theme.ACCENT};
+                border: 1px solid {Theme.ACCENT};
+                padding: 4px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT};
+                color: white;
+            }}
+        """)
+        header.addWidget(create_btn)
+        
+        layout.addLayout(header)
+        
+        # Restore points list
+        for rp in restore_points[:5]:
+            rp_row = QFrame()
+            rp_row.setStyleSheet("background: transparent;")
+            row_layout = QHBoxLayout(rp_row)
+            row_layout.setContentsMargins(0, 4, 0, 4)
+            row_layout.setSpacing(12)
+            
+            # Icon
+            icon = QLabel("🔄")
+            icon.setStyleSheet("background: transparent; font-size: 14px;")
+            row_layout.addWidget(icon)
+            
+            # Description
+            desc = QLabel(rp.get('Description', 'Unknown')[:50])
+            desc.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
+            desc.setWordWrap(True)
+            row_layout.addWidget(desc, 1)
+            
+            # Date
+            date = QLabel(rp.get('CreationTime', ''))
+            date.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
+            row_layout.addWidget(date)
+            
+            # Type
+            rp_type = rp.get('RestorePointType', '')
+            if 'INSTALL' in str(rp_type):
+                type_color = Theme.ACCENT
+            elif 'UNINSTALL' in str(rp_type):
+                type_color = Theme.WARNING
+            else:
+                type_color = Theme.TEXT_TERTIARY
+            
+            type_label = QLabel(str(rp_type).replace('_', ' ').title()[:20])
+            type_label.setStyleSheet(f"background: transparent; color: {type_color}; font-size: 10px;")
+            row_layout.addWidget(type_label)
+            
+            layout.addWidget(rp_row)
+        
+        return card
+    
+    def _create_recent_installs_card(self, installs: list):
+        """Create a card showing recent software installations"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("Recent Software Installations")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Open Programs & Features
+        open_btn = QPushButton("View All")
+        open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        open_btn.clicked.connect(self._open_programs_features)
+        open_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Theme.ACCENT};
+                border: 1px solid {Theme.ACCENT};
+                padding: 4px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT};
+                color: white;
+            }}
+        """)
+        header.addWidget(open_btn)
+        
+        layout.addLayout(header)
+        
+        # Installations list
+        for inst in installs[:10]:
+            inst_row = QFrame()
+            inst_row.setStyleSheet("background: transparent;")
+            row_layout = QHBoxLayout(inst_row)
+            row_layout.setContentsMargins(0, 4, 0, 4)
+            row_layout.setSpacing(12)
+            
+            # Icon
+            icon = QLabel("📦")
+            icon.setStyleSheet("background: transparent; font-size: 14px;")
+            row_layout.addWidget(icon)
+            
+            # Name
+            name = inst.get('Name', 'Unknown')[:40]
+            name_label = QLabel(name)
+            name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
+            row_layout.addWidget(name_label, 1)
+            
+            # Version
+            version = inst.get('Version', '')
+            if version:
+                ver_label = QLabel(version[:15])
+                ver_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+                row_layout.addWidget(ver_label)
+            
+            # Install date
+            install_date = inst.get('InstallDate', '')
+            if install_date and len(install_date) == 8:
+                try:
+                    formatted_date = f"{install_date[:4]}-{install_date[4:6]}-{install_date[6:]}"
+                    date_label = QLabel(formatted_date)
+                    date_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
+                    row_layout.addWidget(date_label)
+                except:
+                    pass
+            
+            layout.addWidget(inst_row)
+        
+        return card
+    
+    def _create_actions_card(self):
+        """Create a card with quick system actions"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+        
+        # Header
+        title = QLabel("System Tools")
+        title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        # Action buttons grid
+        actions_layout = QGridLayout()
+        actions_layout.setSpacing(12)
+        
+        actions = [
+            ("System Properties", "⚙️", self._open_system_properties),
+            ("Device Manager", "🔧", self._open_device_manager),
+            ("Task Manager", "📊", self._open_task_manager),
+            ("Event Viewer", "📋", self._open_event_viewer),
+            ("Services", "🔌", self._open_services),
+            ("Environment Variables", "📝", self._open_env_vars),
+        ]
+        
+        for idx, (label, icon, action) in enumerate(actions):
+            btn = QPushButton(f"{icon}  {label}")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(action)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.BG_SIDEBAR};
+                    color: {Theme.TEXT_PRIMARY};
+                    border: 1px solid {Theme.BORDER};
+                    padding: 12px 16px;
+                    border-radius: {Theme.RADIUS_SM}px;
+                    font-size: 12px;
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.BG_CARD_HOVER};
+                    border-color: {Theme.ACCENT};
+                }}
+            """)
+            actions_layout.addWidget(btn, idx // 3, idx % 3)
+        
+        layout.addLayout(actions_layout)
+        
+        return card
+    
+    def _run_sfc_scan(self):
+        """Run SFC /scannow in an elevated terminal"""
+        import subprocess
+        try:
+            subprocess.Popen(
+                ['powershell', '-Command',
+                 'Start-Process', 'cmd', '-ArgumentList', '"/k sfc /scannow"', '-Verb', 'RunAs'],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+        except Exception as e:
+            print(f"Error launching SFC: {e}")
+    
+    def _run_dism_repair(self):
+        """Run DISM repair commands in an elevated terminal"""
+        import subprocess
+        try:
+            dism_cmd = 'DISM /Online /Cleanup-Image /RestoreHealth && pause'
+            subprocess.Popen(
+                ['powershell', '-Command',
+                 'Start-Process', 'cmd', '-ArgumentList', f'"/k {dism_cmd}"', '-Verb', 'RunAs'],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+        except Exception as e:
+            print(f"Error launching DISM: {e}")
+    
+    def _open_system_protection(self):
+        """Open System Protection dialog"""
+        import subprocess
+        try:
+            subprocess.Popen(["SystemPropertiesProtection"])
+        except:
+            pass
+    
+    def _open_programs_features(self):
+        """Open Programs and Features"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:appsfeatures"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
+    
+    def _open_system_properties(self):
+        """Open System Properties"""
+        import subprocess
+        try:
+            subprocess.Popen(["SystemPropertiesAdvanced"])
+        except:
+            pass
+    
+    def _open_device_manager(self):
+        """Open Device Manager"""
+        import subprocess
+        try:
+            subprocess.Popen(["devmgmt.msc"])
+        except:
+            pass
+    
+    def _open_task_manager(self):
+        """Open Task Manager"""
+        import subprocess
+        try:
+            subprocess.Popen(["taskmgr"])
+        except:
+            pass
+    
+    def _open_event_viewer(self):
+        """Open Event Viewer"""
+        import subprocess
+        try:
+            subprocess.Popen(["eventvwr.msc"])
+        except:
+            pass
+    
+    def _open_services(self):
+        """Open Services"""
+        import subprocess
+        try:
+            subprocess.Popen(["services.msc"])
+        except:
+            pass
+    
+    def _open_env_vars(self):
+        """Open Environment Variables"""
+        import subprocess
+        try:
+            subprocess.Popen(["SystemPropertiesAdvanced"])
+        except:
+            pass
+
+
+class SystemDetailWorker(QObject):
+    """Worker to fetch detailed system info in background"""
+    finished = pyqtSignal(dict)
+    
+    def run(self):
+        try:
+            from driver_backend import HealthChecker
+            checker = HealthChecker()
+            data = checker.get_system_details()
+            self.finished.emit(data)
+        except Exception as e:
+            self.finished.emit({"Error": str(e)})
+
+
+# =============================================================================
 # HARDWARE PAGE - Comprehensive Hardware Information
 # =============================================================================
 
@@ -3448,7 +7628,7 @@ class RealtimeGraphPanel(QFrame):
 
 
 class HardwareInfoCard(QFrame):
-    """Collapsible card for displaying hardware category information"""
+    """Compact card for displaying hardware category information"""
     
     def __init__(self, title: str, icon_char: str, parent=None):
         super().__init__(parent)
@@ -3463,30 +7643,30 @@ class HardwareInfoCard(QFrame):
             HardwareInfoCard {{
                 background: {Theme.BG_CARD};
                 border: 1px solid {Theme.BORDER};
-                border-radius: {Theme.RADIUS_LG}px;
+                border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
         
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(20, 16, 20, 16)
-        self.main_layout.setSpacing(12)
+        self.main_layout.setContentsMargins(16, 12, 16, 12)
+        self.main_layout.setSpacing(8)
         
         # Header (clickable to expand/collapse)
         header = QHBoxLayout()
-        header.setSpacing(12)
+        header.setSpacing(10)
         
-        # Icon container
+        # Icon container (smaller)
         icon_container = QFrame()
-        icon_container.setFixedSize(36, 36)
+        icon_container.setFixedSize(28, 28)
         icon_container.setStyleSheet(f"""
-            background: {Theme.BG_CARD_HOVER};
-            border-radius: {Theme.RADIUS_SM}px;
+            background: {Theme.ACCENT};
+            border-radius: 6px;
         """)
         icon_layout = QHBoxLayout(icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_label = QLabel(self.icon_char)
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px; font-weight: bold;")
+        icon_label.setStyleSheet(f"background: transparent; color: white; font-size: 12px; font-weight: bold;")
         icon_layout.addWidget(icon_label)
         header.addWidget(icon_container)
         
@@ -3495,7 +7675,7 @@ class HardwareInfoCard(QFrame):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         header.addWidget(title)
@@ -3504,19 +7684,22 @@ class HardwareInfoCard(QFrame):
         
         # Status chip
         self.status_chip = QLabel("OK")
+        self.status_chip.setFixedHeight(22)
         self.status_chip.setStyleSheet(f"""
             background: {Theme.SUCCESS_BG};
             color: {Theme.SUCCESS};
-            padding: 4px 10px;
+            padding: 2px 10px;
             border-radius: 10px;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
         """)
         header.addWidget(self.status_chip)
         
         # Expand/collapse chevron
-        self.chevron = QLabel("v")
-        self.chevron.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        self.chevron = QLabel("▾")
+        self.chevron.setFixedSize(16, 16)
+        self.chevron.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chevron.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 10px;")
         header.addWidget(self.chevron)
         
         self.main_layout.addLayout(header)
@@ -3525,51 +7708,42 @@ class HardwareInfoCard(QFrame):
         self.content = QFrame()
         self.content.setStyleSheet("background: transparent;")
         self.content_layout = QVBoxLayout(self.content)
-        self.content_layout.setContentsMargins(48, 4, 0, 0)  # Indent content
-        self.content_layout.setSpacing(6)
+        self.content_layout.setContentsMargins(38, 8, 0, 4)  # Indent content
+        self.content_layout.setSpacing(4)
         
         self.main_layout.addWidget(self.content)
     
     def set_status(self, status: str, text: str = ""):
         """Set the status chip"""
+        # Common style base - note the fixed height is set on widget itself
+        base_style = "padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 600;"
+        
         if status == "healthy" or status == "check":
             self.status_chip.setStyleSheet(f"""
                 background: {Theme.SUCCESS_BG};
                 color: {Theme.SUCCESS};
-                padding: 4px 10px;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: 600;
+                {base_style}
             """)
             self.status_chip.setText(text or "OK")
         elif status == "warning":
             self.status_chip.setStyleSheet(f"""
                 background: {Theme.WARNING_BG};
                 color: {Theme.WARNING};
-                padding: 4px 10px;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: 600;
+                {base_style}
             """)
             self.status_chip.setText(text or "Warning")
         elif status == "critical" or status == "error":
             self.status_chip.setStyleSheet(f"""
                 background: {Theme.ERROR_BG};
                 color: {Theme.ERROR};
-                padding: 4px 10px;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: 600;
+                {base_style}
             """)
             self.status_chip.setText(text or "Critical")
         else:
             self.status_chip.setStyleSheet(f"""
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_SECONDARY};
-                padding: 4px 10px;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: 600;
+                {base_style}
             """)
             self.status_chip.setText(text or "Unknown")
     
@@ -3582,19 +7756,20 @@ class HardwareInfoCard(QFrame):
         self.info_rows = []
     
     def add_info_row(self, label: str, value: str, highlight: bool = False):
-        """Add an info row with label and value"""
+        """Add a compact info row with label and value"""
         row = QHBoxLayout()
-        row.setSpacing(16)
+        row.setSpacing(12)
+        row.setContentsMargins(0, 0, 0, 0)
         
         label_widget = QLabel(label)
-        label_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
-        label_widget.setFixedWidth(140)
+        label_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        label_widget.setFixedWidth(100)
         row.addWidget(label_widget)
         
         value_color = Theme.ACCENT_LIGHT if highlight else Theme.TEXT_PRIMARY
         value_widget = QLabel(value)
-        value_widget.setStyleSheet(f"background: transparent; color: {value_color}; font-size: 12px;")
-        value_widget.setWordWrap(True)
+        value_widget.setStyleSheet(f"background: transparent; color: {value_color}; font-size: 12px; font-weight: 500;")
+        value_widget.setWordWrap(False)
         row.addWidget(value_widget, 1)
         
         container = QWidget()
@@ -3607,7 +7782,7 @@ class HardwareInfoCard(QFrame):
         """Add a visual divider"""
         divider = QFrame()
         divider.setFixedHeight(1)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet(f"background: {Theme.BORDER}; margin: 4px 0;")
         self.content_layout.addWidget(divider)
     
     def add_subsection(self, title: str):
@@ -3615,16 +7790,18 @@ class HardwareInfoCard(QFrame):
         label = QLabel(title)
         label.setStyleSheet(f"""
             background: transparent;
-            color: {Theme.TEXT_TERTIARY};
-            font-size: 11px;
-            font-weight: 600;
-            margin-top: 8px;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
         """)
         self.content_layout.addWidget(label)
 
 
 class HardwareSummaryGrid(QFrame):
-    """Grid showing quick hardware summary stats"""
+    """Grid showing quick hardware summary stats with improved styling"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3639,54 +7816,82 @@ class HardwareSummaryGrid(QFrame):
                 border-radius: {Theme.RADIUS_LG}px;
             }}
         """)
+        Theme.apply_shadow(self, blur_radius=10, offset_y=2, opacity=40)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(0)
         
-        # Create stat items
+        # Create stat items with meaningful colors
         stats = [
-            ("cpu", "CPU", "--", "cores"),
-            ("gpu", "GPU", "--", "VRAM"),
-            ("ram", "RAM", "--", "used"),
-            ("storage", "Storage", "--", "total"),
+            ("cpu", "CPU", "—", "cores", Theme.ACCENT),
+            ("gpu", "GPU", "—", "VRAM", "#8e44ad"),  # Purple for GPU
+            ("ram", "RAM", "—", "used", Theme.SUCCESS),
+            ("storage", "Storage", "—", "drive(s)", Theme.WARNING),
         ]
         
-        for i, (stat_id, label, value, unit) in enumerate(stats):
+        for i, (stat_id, label, value, unit, color) in enumerate(stats):
             if i > 0:
-                # Add separator
-                sep = QFrame()
-                sep.setFixedWidth(1)
-                sep.setStyleSheet(f"background: {Theme.BORDER};")
-                layout.addWidget(sep)
+                # Add divider with proper spacing
+                self._add_stat_divider(layout)
             
-            stat_widget = self._create_stat(label, value, unit)
+            stat_widget = self._create_stat(label, value, unit, color)
             self.stat_widgets[stat_id] = stat_widget
             layout.addWidget(stat_widget, 1)
     
-    def _create_stat(self, label: str, value: str, unit: str) -> QFrame:
+    def _add_stat_divider(self, layout):
+        """Add a vertical divider between stats"""
+        layout.addSpacing(24)
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(50)
+        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        layout.addWidget(divider)
+        layout.addSpacing(24)
+    
+    def _create_stat(self, label: str, value: str, unit: str, color: str) -> QFrame:
         frame = QFrame()
         frame.setStyleSheet("background: transparent;")
+        frame.setMinimumWidth(100)
         
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 8, 16, 8)
+        layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
+        # Label at top - uppercase, smaller
         label_widget = QLabel(label)
-        label_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        label_widget.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        """)
         label_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label_widget)
         
+        # Value - large and colored
         value_widget = QLabel(value)
         value_widget.setObjectName("value")
-        value_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        value_widget.setStyleSheet(f"""
+            background: transparent;
+            color: {color};
+            font-size: 28px;
+            font-weight: 700;
+        """)
         value_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(value_widget)
         
+        # Unit - smaller, secondary
         unit_widget = QLabel(unit)
         unit_widget.setObjectName("unit")
-        unit_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
+        unit_widget.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 12px;
+        """)
         unit_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(unit_widget)
         
@@ -3732,8 +7937,8 @@ class HardwarePage(QWidget):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         header.addWidget(title)
         header.addStretch()
@@ -3752,7 +7957,7 @@ class HardwarePage(QWidget):
                 background: {Theme.ACCENT};
                 color: white;
                 border: none;
-                padding: 10px 20px;
+                padding: 10px 24px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
                 font-weight: 600;
@@ -3806,27 +8011,29 @@ class HardwarePage(QWidget):
         self.graph_panel.setVisible(False)
         self.content_layout.addWidget(self.graph_panel)
         
-        # Hardware cards container
+        # Hardware cards container - use grid layout for two columns
         self.cards_container = QWidget()
         self.cards_container.setStyleSheet("background: transparent;")
-        self.cards_layout = QVBoxLayout(self.cards_container)
+        self.cards_layout = QGridLayout(self.cards_container)
         self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setSpacing(16)
+        self.cards_layout.setSpacing(12)
+        self.cards_layout.setColumnStretch(0, 1)
+        self.cards_layout.setColumnStretch(1, 1)
         
-        # Create hardware category cards
+        # Create hardware category cards - arranged in two columns
         card_configs = [
-            ("cpu", "Processor (CPU)", "C"),
-            ("gpu", "Graphics (GPU)", "G"),
-            ("ram", "Memory (RAM)", "M"),
-            ("motherboard", "Motherboard & BIOS", "B"),
-            ("storage", "Storage", "S"),
-            ("network", "Network Adapters", "N"),
+            ("cpu", "Processor (CPU)", "C", 0, 0),
+            ("gpu", "Graphics (GPU)", "G", 0, 1),
+            ("ram", "Memory (RAM)", "M", 1, 0),
+            ("motherboard", "Motherboard", "B", 1, 1),
+            ("storage", "Storage", "S", 2, 0),
+            ("network", "Network", "N", 2, 1),
         ]
         
-        for card_id, title, icon in card_configs:
+        for card_id, title, icon, row, col in card_configs:
             card = HardwareInfoCard(title, icon)
             self.cards[card_id] = card
-            self.cards_layout.addWidget(card)
+            self.cards_layout.addWidget(card, row, col)
         
         self.cards_container.setVisible(False)
         self.content_layout.addWidget(self.cards_container)
@@ -3946,27 +8153,26 @@ class HardwarePage(QWidget):
         card = self.cards["cpu"]
         card.clear_info()
         
-        card.add_info_row("Processor", cpu.name, highlight=True)
-        card.add_info_row("Manufacturer", cpu.manufacturer)
-        card.add_info_row("Architecture", cpu.architecture)
-        card.add_info_row("Cores / Threads", f"{cpu.cores} cores / {cpu.threads} threads")
-        card.add_info_row("Base Clock", f"{cpu.max_clock_mhz} MHz")
-        card.add_info_row("Current Clock", f"{cpu.current_clock_mhz} MHz")
-        card.add_info_row("Socket", cpu.socket)
+        card.add_info_row("Model", cpu.name, highlight=True)
+        card.add_info_row("Cores", f"{cpu.cores}C / {cpu.threads}T")
+        card.add_info_row("Clock", f"{cpu.max_clock_mhz} MHz (current: {cpu.current_clock_mhz} MHz)")
+        card.add_info_row("Architecture", f"{cpu.architecture} • Socket: {cpu.socket}")
         
+        # Cache info (combined)
+        cache_parts = []
         if cpu.l2_cache_kb > 0:
             l2_mb = cpu.l2_cache_kb / 1024
-            card.add_info_row("L2 Cache", f"{l2_mb:.1f} MB" if l2_mb >= 1 else f"{cpu.l2_cache_kb} KB")
+            cache_parts.append(f"L2: {l2_mb:.1f}MB" if l2_mb >= 1 else f"L2: {cpu.l2_cache_kb}KB")
         if cpu.l3_cache_kb > 0:
             l3_mb = cpu.l3_cache_kb / 1024
-            card.add_info_row("L3 Cache", f"{l3_mb:.1f} MB" if l3_mb >= 1 else f"{cpu.l3_cache_kb} KB")
+            cache_parts.append(f"L3: {l3_mb:.1f}MB" if l3_mb >= 1 else f"L3: {cpu.l3_cache_kb}KB")
+        if cache_parts:
+            card.add_info_row("Cache", " • ".join(cache_parts))
         
-        card.add_divider()
-        card.add_info_row("Current Usage", f"{cpu.utilization_percent:.0f}%")
+        card.add_info_row("Usage", f"{cpu.utilization_percent:.0f}%")
         
         if cpu.temperature_c:
-            temp_status = "healthy" if cpu.temperature_c < 70 else ("warning" if cpu.temperature_c < 85 else "critical")
-            card.add_info_row("Temperature", f"{cpu.temperature_c:.0f}°C")
+            card.add_info_row("Temp", f"{cpu.temperature_c:.0f}°C")
         
         # Set card status
         status = cpu.status.value if hasattr(cpu.status, 'value') else str(cpu.status)
@@ -3982,24 +8188,23 @@ class HardwarePage(QWidget):
         
         for i, gpu in enumerate(gpus):
             if i > 0:
-                card.add_divider()
                 card.add_subsection(f"GPU {i + 1}")
             
-            card.add_info_row("Graphics Card", gpu.name, highlight=True)
-            card.add_info_row("Manufacturer", gpu.manufacturer)
-            card.add_info_row("Driver Version", gpu.driver_version)
-            card.add_info_row("Driver Date", gpu.driver_date)
+            card.add_info_row("Model", gpu.name, highlight=True)
+            card.add_info_row("Vendor", gpu.manufacturer)
             
             if gpu.vram_mb > 0:
                 vram_gb = gpu.vram_mb / 1024
                 vram_str = f"{vram_gb:.1f} GB" if vram_gb >= 1 else f"{gpu.vram_mb} MB"
-                card.add_info_row("Video Memory", vram_str)
+                card.add_info_row("VRAM", vram_str)
+            
+            card.add_info_row("Driver", f"v{gpu.driver_version} ({gpu.driver_date})")
             
             if gpu.resolution != "Unknown":
-                card.add_info_row("Resolution", f"{gpu.resolution} @ {gpu.refresh_rate}Hz")
+                card.add_info_row("Display", f"{gpu.resolution} @ {gpu.refresh_rate}Hz")
             
             if gpu.temperature_c:
-                card.add_info_row("Temperature", f"{gpu.temperature_c:.0f}°C")
+                card.add_info_row("Temp", f"{gpu.temperature_c:.0f}°C")
         
         # Set card status based on first GPU
         if gpus:
@@ -4011,24 +8216,22 @@ class HardwarePage(QWidget):
         card = self.cards["ram"]
         card.clear_info()
         
-        card.add_info_row("Total Memory", f"{ram.total_gb:.1f} GB", highlight=True)
+        card.add_info_row("Total", f"{ram.total_gb:.1f} GB", highlight=True)
         card.add_info_row("Used", f"{ram.used_gb:.1f} GB ({ram.utilization_percent:.0f}%)")
-        card.add_info_row("Available", f"{ram.available_gb:.1f} GB")
-        card.add_info_row("Slots Used", f"{ram.slots_used} of {ram.slots_total}")
+        card.add_info_row("Free", f"{ram.available_gb:.1f} GB")
+        card.add_info_row("Slots", f"{ram.slots_used} / {ram.slots_total} used")
         
         if ram.slots:
-            card.add_divider()
-            card.add_subsection("Installed Modules")
-            
+            card.add_subsection("Modules")
             for slot in ram.slots:
                 if slot.capacity_gb > 0:
-                    slot_info = f"{slot.capacity_gb:.0f} GB {slot.memory_type}"
+                    # Combine all info into one line
+                    parts = [f"{slot.capacity_gb:.0f}GB {slot.memory_type}"]
                     if slot.speed_mhz > 0:
-                        slot_info += f" @ {slot.speed_mhz} MHz"
-                    card.add_info_row(slot.slot or "Slot", slot_info)
-                    
+                        parts.append(f"{slot.speed_mhz}MHz")
                     if slot.manufacturer and slot.manufacturer not in ["Unknown", ""]:
-                        card.add_info_row("  Manufacturer", slot.manufacturer)
+                        parts.append(slot.manufacturer)
+                    card.add_info_row(slot.slot or "DIMM", " • ".join(parts))
         
         # Set status based on utilization
         status = ram.status.value if hasattr(ram.status, 'value') else str(ram.status)
@@ -4037,37 +8240,34 @@ class HardwarePage(QWidget):
         elif ram.utilization_percent > 75:
             card.set_status("warning", f"{ram.utilization_percent:.0f}% Used")
         else:
-            card.set_status(status, f"{ram.available_gb:.1f} GB Free")
+            card.set_status(status, f"{ram.available_gb:.1f}GB Free")
     
     def _populate_motherboard_card(self, mb):
         """Populate motherboard and BIOS information card"""
         card = self.cards["motherboard"]
         card.clear_info()
         
-        card.add_info_row("Manufacturer", mb.manufacturer, highlight=True)
-        card.add_info_row("Model", mb.product)
-        if mb.version:
+        # Main motherboard info at top
+        board_name = f"{mb.manufacturer} {mb.product}"
+        card.add_info_row("Board", board_name, highlight=True)
+        if mb.version and mb.version != "Unknown":
             card.add_info_row("Version", mb.version)
-        if mb.serial_number and mb.serial_number != "Unknown":
-            card.add_info_row("Serial Number", mb.serial_number)
+        if mb.serial_number and mb.serial_number not in ["Unknown", "Default string", ""]:
+            card.add_info_row("Serial", mb.serial_number)
         
-        card.add_divider()
-        card.add_subsection("BIOS Information")
+        # BIOS info (compact)
+        card.add_subsection("BIOS")
+        card.add_info_row("Vendor", mb.bios_vendor)
+        card.add_info_row("Version", mb.bios_version)
+        card.add_info_row("Date", mb.bios_date)
+        card.add_info_row("Mode", mb.bios_mode)
         
-        card.add_info_row("BIOS Vendor", mb.bios_vendor)
-        card.add_info_row("BIOS Version", mb.bios_version)
-        card.add_info_row("BIOS Date", mb.bios_date)
-        card.add_info_row("Firmware Mode", mb.bios_mode)
-        
-        card.add_divider()
-        card.add_subsection("Security Features")
-        
-        secure_boot_status = "Enabled" if mb.secure_boot else "Disabled"
-        secure_boot_color = Theme.SUCCESS if mb.secure_boot else Theme.WARNING
-        card.add_info_row("Secure Boot", secure_boot_status)
-        
-        tpm_status = f"Present (v{mb.tpm_version})" if mb.tpm_present else "Not detected"
-        card.add_info_row("TPM", tpm_status)
+        # Security (inline)
+        card.add_subsection("Security")
+        secure_boot = "✓ Enabled" if mb.secure_boot else "✗ Disabled"
+        tpm = f"✓ v{mb.tpm_version}" if mb.tpm_present else "✗ Not detected"
+        card.add_info_row("Secure Boot", secure_boot)
+        card.add_info_row("TPM", tpm)
         
         # Set card status
         status = mb.status.value if hasattr(mb.status, 'value') else str(mb.status)
@@ -4078,45 +8278,44 @@ class HardwarePage(QWidget):
         card = self.cards["storage"]
         card.clear_info()
         
-        # Physical drives
+        # Physical drives (compact)
         for i, drive in enumerate(storage.physical_drives):
             if i > 0:
-                card.add_divider()
+                card.add_subsection(f"Drive {i + 1}")
             
-            card.add_info_row("Drive", drive.model, highlight=True)
-            card.add_info_row("Capacity", f"{drive.capacity_gb:.0f} GB")
-            card.add_info_row("Type", f"{drive.media_type} ({drive.interface_type})")
-            card.add_info_row("Firmware", drive.firmware_version)
-            card.add_info_row("SMART Status", drive.smart_status)
+            card.add_info_row("Model", drive.model, highlight=True)
+            card.add_info_row("Size", f"{drive.capacity_gb:.0f} GB • {drive.media_type} • {drive.interface_type}")
+            card.add_info_row("Health", f"{drive.smart_status}")
             
+            # Additional info on one line
+            extras = []
             if drive.temperature_c:
-                card.add_info_row("Temperature", f"{drive.temperature_c:.0f}°C")
+                extras.append(f"{drive.temperature_c:.0f}°C")
             if drive.power_on_hours:
-                card.add_info_row("Power-On Hours", f"{drive.power_on_hours:,}")
+                extras.append(f"{drive.power_on_hours:,}h")
+            if extras:
+                card.add_info_row("Stats", " • ".join(extras))
         
         if storage.volumes:
-            card.add_divider()
             card.add_subsection("Volumes")
-            
             for vol in storage.volumes:
-                usage_str = f"{vol.used_gb:.1f} / {vol.capacity_gb:.1f} GB ({vol.utilization_percent:.0f}%)"
                 vol_name = f"{vol.drive_letter}"
                 if vol.label:
-                    vol_name += f" ({vol.label})"
+                    vol_name += f" {vol.label}"
+                usage_str = f"{vol.used_gb:.0f}/{vol.capacity_gb:.0f}GB ({vol.utilization_percent:.0f}%)"
                 card.add_info_row(vol_name, usage_str)
         
-        # Set status based on drive health
-        has_warning = any(d.status.value == "warning" for d in storage.physical_drives if hasattr(d.status, 'value'))
+        # Set status
         has_critical = any(d.status.value == "critical" for d in storage.physical_drives if hasattr(d.status, 'value'))
         vol_critical = any(v.utilization_percent > 95 for v in storage.volumes)
         vol_warning = any(v.utilization_percent > 85 for v in storage.volumes)
         
         if has_critical or vol_critical:
-            card.set_status("critical", "Issues Detected")
-        elif has_warning or vol_warning:
-            card.set_status("warning", "Attention Needed")
+            card.set_status("critical", "Issues")
+        elif vol_warning:
+            card.set_status("warning", "Low Space")
         else:
-            card.set_status("healthy", "All Healthy")
+            card.set_status("healthy", "Healthy")
     
     def _populate_network_card(self, adapters):
         """Populate network adapter information card"""
@@ -4125,39 +8324,31 @@ class HardwarePage(QWidget):
         
         connected_count = sum(1 for a in adapters if a.link_state == "Connected")
         card.set_status("healthy" if connected_count > 0 else "warning", 
-                       f"{connected_count} Connected" if connected_count > 0 else "Disconnected")
+                       f"{connected_count} Up" if connected_count > 0 else "Down")
         
         for i, adapter in enumerate(adapters):
             if i > 0:
-                card.add_divider()
+                card.add_subsection("")
             
-            card.add_info_row("Adapter", adapter.name, highlight=True)
-            card.add_info_row("Type", adapter.adapter_type)
-            card.add_info_row("Status", adapter.link_state)
+            card.add_info_row("Adapter", adapter.name[:35] + "..." if len(adapter.name) > 35 else adapter.name, highlight=True)
             
+            # Type and speed on one line
+            speed_str = ""
             if adapter.speed_mbps > 0:
-                speed_str = f"{adapter.speed_mbps} Mbps"
-                if adapter.speed_mbps >= 1000:
-                    speed_str = f"{adapter.speed_mbps / 1000:.0f} Gbps"
-                card.add_info_row("Speed", speed_str)
-            
-            card.add_info_row("MAC Address", adapter.mac_address)
+                speed_str = f" @ {adapter.speed_mbps / 1000:.0f}Gbps" if adapter.speed_mbps >= 1000 else f" @ {adapter.speed_mbps}Mbps"
+            card.add_info_row("Type", f"{adapter.adapter_type}{speed_str} • {adapter.link_state}")
             
             if adapter.ipv4_address != "Not assigned":
-                card.add_info_row("IPv4 Address", adapter.ipv4_address)
-            if adapter.ipv6_address != "Not assigned" and len(adapter.ipv6_address) < 40:
-                card.add_info_row("IPv6 Address", adapter.ipv6_address)
+                card.add_info_row("IPv4", adapter.ipv4_address)
+            
+            card.add_info_row("MAC", adapter.mac_address)
+            
             if adapter.gateway:
                 card.add_info_row("Gateway", adapter.gateway)
-            if adapter.dns_servers:
-                card.add_info_row("DNS Servers", ", ".join(adapter.dns_servers[:2]))
-            
-            dhcp_status = "Enabled" if adapter.dhcp_enabled else "Disabled"
-            card.add_info_row("DHCP", dhcp_status)
         
         if not adapters:
-            card.add_info_row("Status", "No active network adapters found")
-            card.set_status("warning", "No Adapters")
+            card.add_info_row("Status", "No adapters found")
+            card.set_status("warning", "None")
     
     def open_device_manager(self):
         """Open Windows Device Manager"""
@@ -4203,8 +8394,8 @@ class SettingsPage(QWidget):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 26px;
-            font-weight: bold;
+            font-size: 28px;
+            font-weight: 600;
         """)
         layout.addWidget(title)
         
@@ -4527,12 +8718,13 @@ class MainWindow(QMainWindow):
         self.pages = {"overview": self.overview}
         
         modules = [
-            ("updates", "Windows Update", "download"),
-            ("storage", "Storage Health", "hdd"),
-            ("security", "Security Status", "shield"),
-            # Hardware now uses dedicated HardwarePage
-            ("system", "System Files", "file"),
-            # Events now uses dedicated EventsPage
+            # All module pages are now dedicated pages - no generic ModulePage needed
+            # Updates uses WindowsUpdatePage
+            # Storage uses StoragePage
+            # Security uses SecurityPage
+            # Hardware uses HardwarePage
+            # System uses SystemPage
+            # Events uses EventsPage
         ]
         
         # Map module IDs to check methods
@@ -4544,6 +8736,26 @@ class MainWindow(QMainWindow):
             "system": self.check_system_files,
             "events": self.check_event_logs,
         }
+        
+        # Add Windows Update page (comprehensive update management)
+        self.updates_page = WindowsUpdatePage()
+        self.pages["updates"] = self.updates_page
+        self.content_stack.addWidget(self.updates_page)
+        
+        # Add Storage page (comprehensive storage management)
+        self.storage_page = StoragePage()
+        self.pages["storage"] = self.storage_page
+        self.content_stack.addWidget(self.storage_page)
+        
+        # Add Security page (Defender, Firewall status, Firewall rules)
+        self.security_page = SecurityPage()
+        self.pages["security"] = self.security_page
+        self.content_stack.addWidget(self.security_page)
+        
+        # Add System page (comprehensive system configuration)
+        self.system_page = SystemPage()
+        self.pages["system"] = self.system_page
+        self.content_stack.addWidget(self.system_page)
         
         for module_id, title, icon in modules:
             page = ModulePage(title, icon)
@@ -4570,6 +8782,11 @@ class MainWindow(QMainWindow):
         self.events_page = EventsPage()
         self.pages["events"] = self.events_page
         self.content_stack.addWidget(self.events_page)
+        
+        # Add Audio page (audio device testing with oscilloscope)
+        self.audio_page = AudioPage()
+        self.pages["audio"] = self.audio_page
+        self.content_stack.addWidget(self.audio_page)
         
         # Add Settings page
         self.settings_page = SettingsPage()
@@ -4657,6 +8874,7 @@ class MainWindow(QMainWindow):
             ("hardware", "cpu", "Hardware"),
             ("system", "file", "System"),
             ("events", "alert", "Events"),
+            ("audio", "speaker", "Audio"),
         ]
         
         for nav_id, icon, label in nav_data:
@@ -5026,26 +9244,27 @@ class MainWindow(QMainWindow):
         self._complete_scan_task("services", results)
     
     def _scan_startup(self):
-        """Scan startup items for full scan"""
+        """Scan startup items for full scan - runs in background thread"""
+        # Create worker and thread to avoid blocking UI
+        self._startup_scan_thread = QThread()
+        self._startup_scan_worker = StartupScanWorker()
+        self._startup_scan_worker.moveToThread(self._startup_scan_thread)
+        
+        # Connect signals
+        self._startup_scan_thread.started.connect(self._startup_scan_worker.run)
+        self._startup_scan_worker.finished.connect(self._on_startup_full_scan_complete)
+        self._startup_scan_worker.finished.connect(self._startup_scan_thread.quit)
+        self._startup_scan_worker.finished.connect(self._startup_scan_worker.deleteLater)
+        self._startup_scan_thread.finished.connect(self._startup_scan_thread.deleteLater)
+        
+        # Start the thread
+        self._startup_scan_thread.start()
+    
+    def _on_startup_full_scan_complete(self, startup_items: list):
+        """Handle startup scan completion during full scan"""
         results = {"status": "check", "message": "OK", "data": []}
+        
         try:
-            from startup_scanner import collect_startup_entries, StartupStatus
-            scan_result = collect_startup_entries()
-            
-            # Convert to list of dicts for UI
-            startup_items = []
-            for entry in scan_result.entries:
-                startup_items.append({
-                    "name": entry.name,
-                    "publisher": entry.publisher or "Unknown",
-                    "enabled": entry.status == StartupStatus.ENABLED,
-                    "impact": entry.impact,
-                    "location": entry.source.value,
-                    "command": entry.command,
-                    "source_path": entry.source_path,
-                    "confidence": entry.confidence.value,
-                })
-            
             enabled_count = sum(1 for item in startup_items if item.get("enabled", False))
             total_count = len(startup_items)
             
@@ -5175,182 +9394,29 @@ class MainWindow(QMainWindow):
             event_data = self.cached_data["events"]
             self.events_page.display_cached_data(event_data)
         
-        # Populate System Files page
-        system_res = self.scan_results.get("services", {})
-        if system_res:
-            results = []
-            results.append(("info", "System file integrity check"))
-            results.append(("check", "No critical issues detected"))
-            results.append(("info", "Run SFC /scannow for detailed verification"))
-            self.pages["system"].show_results_with_actions(results, [
-                ("Run SFC Scan", self._run_sfc_scan),
-                ("Run DISM Repair", self._run_dism_repair),
-            ])
+        # Populate System Files page - trigger detailed scan
+        if self.scan_results.get("services"):
+            self.system_page.display_cached_data(self.scan_results.get("services"))
         
         # Populate Drivers page - trigger a scan if not already done
         if not self.cached_data.get("drivers"):
             # Queue driver scan for after dialog closes
             QTimer.singleShot(1000, self._scan_drivers_background)
         
-        # Populate other pages that use ModulePage.show_results()
+        # Populate Windows Update page - trigger detailed check
         if self.cached_data.get("updates"):
-            update_info = self.cached_data["updates"]
-            results = []
-            results.append(("info", f"Last update check: {update_info.get('LastCheck', 'Unknown')}"))
-            pending = update_info.get('PendingUpdates', 0)
-            if pending > 0:
-                results.append(("warning", f"{pending} updates pending installation"))
-            else:
-                results.append(("check", "All updates installed"))
-            results.append(("info", f"Last install: {update_info.get('LastInstall', 'Unknown')}"))
-            
-            actions = [
-                ("Open Windows Update", self._open_windows_update),
-                ("Check for Updates", self._trigger_update_check),
-            ]
-            self.pages["updates"].show_results_with_actions(results, actions)
+            self.updates_page.display_cached_data(self.cached_data["updates"])
         
+        # Populate Storage page with cached volume data
         if self.cached_data.get("storage"):
-            volume_info = self.cached_data["storage"]
-            results = []
-            for vol in volume_info:
-                letter = vol.get('DriveLetter', '?')
-                label = vol.get('FileSystemLabel', '')
-                size_gb = vol.get('SizeGB', 0)
-                free_gb = vol.get('FreeSpaceGB', 0)
-                
-                if size_gb > 0:
-                    used_percent = int(((size_gb - free_gb) / size_gb) * 100)
-                else:
-                    used_percent = 0
-                
-                name = f"{letter}:"
-                if label:
-                    name += f" ({label})"
-                
-                if used_percent >= 90:
-                    results.append(("error", f"{name}: {used_percent}% used - Critical! ({free_gb:.1f} GB free)"))
-                elif used_percent >= 75:
-                    results.append(("warning", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
-                else:
-                    results.append(("check", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
-            
-            self.pages["storage"].show_results(results)
+            self.storage_page.display_cached_data(self.cached_data["storage"])
         
+        # Populate Security page with cached defender data
         if self.cached_data.get("security"):
             defender = self.cached_data["security"]
-            results = []
-            
-            # Windows Defender Status Section
-            results.append(("header", "Windows Defender"))
-            
-            enabled = defender.get('AntivirusEnabled', False)
-            if enabled:
-                results.append(("check", "Windows Defender Antivirus is enabled"))
-            else:
-                results.append(("error", "Windows Defender Antivirus is DISABLED!"))
-            
-            realtime = defender.get('RealTimeProtection', False)
-            if realtime:
-                results.append(("check", "Real-time protection is active"))
-            else:
-                results.append(("warning", "Real-time protection is OFF"))
-            
-            # Behavior monitoring
-            if defender.get('BehaviorMonitor', False):
-                results.append(("check", "Behavior monitoring enabled"))
-            else:
-                results.append(("warning", "Behavior monitoring disabled"))
-            
-            # Signature info
-            sig_age = defender.get('SignatureAge', 0)
-            if sig_age == 0:
-                results.append(("check", f"Virus definitions are up to date"))
-            elif sig_age <= 3:
-                results.append(("check", f"Virus definitions: {sig_age} day(s) old"))
-            elif sig_age <= 7:
-                results.append(("warning", f"Virus definitions: {sig_age} days old - Update recommended"))
-            else:
-                results.append(("error", f"Virus definitions: {sig_age} days old - Update required!"))
-            
-            if defender.get('SignatureVersion'):
-                results.append(("info", f"Signature version: {defender.get('SignatureVersion')}"))
-            
-            # Scan history
-            results.append(("info", f"Last full scan: {defender.get('LastScan', 'Never')}"))
-            results.append(("info", f"Last quick scan: {defender.get('LastQuickScan', 'Never')}"))
-            
-            # Firewall Section
-            results.append(("header", "Windows Firewall"))
-            
-            fw_domain = defender.get('FirewallDomain')
-            fw_private = defender.get('FirewallPrivate')
-            fw_public = defender.get('FirewallPublic')
-            
-            if fw_domain is True:
-                results.append(("check", "Domain firewall: Enabled"))
-            elif fw_domain is False:
-                results.append(("error", "Domain firewall: DISABLED"))
-            
-            if fw_private is True:
-                results.append(("check", "Private network firewall: Enabled"))
-            elif fw_private is False:
-                results.append(("warning", "Private network firewall: Disabled"))
-            
-            if fw_public is True:
-                results.append(("check", "Public network firewall: Enabled"))
-            elif fw_public is False:
-                results.append(("error", "Public network firewall: DISABLED"))
-            
-            # System Security Section
-            results.append(("header", "System Security"))
-            
-            # UAC
-            if defender.get('UACEnabled', False):
-                results.append(("check", "User Account Control (UAC) is enabled"))
-            else:
-                results.append(("error", "User Account Control (UAC) is DISABLED!"))
-            
-            # Secure Boot
-            secure_boot = defender.get('SecureBoot')
-            if secure_boot is True:
-                results.append(("check", "Secure Boot is enabled"))
-            elif secure_boot is False:
-                results.append(("warning", "Secure Boot is disabled"))
-            else:
-                results.append(("info", "Secure Boot: Unable to determine"))
-            
-            # BitLocker
-            bl_status = defender.get('BitLockerStatus', 'Unknown')
-            if bl_status == 'On':
-                enc = defender.get('BitLockerEncryption', 100)
-                if enc == 100:
-                    results.append(("check", f"BitLocker: System drive fully encrypted"))
-                else:
-                    results.append(("warning", f"BitLocker: Encrypting ({enc}% complete)"))
-            elif bl_status == 'Off':
-                results.append(("info", "BitLocker: Not enabled on system drive"))
-            else:
-                results.append(("info", f"BitLocker: {bl_status}"))
-            
-            # Credential Guard
-            if defender.get('CredentialGuard', False):
-                results.append(("check", "Credential Guard is running"))
-            
-            if defender.get('HVCIRunning', False):
-                results.append(("check", "Hypervisor-protected Code Integrity (HVCI) is active"))
-            
-            # Installed AV
-            if defender.get('InstalledAV'):
-                results.append(("info", f"Installed security products: {defender.get('InstalledAV')}"))
-            
-            # Add action buttons
-            actions = [
-                ("Open Windows Security", self._open_windows_security),
-                ("Update Definitions", self._update_defender_definitions),
-                ("Quick Scan", self._run_quick_scan),
-            ]
-            self.pages["security"].show_results_with_actions(results, actions)
+            # Store in security page's cache and display
+            self.security_page.cached_defender_data = defender
+            self.security_page.display_defender_data(defender)
         
         if self.cached_data.get("hardware"):
             hw_data = self.cached_data["hardware"]
@@ -5373,57 +9439,23 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(100, lambda: self.check_methods[module_id]())
     
     def check_windows_updates(self):
-        """Check Windows Update status using background thread"""
-        # Show loading state
-        self.pages["updates"].set_checking()
-        
-        # Run check in background thread
-        self._update_thread = QThread()
-        self._update_worker = WindowsUpdateWorker(self.health_checker)
-        self._update_worker.moveToThread(self._update_thread)
-        
-        self._update_thread.started.connect(self._update_worker.run)
-        self._update_worker.finished.connect(self._on_windows_update_complete)
-        self._update_worker.finished.connect(self._update_thread.quit)
-        self._update_worker.finished.connect(self._update_worker.deleteLater)
-        self._update_thread.finished.connect(self._update_thread.deleteLater)
-        
-        self._update_thread.start()
+        """Check Windows Update status - delegates to dedicated page"""
+        # Use the dedicated WindowsUpdatePage which has its own background thread
+        self.updates_page.check_updates()
     
     def _on_windows_update_complete(self, update_info: dict):
-        """Handle completion of Windows Update check"""
-        results = []
-        
-        if 'Error' in update_info:
-            results.append(("warning", f"Could not check updates: {update_info['Error']}"))
-        else:
-            last_check = update_info.get('LastCheck', 'Unknown')
-            results.append(("info", f"Last update check: {last_check}"))
-            
-            pending = update_info.get('PendingUpdates', 0)
-            if pending > 0:
-                results.append(("warning", f"{pending} updates pending installation"))
-            else:
-                results.append(("check", "All updates installed"))
-            
-            last_install = update_info.get('LastInstall', 'Unknown')
-            results.append(("info", f"Last install: {last_install}"))
-        
-        if not results:
-            results.append(("info", "No update information available"))
-        
+        """Handle completion of Windows Update check (legacy - kept for compatibility)"""
         # Cache the data
         self.cached_data["updates"] = update_info
         
-        # Show results with action buttons
-        actions = [
-            ("Open Windows Update", self._open_windows_update),
-            ("Check for Updates", self._trigger_update_check),
-        ]
-        self.pages["updates"].show_results_with_actions(results, actions)
+        # Update overview card
+        pending = update_info.get('PendingUpdates', 0)
+        if isinstance(pending, list):
+            pending = len(pending)
+        
         self.overview.status_cards["updates"].set_status(
-            "check" if all(r[0] == "check" or r[0] == "info" for r in results) else "warning",
-            "Up to date" if all(r[0] != "warning" for r in results) else "Updates available"
+            "check" if pending == 0 else "warning",
+            "Up to date" if pending == 0 else f"{pending} updates available"
         )
     
     def _open_windows_update(self):
@@ -5497,65 +9529,30 @@ class MainWindow(QMainWindow):
             self._open_windows_update()
     
     def check_storage_health(self):
-        """Check storage/disk health using background thread"""
-        # Show loading state
-        self.pages["storage"].set_checking()
-        
-        # Run check in background thread
-        self._storage_thread = QThread()
-        self._storage_worker = StorageCheckWorker(self.health_checker)
-        self._storage_worker.moveToThread(self._storage_thread)
-        
-        self._storage_thread.started.connect(self._storage_worker.run)
-        self._storage_worker.finished.connect(self._on_storage_check_complete)
-        self._storage_worker.finished.connect(self._storage_thread.quit)
-        self._storage_worker.finished.connect(self._storage_worker.deleteLater)
-        self._storage_thread.finished.connect(self._storage_thread.deleteLater)
-        
-        self._storage_thread.start()
+        """Check storage/disk health - delegates to StoragePage"""
+        # Delegate to the dedicated storage page
+        self.storage_page.scan_storage()
     
     def _on_storage_check_complete(self, volume_info: list):
-        """Handle completion of storage health check"""
-        results = []
-        
-        for vol in volume_info:
-            letter = vol.get('DriveLetter', '?')
-            label = vol.get('FileSystemLabel', '')
-            size_gb = vol.get('SizeGB', 0)
-            free_gb = vol.get('FreeSpaceGB', 0)
-            
-            if size_gb > 0:
-                used_percent = int(((size_gb - free_gb) / size_gb) * 100)
-            else:
-                used_percent = 0
-            
-            name = f"{letter}:"
-            if label:
-                name += f" ({label})"
-            
-            if used_percent >= 90:
-                results.append(("error", f"{name}: {used_percent}% used - Critical! ({free_gb:.1f} GB free)"))
-            elif used_percent >= 75:
-                results.append(("warning", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
-            else:
-                results.append(("check", f"{name}: {used_percent}% used ({free_gb:.1f} GB free)"))
-        
-        if not results:
-            results.append(("info", "No volume information available"))
-        
+        """Handle completion of storage health check - legacy method for compatibility"""
         # Cache the data
         self.cached_data["storage"] = volume_info
         
-        self.pages["storage"].show_results(results)
+        # Forward to storage page
+        self.storage_page.display_cached_data(volume_info)
         
-        # Update status card
+        # Update status card based on volume usage
         worst_status = "check"
-        for status, _ in results:
-            if status == "error":
-                worst_status = "error"
-                break
-            elif status == "warning":
-                worst_status = "warning"
+        for vol in volume_info:
+            size_gb = vol.get('SizeGB', 0)
+            free_gb = vol.get('FreeSpaceGB', 0)
+            if size_gb > 0:
+                used_percent = ((size_gb - free_gb) / size_gb) * 100
+                if used_percent >= 90:
+                    worst_status = "error"
+                    break
+                elif used_percent >= 75:
+                    worst_status = "warning"
         
         self.overview.status_cards["storage"].set_status(
             worst_status,
@@ -5565,7 +9562,7 @@ class MainWindow(QMainWindow):
     def check_security_status(self):
         """Check Windows Defender and security status using background thread"""
         # Show loading state
-        self.pages["security"].set_checking()
+        self.security_page.set_checking()
         
         # Run check in background thread
         self._security_thread = QThread()
@@ -5582,45 +9579,25 @@ class MainWindow(QMainWindow):
     
     def _on_security_check_complete(self, defender: dict):
         """Handle completion of security check"""
-        results = []
-        
-        if 'Error' in defender:
-            results.append(("warning", f"Could not check Defender: {defender['Error']}"))
-        else:
-            enabled = defender.get('AntivirusEnabled', False)
-            if enabled:
-                results.append(("check", "Windows Defender Antivirus is enabled"))
-            else:
-                results.append(("error", "Windows Defender Antivirus is disabled!"))
-            
-            realtime = defender.get('RealTimeProtection', False)
-            if realtime:
-                results.append(("check", "Real-time protection is active"))
-            else:
-                results.append(("warning", "Real-time protection is off"))
-            
-            last_scan = defender.get('LastScan', 'Unknown')
-            results.append(("info", f"Last full scan: {last_scan}"))
-            
-            sig_age = defender.get('SignatureAge', 0)
-            if sig_age == 0:
-                results.append(("check", "Virus definitions are up to date"))
-            elif sig_age <= 3:
-                results.append(("info", f"Virus definitions are {sig_age} days old"))
-            else:
-                results.append(("warning", f"Virus definitions are {sig_age} days old - update recommended"))
-        
-        if not results:
-            results.append(("info", "No security information available"))
-        
         # Cache the data
         self.cached_data["security"] = defender
         
-        self.pages["security"].show_results(results)
-        self.overview.status_cards["defender"].set_status(
-            "check" if all(r[0] != "error" for r in results) else "error",
-            "Protected" if all(r[0] != "error" for r in results) else "At Risk"
-        )
+        # Update the security page with the new data
+        self.security_page.cached_defender_data = defender
+        self.security_page.display_defender_data(defender)
+        
+        # Update overview card
+        if 'Error' not in defender:
+            enabled = defender.get('AntivirusEnabled', False)
+            realtime = defender.get('RealTimeProtection', False)
+            if enabled and realtime:
+                self.overview.status_cards["defender"].set_status("check", "Protected")
+            elif enabled:
+                self.overview.status_cards["defender"].set_status("warning", "Partial")
+            else:
+                self.overview.status_cards["defender"].set_status("error", "At Risk")
+        else:
+            self.overview.status_cards["defender"].set_status("warning", "Unknown")
     
     def check_hardware_health(self):
         """Check hardware health including disks"""
@@ -5666,22 +9643,9 @@ class MainWindow(QMainWindow):
         )
     
     def check_system_files(self):
-        """Check system file integrity info (quick check, not full SFC)"""
-        results = []
-        try:
-            # Provide info and action buttons
-            results.append(("info", "System file integrity can be verified with SFC /scannow"))
-            results.append(("info", "DISM can repair the Windows component store"))
-            results.append(("check", "Use the action buttons below to run system repairs"))
-            
-        except Exception as e:
-            results.append(("error", f"Error: {str(e)}"))
-        
-        # Show results with action buttons
-        self.pages["system"].show_results_with_actions(results, [
-            ("Run SFC Scan", self._run_sfc_scan),
-            ("Run DISM Repair", self._run_dism_repair),
-        ])
+        """Check system file integrity - delegates to SystemPage"""
+        # Delegate to the dedicated system page
+        self.system_page.scan_system()
         self.overview.status_cards["system"].set_status("check", "No issues")
     
     def _run_sfc_scan(self):

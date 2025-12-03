@@ -9,6 +9,7 @@ This application draws inspiration from **Microsoft PowerToys**, **Windows Secur
 ## 1. Window Structure & Layout
 
 ### Primary Window Dimensions
+
 - **Minimum Size**: 1100 × 720 px
 - **Default Size**: 1280 × 800 px
 - **Maximum Size**: Resizable to screen bounds
@@ -784,6 +785,486 @@ ScanResult
 | Overall feel        | Clean, sharp, utilitarian   | Soft, premium, modern       |
 
 Both versions share the same layout, typography, and spacing — only the surface treatments differ.
+
+---
+
+## 14. Modern UI Enhancements (Implemented)
+
+This section documents the modern UI improvements implemented in `driver_updater_qt_mk5.py` using PyQt6.
+
+### 14.1 Shadow System
+
+The Theme class includes a comprehensive shadow system for creating depth and visual hierarchy.
+
+#### Shadow Constants
+
+```python
+SHADOW_BLUR_SM = 8       # Small/subtle shadows
+SHADOW_BLUR_MD = 16      # Medium shadows (default for cards)
+SHADOW_BLUR_LG = 24      # Large shadows (modals, elevated elements)
+SHADOW_COLOR = "#000000"
+SHADOW_OPACITY_LIGHT = 40   # Subtle shadow (40/255)
+SHADOW_OPACITY_MEDIUM = 80  # Standard shadow (80/255)
+SHADOW_OPACITY_HEAVY = 120  # Strong shadow (120/255)
+```
+
+#### Shadow Helper Methods
+
+```python
+@staticmethod
+def apply_shadow(widget, blur_radius=16, offset_x=0, offset_y=4, 
+                 color="#000000", opacity=80):
+    """Apply a drop shadow effect to any widget."""
+    shadow = QGraphicsDropShadowEffect(widget)
+    shadow_color = QColor(color)
+    shadow_color.setAlpha(opacity)
+    shadow.setColor(shadow_color)
+    shadow.setBlurRadius(blur_radius)
+    shadow.setOffset(offset_x, offset_y)
+    widget.setGraphicsEffect(shadow)
+    return shadow
+
+@staticmethod
+def apply_card_shadow(widget):
+    """Apply standard card elevation shadow."""
+    return Theme.apply_shadow(widget, blur_radius=12, offset_y=3, opacity=60)
+
+@staticmethod
+def apply_button_shadow(widget, color="#0078d4"):
+    """Apply colored glow shadow for buttons."""
+    return Theme.apply_shadow(widget, blur_radius=16, offset_y=2, 
+                              color=color, opacity=100)
+```
+
+#### Usage Examples
+
+```python
+# Standard card shadow
+Theme.apply_card_shadow(self)
+
+# Custom shadow with specific parameters
+Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=60)
+
+# Button glow effect
+Theme.apply_button_shadow(button, color="#0078d4")
+```
+
+### 14.2 Animation System
+
+#### Animation Timing Constants
+
+```python
+ANIM_DURATION_FAST = 150    # Quick micro-interactions
+ANIM_DURATION_NORMAL = 250  # Standard transitions
+ANIM_DURATION_SLOW = 400    # Deliberate animations
+```
+
+#### AnimatedButton Widget
+
+A QPushButton subclass with hover shadow animation for interactive feedback.
+
+```python
+class AnimatedButton(QPushButton):
+    """Button with animated shadow on hover."""
+    
+    def __init__(self, text: str = "", variant: str = "primary", parent=None):
+        # variant: "primary" (accent blue) or "secondary" (outline)
+        
+    def enterEvent(self, event):
+        # Animates shadow blur from 0 to 20
+        
+    def leaveEvent(self, event):
+        # Animates shadow blur from 20 to 0
+```
+
+**Styling:**
+```
+PRIMARY VARIANT
+├── Background: #0078d4 (Windows accent blue)
+├── Hover: #1084d8
+├── Text: #ffffff
+├── Padding: 10px 24px
+└── Border radius: 6px
+
+SECONDARY VARIANT
+├── Background: transparent
+├── Border: 1px solid #5a5a5f
+├── Hover background: #38383d
+├── Text: #ffffff
+└── Border radius: 6px
+```
+
+### 14.3 Modern Spinner Widget
+
+A custom spinning arc indicator for loading states, replacing simple text indicators.
+
+```python
+class ModernSpinner(QWidget):
+    """Modern spinning arc loading indicator."""
+    
+    def __init__(self, size=32, line_width=3, color="#60cdff", parent=None):
+        # size: Diameter of the spinner
+        # line_width: Thickness of the arc
+        # color: Arc color
+```
+
+**Visual Specifications:**
+```
+SPINNER DESIGN
+├── Style: Spinning arc (not full circle)
+├── Arc span: 90° (quarter circle)
+├── Animation: Continuous rotation at ~60fps
+├── Timer interval: 16ms (approximately 60fps)
+├── Rotation step: 10° per frame
+└── Cap style: Round ends
+
+DEFAULT PARAMETERS
+├── Size: 32×32px
+├── Line width: 3px
+├── Color: #60cdff (accent light blue)
+└── Background: Transparent
+```
+
+**Usage:**
+```python
+# Create a spinner
+spinner = ModernSpinner(size=24, line_width=2, color="#60cdff")
+layout.addWidget(spinner)
+
+# Control visibility
+spinner.setVisible(True)   # Start spinning
+spinner.setVisible(False)  # Stop (automatically handled)
+```
+
+### 14.4 Glow Button Widget
+
+A button with an intensifying glow effect on hover for important actions.
+
+```python
+class GlowButton(QPushButton):
+    """Button with glow effect that intensifies on hover."""
+    
+    def __init__(self, text: str = "", glow_color: str = "#0078d4", parent=None):
+        # glow_color: The color of the glow effect
+```
+
+**Hover Animation:**
+```
+IDLE STATE
+├── Shadow blur: 8px
+├── Shadow opacity: 80/255
+└── Shadow offset: 0, 2px
+
+HOVER STATE
+├── Shadow blur: 24px (animated transition)
+├── Shadow opacity: 150/255
+└── Animation duration: 150ms
+```
+
+### 14.5 Gradient Backgrounds
+
+CSS-style gradients for rich button backgrounds.
+
+#### Gradient Presets
+
+```python
+GRADIENT_PRIMARY = "qlineargradient(x1:0, y1:0, x2:1, y2:1, " \
+                   "stop:0 #0078d4, stop:1 #00a8e8)"
+
+GRADIENT_SUCCESS = "qlineargradient(x1:0, y1:0, x2:1, y2:1, " \
+                   "stop:0 #0f9d58, stop:1 #00c853)"
+
+GRADIENT_ACCENT = "qlineargradient(x1:0, y1:0, x2:0, y2:1, " \
+                  "stop:0 #60cdff, stop:1 #0078d4)"
+```
+
+#### Button with Gradient Example
+
+```python
+# Scan button with gradient background and glow
+scan_btn.setStyleSheet(f"""
+    QPushButton {{
+        background: {Theme.GRADIENT_PRIMARY};
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 14px 28px;
+        font-size: 14px;
+        font-weight: 600;
+    }}
+    QPushButton:hover {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #1084d8, stop:1 #00b4f0);
+    }}
+    QPushButton:pressed {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #005a9e, stop:1 #0088cc);
+    }}
+""")
+```
+
+### 14.6 Card Shadow Implementation
+
+All major cards include shadow effects for visual elevation.
+
+#### StatusCard Shadow
+
+```python
+def _setup_shadow(self):
+    """Apply modern shadow effect."""
+    Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=60)
+```
+
+#### HealthSummaryCard Shadow
+
+```python
+# Applied in __init__
+Theme.apply_shadow(self, blur_radius=16, offset_y=4, opacity=70)
+```
+
+#### Other Cards
+
+```python
+# StartupProgramsCard, BootSecurityCard, etc.
+Theme.apply_card_shadow(self)
+```
+
+### 14.7 Visual Effects Summary
+
+| Component          | Effect                  | Parameters                           |
+|--------------------|-------------------------|--------------------------------------|
+| StatusCard         | Drop shadow             | blur=12, offset_y=3, opacity=60      |
+| HealthSummaryCard  | Drop shadow             | blur=16, offset_y=4, opacity=70      |
+| StartupProgramsCard| Card shadow (standard)  | blur=12, offset_y=3, opacity=60      |
+| BootSecurityCard   | Card shadow (standard)  | blur=12, offset_y=3, opacity=60      |
+| Scan Button        | Gradient + Glow         | Primary gradient, glow blur=16       |
+| AnimatedButton     | Hover shadow animation  | blur 0→20 on hover                   |
+| GlowButton         | Intensifying glow       | blur 8→24 on hover                   |
+| ModernSpinner      | Rotating arc            | 90° arc, 60fps rotation              |
+
+### 14.8 Performance Considerations
+
+```
+SHADOW EFFECTS
+├── Use sparingly on important elements
+├── QGraphicsDropShadowEffect can impact performance
+├── Consider disabling on lower-end systems
+└── Maximum recommended: 5-10 simultaneous shadows
+
+ANIMATIONS
+├── Timer-based animations (ModernSpinner) use ~16ms intervals
+├── QPropertyAnimation for smooth value transitions
+├── Stop animations when widgets are hidden
+└── Respect prefers-reduced-motion when possible
+```
+
+---
+
+## 15. Modern Table & List Design (Implemented)
+
+This section documents the improved table and list row components for better readability and user-friendliness.
+
+### 15.1 Design Principles
+
+```
+READABILITY IMPROVEMENTS
+├── Larger row heights (52-60px instead of 40px)
+├── Increased padding (16px horizontal, 14px vertical)
+├── Larger fonts for primary text (14px instead of 13px)
+├── Better color contrast for subtitles
+├── Status badges with background colors
+└── Alternating row colors for scanning
+
+VISUAL HIERARCHY
+├── Category headers with uppercase styling
+├── Subtle shadows on list containers
+├── Clear visual separation between groups
+├── Status icons with consistent sizing (18px)
+└── Action buttons with proper hit targets
+```
+
+### 15.2 ModernListRow Component
+
+A styled list row with improved readability and hover effects.
+
+```python
+class ModernListRow(QFrame):
+    """Modern styled list row with improved readability."""
+    
+    def __init__(self, 
+                 title: str = "",
+                 subtitle: str = "",
+                 status: str = "ok",  # ok, warning, error, info
+                 status_text: str = "",
+                 is_alternate: bool = False,
+                 show_chevron: bool = False,
+                 parent=None):
+```
+
+**Visual Specifications:**
+
+```
+ROW STYLING
+├── Height: Auto (typically 52-60px with content)
+├── Padding: 16px horizontal, 14px vertical
+├── Spacing: 14px between elements
+├── Background (normal): #2d2d32 
+├── Background (alternate): #292930 (slightly darker)
+├── Hover: #38383d
+└── Border: None (container handles borders)
+
+TITLE TEXT
+├── Font size: 14px
+├── Font weight: 500 (Medium)
+├── Color: #ffffff (TEXT_PRIMARY)
+└── Line height: 20px
+
+SUBTITLE TEXT
+├── Font size: 12px
+├── Font weight: 400 (Regular)
+├── Color: #7a7a7a (TEXT_TERTIARY)
+└── Line height: 18px
+
+STATUS BADGE
+├── Font size: 11px
+├── Font weight: 600 (SemiBold)
+├── Padding: 4px 10px
+├── Border radius: 4px
+├── Background: Color-specific (see below)
+
+STATUS BADGE COLORS
+├── OK:      Background: rgba(15,157,88,0.15)  Text: #0f9d58
+├── Warning: Background: rgba(244,180,0,0.15)  Text: #f4b400
+├── Error:   Background: rgba(219,68,55,0.15)  Text: #db4437
+└── Info:    Background: rgba(66,133,244,0.15) Text: #60cdff
+```
+
+### 15.3 ModernCategoryHeader Component
+
+A styled category header for grouping list items.
+
+```python
+class ModernCategoryHeader(QFrame):
+    """Category header for grouping list items."""
+    
+    def __init__(self, title: str, count: int = 0, parent=None):
+```
+
+**Visual Specifications:**
+
+```
+HEADER STYLING
+├── Height: Fixed 40px
+├── Padding: 16px horizontal
+├── Background: #232328 (BG_SIDEBAR)
+├── Border-bottom: 1px solid #3a3a3f
+└── Text transform: UPPERCASE
+
+TITLE TEXT
+├── Font size: 11px
+├── Font weight: 700 (Bold)
+├── Color: #b4b4b4 (TEXT_SECONDARY)
+├── Letter spacing: 1px
+└── Text transform: uppercase
+
+COUNT BADGE
+├── Font size: 11px
+├── Font weight: 600
+├── Color: #7a7a7a (TEXT_TERTIARY)
+└── Format: "(count)"
+```
+
+### 15.4 ModernListContainer Component
+
+A container that manages list items with proper styling.
+
+```python
+class ModernListContainer(QFrame):
+    """Container for modern list items."""
+    
+    def add_category(self, title: str, count: int = 0) -> ModernCategoryHeader
+    def add_row(self, title, subtitle, status, status_text, show_chevron) -> ModernListRow
+    def add_separator(self)
+    def add_more_label(self, text: str)
+    def clear(self)
+```
+
+**Visual Specifications:**
+
+```
+CONTAINER STYLING
+├── Background: #2d2d32 (BG_CARD)
+├── Border: 1px solid #3a3a3f
+├── Border radius: 8px
+├── Shadow: blur=12, offset_y=3, opacity=50
+└── Overflow: Hidden (for rounded corners)
+
+SPACING
+├── No margins between items
+├── No spacing between items (0px)
+└── Dividers handled by category headers
+```
+
+### 15.5 Improved Stats Display
+
+Enhanced statistics display with visual dividers and color coding.
+
+```
+STAT BOX STYLING
+├── Min width: 100px
+├── Value font size: 24px (up from 18px)
+├── Value font weight: 700
+├── Label font size: 11px
+├── Label text transform: uppercase
+├── Label letter spacing: 0.5px
+├── Color coding by type (success/warning/error)
+
+STAT DIVIDERS
+├── Width: 1px
+├── Height: 40px
+├── Color: #3a3a3f
+├── Margin: 24px horizontal
+```
+
+### 15.6 Usage Examples
+
+**Driver Manager Page:**
+```python
+# Create modern list container
+self.drivers_list = ModernListContainer()
+
+# Add category with count
+self.drivers_list.add_category("Audio Endpoint", 6)
+
+# Add rows with full styling
+row = self.drivers_list.add_row(
+    title="Realtek Audio Effects",
+    subtitle="Realtek • v13.0.6000.1167 • 2024-01-23",
+    status="ok",
+    status_text="OK"
+)
+
+# Add action button to row
+row.add_action_button("Fix", callback, primary=True)
+
+# Add "more items" label
+self.drivers_list.add_more_label("... and 3 more drivers")
+```
+
+### 15.7 Comparison: Before vs After
+
+| Aspect              | Before                    | After                     |
+|---------------------|---------------------------|---------------------------|
+| Row Height          | ~40px                     | ~56px                     |
+| Padding             | 10px 16px                 | 14px 16px                 |
+| Title Font          | 13px                      | 14px Medium               |
+| Subtitle Font       | 11px                      | 12px                      |
+| Status Display      | Plain text                | Colored badge with bg     |
+| Alternating Rows    | No                        | Yes (subtle)              |
+| Category Headers    | Plain label               | Uppercase styled header   |
+| Container Shadow    | None                      | Subtle drop shadow        |
+| Icon Size           | 16px                      | 18px                      |
+| Action Buttons      | Inline small              | Proper sized, styled      |
 
 ---
 
