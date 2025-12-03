@@ -658,7 +658,7 @@ def _resolve_shortcut(lnk_path: str) -> str:
     try:
         ps_cmd = f'(New-Object -ComObject WScript.Shell).CreateShortcut("{lnk_path}").TargetPath'
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-NoLogo", "-Command", ps_cmd],
+            ["powershell", "-NoProfile", "-NoLogo", "-WindowStyle", "Hidden", "-Command", ps_cmd],
             capture_output=True,
             text=True,
             timeout=2,
@@ -693,7 +693,7 @@ ForEach-Object {
 '''
         
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-NoLogo", "-Command", ps_script],
+            ["powershell", "-NoProfile", "-NoLogo", "-WindowStyle", "Hidden", "-Command", ps_script],
             capture_output=True,
             text=True,
             timeout=15,
@@ -769,7 +769,7 @@ Where-Object {
 '''
         
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-NoLogo", "-Command", ps_script],
+            ["powershell", "-NoProfile", "-NoLogo", "-WindowStyle", "Hidden", "-Command", ps_script],
             capture_output=True,
             text=True,
             timeout=15,
@@ -842,7 +842,7 @@ def scan_wmi() -> Tuple[List[StartupEntry], List[str]]:
         ps_script = '''Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,Location | ConvertTo-Json -Compress'''
         
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-NoLogo", "-Command", ps_script],
+            ["powershell", "-NoProfile", "-NoLogo", "-WindowStyle", "Hidden", "-Command", ps_script],
             capture_output=True,
             text=True,
             timeout=10,

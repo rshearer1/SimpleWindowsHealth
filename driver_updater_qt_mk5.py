@@ -696,7 +696,7 @@ class EventScanWorker(QObject):
             $output | ConvertTo-Json -Depth 4
             '''
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", cmd],
                 capture_output=True, text=True, timeout=30,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
@@ -728,7 +728,7 @@ class HardwareMemoryWorker(QObject):
             $mem | ConvertTo-Json
             '''
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", cmd],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", cmd],
                 capture_output=True, text=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
@@ -4137,7 +4137,7 @@ class DriversPage(QWidget):
             Get-CimInstance Win32_VideoController | Select-Object Name, AdapterCompatibility | ConvertTo-Json
             """
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", gpu_cmd],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", gpu_cmd],
                 capture_output=True, text=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
@@ -4159,7 +4159,7 @@ class DriversPage(QWidget):
             Get-CimInstance Win32_Processor | Select-Object Manufacturer, Name | ConvertTo-Json
             """
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", cpu_cmd],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", cpu_cmd],
                 capture_output=True, text=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
@@ -4179,7 +4179,7 @@ class DriversPage(QWidget):
             (Get-CimInstance Win32_ComputerSystem).Manufacturer
             """
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", sys_cmd],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", sys_cmd],
                 capture_output=True, text=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
@@ -5494,7 +5494,7 @@ class EventsPage(QWidget):
             import json
             
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -5801,7 +5801,7 @@ class EventsPage(QWidget):
             $header + $errors | Out-File -FilePath "{file_path}" -Encoding UTF8
             '''
             subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 capture_output=True,
                 timeout=30,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
@@ -6181,7 +6181,7 @@ class AudioTestWorker(QObject):
             '''
             
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -6687,7 +6687,7 @@ class AudioPage(QWidget):
             [console]::beep(659, 500)
             '''
             subprocess.Popen(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
         except Exception as e:
@@ -6700,7 +6700,7 @@ class AudioPage(QWidget):
             freq = 440 if channel == "left" else 554
             command = f'[console]::beep({freq}, 1000)'
             subprocess.Popen(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
         except Exception as e:
@@ -7936,7 +7936,7 @@ class StoragePage(QWidget):
             import subprocess
             try:
                 subprocess.run(
-                    ["powershell", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
+                    ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
                     creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
                 )
                 # Refresh the scan
@@ -8652,14 +8652,14 @@ class SecurityPage(QWidget):
     def _update_defender_definitions(self):
         """Update Windows Defender definitions"""
         subprocess.Popen(
-            ["powershell", "-Command", "Update-MpSignature"],
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Update-MpSignature"],
             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
         )
     
     def _run_quick_scan(self):
         """Run a quick Windows Defender scan"""
         subprocess.Popen(
-            ["powershell", "-Command", "Start-MpScan -ScanType QuickScan"],
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Start-MpScan -ScanType QuickScan"],
             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
         )
     
@@ -11648,7 +11648,7 @@ class MainWindow(QMainWindow):
         try:
             # Run Update-MpSignature
             subprocess.Popen(
-                ['powershell', '-Command', 'Update-MpSignature'],
+                ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', 'Update-MpSignature'],
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             QMessageBox.information(
@@ -11666,7 +11666,7 @@ class MainWindow(QMainWindow):
         from PyQt6.QtWidgets import QMessageBox
         try:
             subprocess.Popen(
-                ['powershell', '-Command', 'Start-MpScan -ScanType QuickScan'],
+                ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', 'Start-MpScan -ScanType QuickScan'],
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             QMessageBox.information(

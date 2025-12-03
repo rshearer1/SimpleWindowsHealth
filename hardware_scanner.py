@@ -247,7 +247,7 @@ def _run_powershell(command: str, timeout: int = 15) -> str:
     """Run PowerShell command and return output"""
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", command],
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", command],
             capture_output=True,
             text=True,
             timeout=timeout,

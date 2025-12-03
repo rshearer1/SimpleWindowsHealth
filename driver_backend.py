@@ -440,7 +440,7 @@ class DriverScanner:
         """Execute a PowerShell command and return output"""
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -897,7 +897,7 @@ class HealthChecker:
         """Execute a PowerShell command and return output"""
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
                 capture_output=True,
                 text=True,
                 timeout=timeout,
