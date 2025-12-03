@@ -1010,31 +1010,143 @@ class HealthChecker:
             return {"Error": "Could not check Defender status"}
     
     def check_windows_update_status(self) -> dict:
-        """Check Windows Update status"""
+        """Check Windows Update status - fast version that doesn't hang"""
         self.log("Checking Windows Update status...")
+        # Use a faster approach that doesn't query pending updates (which can hang)
+        # Instead, check registry for last check times and service status
         command = """
         try {
-            $session = New-Object -ComObject Microsoft.Update.Session
-            $searcher = $session.CreateUpdateSearcher()
-            $pending = $searcher.Search("IsInstalled=0").Updates.Count
+            $result = @{
+                PendingUpdates = 0
+                LastCheck = "Unknown"
+                LastInstall = "Unknown"
+                ServiceStatus = "Unknown"
+                PendingReboot = $false
+            }
             
+            # Check Windows Update service status
+            $wuService = Get-Service -Name wuauserv -ErrorAction SilentlyContinue
+            $result.ServiceStatus = if ($wuService) { $wuService.Status.ToString() } else { "Not Found" }
+            
+            # Check for pending reboot
+            $result.PendingReboot = Test-Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired"
+            
+            # Get last check/install times from registry (fast)
             $lastCheck = Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\Results\\Detect" -ErrorAction SilentlyContinue
             $lastInstall = Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\Results\\Install" -ErrorAction SilentlyContinue
+            $result.LastCheck = if ($lastCheck.LastSuccessTime) { $lastCheck.LastSuccessTime } else { "Unknown" }
+            $result.LastInstall = if ($lastInstall.LastSuccessTime) { $lastInstall.LastSuccessTime } else { "Unknown" }
             
-            @{
-                PendingUpdates = $pending
-                LastCheck = if ($lastCheck.LastSuccessTime) { $lastCheck.LastSuccessTime } else { "Unknown" }
-                LastInstall = if ($lastInstall.LastSuccessTime) { $lastInstall.LastSuccessTime } else { "Unknown" }
-            } | ConvertTo-Json
+            # Quick pending update count from Windows Update orchestrator (faster than COM)
+            try {
+                $pending = Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\StateVariables" -ErrorAction SilentlyContinue
+                if ($pending.PendingUpdatesCount) {
+                    $result.PendingUpdates = $pending.PendingUpdatesCount
+                }
+            } catch {}
+            
+            $result | ConvertTo-Json
         } catch {
             @{ Error = $_.Exception.Message } | ConvertTo-Json
         }
+        """
+        output = self.run_powershell(command, timeout=15)  # 15 second timeout
+        try:
+            return json.loads(output)
+        except:
+            return {"Error": "Could not check Windows Update status"}
+    
+    def get_windows_update_details(self) -> dict:
+        """Get comprehensive Windows Update information including history and available updates"""
+        self.log("Getting detailed Windows Update information...")
+        command = """
+        $output = @{
+            PendingUpdates = @()
+            RecentHistory = @()
+            LastCheck = "Unknown"
+            LastInstall = "Unknown"
+            AutoUpdateEnabled = $true
+            PendingReboot = $false
+            ServiceStatus = "Unknown"
+        }
+        
+        try {
+            # Check if Windows Update service is running
+            $wuService = Get-Service -Name wuauserv -ErrorAction SilentlyContinue
+            $output.ServiceStatus = if ($wuService) { $wuService.Status.ToString() } else { "Not Found" }
+            
+            # Check for pending reboot
+            $rebootPending = Test-Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired"
+            $output.PendingReboot = $rebootPending
+            
+            # Get last check/install times from registry
+            $lastCheck = Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\Results\\Detect" -ErrorAction SilentlyContinue
+            $lastInstall = Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\Results\\Install" -ErrorAction SilentlyContinue
+            $output.LastCheck = if ($lastCheck.LastSuccessTime) { $lastCheck.LastSuccessTime } else { "Unknown" }
+            $output.LastInstall = if ($lastInstall.LastSuccessTime) { $lastInstall.LastSuccessTime } else { "Unknown" }
+            
+            # Get pending updates
+            $session = New-Object -ComObject Microsoft.Update.Session
+            $searcher = $session.CreateUpdateSearcher()
+            
+            try {
+                $searchResult = $searcher.Search("IsInstalled=0")
+                foreach ($update in $searchResult.Updates) {
+                    $size = if ($update.MaxDownloadSize -gt 0) { 
+                        [math]::Round($update.MaxDownloadSize / 1MB, 1) 
+                    } else { 0 }
+                    
+                    $output.PendingUpdates += @{
+                        Title = $update.Title
+                        Description = if ($update.Description.Length -gt 200) { $update.Description.Substring(0, 200) + "..." } else { $update.Description }
+                        KBArticleIDs = ($update.KBArticleIDs -join ", ")
+                        SizeMB = $size
+                        IsDownloaded = $update.IsDownloaded
+                        IsMandatory = $update.IsMandatory
+                        Category = if ($update.Categories.Count -gt 0) { $update.Categories.Item(0).Name } else { "Other" }
+                        Severity = if ($update.MsrcSeverity) { $update.MsrcSeverity } else { "Unspecified" }
+                    }
+                }
+            } catch {}
+            
+            # Get update history (last 20)
+            try {
+                $historyCount = $searcher.GetTotalHistoryCount()
+                $history = $searcher.QueryHistory(0, [Math]::Min(20, $historyCount))
+                
+                foreach ($entry in $history) {
+                    if ($entry.Title) {
+                        $resultCode = switch ($entry.ResultCode) {
+                            0 { "Not Started" }
+                            1 { "In Progress" }
+                            2 { "Succeeded" }
+                            3 { "Succeeded With Errors" }
+                            4 { "Failed" }
+                            5 { "Aborted" }
+                            default { "Unknown" }
+                        }
+                        
+                        $output.RecentHistory += @{
+                            Title = $entry.Title
+                            Date = $entry.Date.ToString("yyyy-MM-dd HH:mm")
+                            Result = $resultCode
+                            Operation = switch ($entry.Operation) { 1 { "Install" }; 2 { "Uninstall" }; default { "Other" } }
+                        }
+                    }
+                }
+            } catch {}
+            
+        } catch {
+            $output.Error = $_.Exception.Message
+        }
+        
+        $output | ConvertTo-Json -Depth 4
         """
         output = self.run_powershell(command)
         try:
             return json.loads(output)
         except:
-            return {"Error": "Could not check Windows Update status"}
+            return {"Error": "Could not get Windows Update details"}
     
     def run_sfc_scan(self) -> str:
         """Run System File Checker"""
@@ -1115,6 +1227,359 @@ class HealthChecker:
             if isinstance(data, dict):
                 data = [data]
             return data
+        except:
+            return []
+    
+    def get_storage_details(self) -> dict:
+        """Get comprehensive storage information including disks, volumes, and cleanup data"""
+        self.log("Getting detailed storage information...")
+        command = """
+        $output = @{
+            Disks = @()
+            Volumes = @()
+            TempFilesSize = 0
+            RecycleBinSize = 0
+            DownloadsSize = 0
+            TotalSpace = 0
+            TotalFree = 0
+            TotalUsed = 0
+        }
+        
+        # Get physical disks with SMART status
+        try {
+            Get-CimInstance Win32_DiskDrive | ForEach-Object {
+                $disk = $_
+                $partitions = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($disk.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
+                $partCount = if ($partitions) { @($partitions).Count } else { 0 }
+                
+                $output.Disks += @{
+                    Model = $disk.Model
+                    SerialNumber = $disk.SerialNumber
+                    SizeGB = [math]::Round($disk.Size / 1GB, 1)
+                    Status = $disk.Status
+                    MediaType = if ($disk.MediaType -match 'SSD|Solid') { 'SSD' } elseif ($disk.MediaType -match 'Fixed') { 'HDD' } else { $disk.MediaType }
+                    InterfaceType = $disk.InterfaceType
+                    Partitions = $partCount
+                    Index = $disk.Index
+                }
+            }
+        } catch {}
+        
+        # Get volumes with detailed info
+        try {
+            Get-Volume | Where-Object { $_.DriveLetter } | ForEach-Object {
+                $vol = $_
+                $sizeGB = [math]::Round($vol.Size / 1GB, 2)
+                $freeGB = [math]::Round($vol.SizeRemaining / 1GB, 2)
+                $usedGB = $sizeGB - $freeGB
+                $usedPercent = if ($sizeGB -gt 0) { [math]::Round(($usedGB / $sizeGB) * 100, 1) } else { 0 }
+                
+                $output.TotalSpace += $sizeGB
+                $output.TotalFree += $freeGB
+                $output.TotalUsed += $usedGB
+                
+                $output.Volumes += @{
+                    DriveLetter = $vol.DriveLetter
+                    Label = $vol.FileSystemLabel
+                    FileSystem = $vol.FileSystem
+                    SizeGB = $sizeGB
+                    FreeGB = $freeGB
+                    UsedGB = $usedGB
+                    UsedPercent = $usedPercent
+                    HealthStatus = $vol.HealthStatus.ToString()
+                    DriveType = $vol.DriveType.ToString()
+                }
+            }
+        } catch {}
+        
+        # Get temp files size
+        try {
+            $tempPath = $env:TEMP
+            $tempSize = (Get-ChildItem -Path $tempPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+            $output.TempFilesSize = [math]::Round($tempSize / 1MB, 1)
+        } catch { $output.TempFilesSize = 0 }
+        
+        # Get recycle bin size
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $recycleBin = $shell.NameSpace(0x0a)
+            $rbSize = ($recycleBin.Items() | Measure-Object -Property Size -Sum).Sum
+            $output.RecycleBinSize = [math]::Round($rbSize / 1MB, 1)
+        } catch { $output.RecycleBinSize = 0 }
+        
+        # Get Downloads folder size
+        try {
+            $downloadsPath = [Environment]::GetFolderPath('UserProfile') + '\\Downloads'
+            $dlSize = (Get-ChildItem -Path $downloadsPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+            $output.DownloadsSize = [math]::Round($dlSize / 1MB, 1)
+        } catch { $output.DownloadsSize = 0 }
+        
+        $output | ConvertTo-Json -Depth 4
+        """
+        output = self.run_powershell(command)
+        try:
+            return json.loads(output)
+        except:
+            return {"Error": "Could not get storage details"}
+    
+    def get_system_details(self) -> dict:
+        """Get detailed system information for System Files page"""
+        command = """
+        $output = @{
+            CriticalServices = @()
+            SystemInfo = @{}
+            RecentInstalls = @()
+            BootConfig = @{}
+            ComponentStore = @{}
+        }
+        
+        # Get critical Windows services status
+        $criticalServices = @(
+            'wuauserv',      # Windows Update
+            'BITS',          # Background Intelligent Transfer
+            'cryptsvc',      # Cryptographic Services
+            'TrustedInstaller', # Windows Modules Installer
+            'msiserver',     # Windows Installer
+            'EventLog',      # Windows Event Log
+            'Schedule',      # Task Scheduler
+            'Spooler',       # Print Spooler
+            'Winmgmt',       # WMI
+            'LanmanServer',  # Server service
+            'LanmanWorkstation', # Workstation
+            'Dnscache'       # DNS Client
+        )
+        
+        foreach ($svcName in $criticalServices) {
+            try {
+                $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+                if ($svc) {
+                    $output.CriticalServices += @{
+                        Name = $svc.Name
+                        DisplayName = $svc.DisplayName
+                        Status = $svc.Status.ToString()
+                        StartType = $svc.StartType.ToString()
+                    }
+                }
+            } catch {}
+        }
+        
+        # Get system info
+        try {
+            $os = Get-CimInstance Win32_OperatingSystem
+            $cs = Get-CimInstance Win32_ComputerSystem
+            $output.SystemInfo = @{
+                OSName = $os.Caption
+                OSVersion = $os.Version
+                BuildNumber = $os.BuildNumber
+                InstallDate = $os.InstallDate.ToString('yyyy-MM-dd')
+                LastBoot = $os.LastBootUpTime.ToString('yyyy-MM-dd HH:mm')
+                SystemDrive = $os.SystemDrive
+                WindowsDirectory = $os.WindowsDirectory
+                TotalMemoryGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
+                ComputerName = $cs.Name
+                Domain = $cs.Domain
+                Workgroup = $cs.Workgroup
+                Manufacturer = $cs.Manufacturer
+                Model = $cs.Model
+            }
+            
+            # Get uptime
+            $uptime = (Get-Date) - $os.LastBootUpTime
+            $output.SystemInfo.UptimeDays = [math]::Floor($uptime.TotalDays)
+            $output.SystemInfo.UptimeHours = $uptime.Hours
+        } catch {}
+        
+        # Get recent software installations from registry
+        try {
+            $recentInstalls = @()
+            $uninstallPaths = @(
+                'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+                'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
+            )
+            
+            foreach ($path in $uninstallPaths) {
+                Get-ItemProperty $path -ErrorAction SilentlyContinue | 
+                Where-Object { $_.DisplayName -and $_.InstallDate } |
+                ForEach-Object {
+                    $recentInstalls += @{
+                        Name = $_.DisplayName
+                        InstallDate = $_.InstallDate
+                        Publisher = $_.Publisher
+                        Version = $_.DisplayVersion
+                    }
+                }
+            }
+            
+            $output.RecentInstalls = $recentInstalls | 
+                Sort-Object { [datetime]::ParseExact($_.InstallDate, 'yyyyMMdd', $null) } -Descending -ErrorAction SilentlyContinue |
+                Select-Object -First 15
+        } catch {}
+        
+        # Get boot configuration
+        try {
+            $bcdedit = bcdedit /v 2>&1 | Out-String
+            $output.BootConfig.RawOutput = $bcdedit
+            
+            # Safe mode boot pending?
+            $output.BootConfig.SafeModePending = $bcdedit -match 'safeboot'
+            
+            # Recovery enabled?
+            $output.BootConfig.RecoveryEnabled = $bcdedit -match 'recoveryenabled.*Yes'
+        } catch {}
+        
+        # Check component store health (quick check - last CBS.log entry)
+        try {
+            $cbsLog = 'C:\\Windows\\Logs\\CBS\\CBS.log'
+            if (Test-Path $cbsLog) {
+                $lastLines = Get-Content $cbsLog -Tail 50 -ErrorAction SilentlyContinue
+                $output.ComponentStore.LogExists = $true
+                $output.ComponentStore.HasCorruptionErrors = ($lastLines | Where-Object { $_ -match 'corrupt|error|failed' }).Count -gt 0
+                $output.ComponentStore.LastEntry = ($lastLines | Select-Object -Last 1)
+            } else {
+                $output.ComponentStore.LogExists = $false
+            }
+        } catch {}
+        
+        # Get pending reboots info
+        try {
+            $pendingReboot = $false
+            
+            # Check Windows Update pending reboot
+            $wuKey = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'
+            if (Test-Path $wuKey) { $pendingReboot = $true }
+            
+            # Check Component Based Servicing pending reboot
+            $cbsKey = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'
+            if (Test-Path $cbsKey) { $pendingReboot = $true }
+            
+            # Check Pending File Rename Operations
+            $pfro = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' -Name PendingFileRenameOperations -ErrorAction SilentlyContinue
+            if ($pfro.PendingFileRenameOperations) { $pendingReboot = $true }
+            
+            $output.PendingReboot = $pendingReboot
+        } catch {
+            $output.PendingReboot = $false
+        }
+        
+        # Get system restore info
+        try {
+            $restorePoints = Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Select-Object -First 5
+            $output.RestorePoints = @($restorePoints | ForEach-Object {
+                @{
+                    SequenceNumber = $_.SequenceNumber
+                    Description = $_.Description
+                    CreationTime = $_.ConvertToDateTime($_.CreationTime).ToString('yyyy-MM-dd HH:mm')
+                    RestorePointType = switch($_.RestorePointType) {
+                        0 { 'APPLICATION_INSTALL' }
+                        1 { 'APPLICATION_UNINSTALL' }
+                        10 { 'DEVICE_DRIVER_INSTALL' }
+                        12 { 'MODIFY_SETTINGS' }
+                        13 { 'CANCELLED_OPERATION' }
+                        default { $_.RestorePointType }
+                    }
+                }
+            })
+        } catch {
+            $output.RestorePoints = @()
+        }
+        
+        # Get environment variables count
+        try {
+            $output.SystemInfo.EnvVarsSystem = (Get-ChildItem Env:).Count
+        } catch {}
+        
+        $output | ConvertTo-Json -Depth 4
+        """
+        output = self.run_powershell(command)
+        try:
+            return json.loads(output)
+        except:
+            return {"Error": "Could not get system details"}
+    
+    def get_firewall_status(self) -> dict:
+        """Get detailed Windows Firewall status for all profiles"""
+        self.log("Getting Windows Firewall status...")
+        command = """
+        try {
+            $result = @{
+                Profiles = @()
+                DefaultInbound = "Unknown"
+                DefaultOutbound = "Unknown"
+            }
+            
+            $profiles = Get-NetFirewallProfile -ErrorAction Stop
+            foreach ($p in $profiles) {
+                $result.Profiles += @{
+                    Name = $p.Name
+                    Enabled = [bool]$p.Enabled
+                    DefaultInboundAction = $p.DefaultInboundAction.ToString()
+                    DefaultOutboundAction = $p.DefaultOutboundAction.ToString()
+                    AllowInboundRules = $p.AllowInboundRules.ToString()
+                    AllowLocalFirewallRules = $p.AllowLocalFirewallRules.ToString()
+                    LogAllowed = $p.LogAllowed
+                    LogBlocked = $p.LogBlocked
+                    LogFileName = $p.LogFileName
+                }
+            }
+            
+            $result | ConvertTo-Json -Depth 3
+        } catch {
+            @{ Error = $_.Exception.Message } | ConvertTo-Json
+        }
+        """
+        output = self.run_powershell(command, timeout=15)
+        try:
+            return json.loads(output)
+        except:
+            return {"Error": "Could not get firewall status"}
+    
+    def get_firewall_rules(self, enabled_only: bool = True, max_rules: int = 100) -> list:
+        """Get Windows Firewall rules - limited to avoid performance issues"""
+        self.log("Getting Windows Firewall rules...")
+        enabled_filter = "Enabled -eq $true" if enabled_only else "$true"
+        command = f"""
+        try {{
+            $rules = Get-NetFirewallRule -ErrorAction Stop | 
+                Where-Object {{ ${enabled_filter} }} |
+                Select-Object -First {max_rules} |
+                ForEach-Object {{
+                    $rule = $_
+                    $addressFilter = Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue
+                    $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue
+                    $appFilter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue
+                    
+                    @{{
+                        Name = $rule.DisplayName
+                        Direction = $rule.Direction.ToString()
+                        Action = $rule.Action.ToString()
+                        Enabled = [bool]$rule.Enabled
+                        Profile = $rule.Profile.ToString()
+                        Protocol = if ($portFilter) {{ $portFilter.Protocol }} else {{ "Any" }}
+                        LocalPort = if ($portFilter -and $portFilter.LocalPort) {{ $portFilter.LocalPort }} else {{ "Any" }}
+                        RemotePort = if ($portFilter -and $portFilter.RemotePort) {{ $portFilter.RemotePort }} else {{ "Any" }}
+                        LocalAddress = if ($addressFilter -and $addressFilter.LocalAddress) {{ $addressFilter.LocalAddress }} else {{ "Any" }}
+                        RemoteAddress = if ($addressFilter -and $addressFilter.RemoteAddress) {{ $addressFilter.RemoteAddress }} else {{ "Any" }}
+                        Program = if ($appFilter -and $appFilter.Program) {{ $appFilter.Program }} else {{ "Any" }}
+                        Group = if ($rule.Group) {{ $rule.Group }} else {{ "" }}
+                        Description = if ($rule.Description) {{ $rule.Description.Substring(0, [Math]::Min(100, $rule.Description.Length)) }} else {{ "" }}
+                    }}
+                }}
+            
+            $rules | ConvertTo-Json -Depth 2
+        }} catch {{
+            @{{ Error = $_.Exception.Message }} | ConvertTo-Json
+        }}
+        """
+        output = self.run_powershell(command, timeout=30)
+        try:
+            result = json.loads(output)
+            if isinstance(result, dict) and 'Error' in result:
+                return []
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                return [result]  # Single rule returned
+            return []
         except:
             return []
 
