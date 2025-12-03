@@ -51,53 +51,117 @@ This application draws inspiration from **Microsoft PowerToys**, **Windows Secur
 
 ---
 
-## 2. Color Palette
+## 2. Color Palette - Material Design Dark Theme
 
-### Version A: Minimalist (Flat Modern)
+**Based on:** https://m2.material.io/design/color/dark-theme.html
+
+### Core Principles
+
+1. **Dark Grey, Not Black** - Use `#121212` as base (not pure black)
+2. **Elevation = Lighter** - Higher elevation surfaces are lighter via white overlay
+3. **Desaturated Colors** - Use 200-tone colors for accessibility (4.5:1 contrast)
+4. **Limited Accents** - Most space is dark; color used sparingly
+5. **Text Opacity** - High 87%, Medium 60%, Disabled 38%
+
+### Elevation Surface System
+
+Material Design expresses elevation through progressively lighter surfaces:
+
+| Elevation | Overlay | Hex Color | Semantic Assignment |
+|-----------|---------|-----------|---------------------|
+| 0dp | 0% | `#121212` | Window Background (BG_WINDOW) |
+| 1dp | 5% | `#1e1e1e` | Sidebar Background (BG_SIDEBAR) |
+| 2dp | 7% | `#222222` | Card Background (BG_CARD) |
+| 3dp | 8% | `#242424` | - |
+| 4dp | 9% | `#272727` | Hover States (BG_CARD_HOVER) |
+| 6dp | 11% | `#2c2c2c` | Elevated Elements (BG_ELEVATED) |
+| 8dp | 12% | `#2e2e2e` | - |
+| 12dp | 14% | `#333333` | - |
+| 16dp | 15% | `#383838` | - |
+| 24dp | 16% | `#3d3d3d` | Dialogs/Modals (BG_DIALOG) |
+
+### Text Hierarchy (Opacity-Based)
+
+| Level | Opacity | Hex Approximation | Usage |
+|-------|---------|-------------------|-------|
+| High Emphasis | 87% | `#dedede` | Headings, important text |
+| Medium Emphasis | 60% | `#9e9e9e` | Body text, descriptions |
+| Disabled | 38% | `#636363` | Hints, inactive, timestamps |
+
+### Primary Color (Purple 200 - Material Baseline)
 
 ```
-BACKGROUND LAYERS
-├── Window Background     #1b1b1f    (Near black with warmth)
-├── Sidebar Background    #232328    (Slightly elevated)
-├── Card Background       #2d2d32    (Content containers)
-├── Hover State           #38383d    (Interactive feedback)
-└── Active/Selected       #0078d4    (Windows accent blue)
-
-TEXT HIERARCHY
-├── Primary Text          #ffffff    (Headings, important)
-├── Secondary Text        #b4b4b4    (Body text)
-├── Tertiary Text         #7a7a7a    (Captions, timestamps)
-└── Disabled Text         #4a4a4a    (Inactive elements)
-
-SEMANTIC COLORS
-├── Success/Healthy       #0f9d58    (Green - not neon)
-├── Warning/Attention     #f4b400    (Amber)
-├── Error/Critical        #db4437    (Red)
-├── Info/Neutral          #4285f4    (Blue)
-└── In Progress           #8e44ad    (Purple for running scans)
-
-ACCENT COLORS
-├── Primary Accent        #0078d4    (Windows Blue)
-├── Secondary Accent      #106ebe    (Darker blue for depth)
-└── Highlight             #60cdff    (Light blue for emphasis)
+PRIMARY         = #bb86fc    (Purple 200 - main accent)
+PRIMARY_VARIANT = #3700b3    (Purple 700 - dark variant)
+ON_PRIMARY      = #000000    (Text on primary surfaces)
 ```
 
-### Version B: Depth (Soft Shadows & Elevation)
-
-Same palette as above, plus:
+### Accent/Secondary Colors (Desaturated)
 
 ```
-ELEVATION SYSTEM
-├── Level 0 (Base)        No shadow, background color
-├── Level 1 (Cards)       0 2px 4px rgba(0,0,0,0.2)
-├── Level 2 (Modals)      0 8px 16px rgba(0,0,0,0.3)
-├── Level 3 (Dropdowns)   0 12px 24px rgba(0,0,0,0.4)
-└── Level 4 (Tooltips)    0 4px 8px rgba(0,0,0,0.25)
+ACCENT          = #82b1ff    (Blue 200 - Windows-inspired)
+ACCENT_HOVER    = #448aff    (Blue A200)
+ACCENT_LIGHT    = #b3e5fc    (Light Blue 100)
+SECONDARY       = #03dac6    (Teal 200)
+```
 
-SURFACE TREATMENTS
-├── Subtle gradient       linear-gradient(180deg, #2d2d32 0%, #28282d 100%)
-├── Glass effect          background: rgba(45,45,50,0.85); backdrop-filter: blur(20px)
-└── Border highlight      1px solid rgba(255,255,255,0.06) on top edge of cards
+### Semantic Colors (Desaturated for Dark Theme)
+
+| Status | Color | Hex | Background Overlay |
+|--------|-------|-----|-------------------|
+| Success | Green 300 | `#81c784` | `rgba(129,199,132,0.12)` |
+| Warning | Orange 200 | `#ffcc80` | `rgba(255,204,128,0.12)` |
+| Error | MD Dark Error | `#cf6679` | `rgba(207,102,121,0.12)` |
+| Info | Blue 200 | `#82b1ff` | `rgba(130,177,255,0.12)` |
+| Running | Purple 200 | `#bb86fc` | `rgba(187,134,252,0.12)` |
+
+> **Note:** The error color `#cf6679` is the official Material Design dark theme error, created by applying a 40% white overlay to the light theme error (#b00020).
+
+### Borders
+
+```
+BORDER        = #3a3a3a    (Subtle - 12% white on surface)
+BORDER_LIGHT  = #454545    (Emphasis)
+BORDER_ACCENT = #bb86fc    (Primary color for focus states)
+```
+
+### Shadow System
+
+**Material Design Rule:** Shadows remain dark in dark theme (no light glows).
+
+| Elevation | Blur | Offset Y | Opacity |
+|-----------|------|----------|---------|
+| Low (1-2dp) | 4px | 2px | 48 |
+| Medium (4-6dp) | 8px | 2px | 64 |
+| High (8-16dp) | 16px | 4px | 80 |
+| Highest (24dp) | 24px | 8px | 96 |
+
+---
+
+### Legacy Color Palette (Deprecated)
+
+The following was the original color scheme before Material Design adoption:
+
+```
+BACKGROUND LAYERS (OLD)
+├── Window Background     #1b1b1f    
+├── Sidebar Background    #232328    
+├── Card Background       #2d2d32    
+├── Hover State           #38383d    
+└── Active/Selected       #0078d4    
+
+TEXT HIERARCHY (OLD)
+├── Primary Text          #ffffff    
+├── Secondary Text        #b4b4b4    
+├── Tertiary Text         #7a7a7a    
+└── Disabled Text         #4a4a4a    
+
+SEMANTIC COLORS (OLD - Saturated)
+├── Success/Healthy       #0f9d58    
+├── Warning/Attention     #f4b400    
+├── Error/Critical        #db4437    
+├── Info/Neutral          #4285f4    
+└── In Progress           #8e44ad    
 ```
 
 ---
@@ -105,6 +169,7 @@ SURFACE TREATMENTS
 ## 3. Typography System
 
 ### Font Stack
+
 ```
 Primary:      "Segoe UI Variable", "Segoe UI", system-ui, sans-serif
 Monospace:    "Cascadia Code", "Consolas", monospace
@@ -878,6 +943,7 @@ class AnimatedButton(QPushButton):
 ```
 
 **Styling:**
+
 ```
 PRIMARY VARIANT
 ├── Background: #0078d4 (Windows accent blue)
@@ -909,6 +975,7 @@ class ModernSpinner(QWidget):
 ```
 
 **Visual Specifications:**
+
 ```
 SPINNER DESIGN
 ├── Style: Spinning arc (not full circle)
@@ -926,6 +993,7 @@ DEFAULT PARAMETERS
 ```
 
 **Usage:**
+
 ```python
 # Create a spinner
 spinner = ModernSpinner(size=24, line_width=2, color="#60cdff")
@@ -949,6 +1017,7 @@ class GlowButton(QPushButton):
 ```
 
 **Hover Animation:**
+
 ```
 IDLE STATE
 ├── Shadow blur: 8px
@@ -1229,6 +1298,7 @@ STAT DIVIDERS
 ### 15.6 Usage Examples
 
 **Driver Manager Page:**
+
 ```python
 # Create modern list container
 self.drivers_list = ModernListContainer()
