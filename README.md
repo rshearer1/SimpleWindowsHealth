@@ -103,6 +103,12 @@ The executable will be created in the `dist` folder.
 
 ## Version History
 
+### v2.0.1 (December 2025)
+
+- **Fixed PowerShell window popup** - No more scary console windows during full system scan
+- **Added -WindowStyle Hidden** - All PowerShell subprocess calls now fully hidden
+- **Improved user experience** - Background operations are truly invisible
+
 ### v2.1.0 (December 2025)
 
 - **Consistent UI styling** - Standardized stats sections across all pages
