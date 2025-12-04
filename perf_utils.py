@@ -224,11 +224,9 @@ class CachedFunction:
         # Check cache first
         cached_value = data_cache.get(self._key)
         if cached_value is not None:
-            print(f"[CACHE] HIT: {self._key}")
             return cached_value
         
         # Execute function and cache result
-        print(f"[CACHE] MISS: {self._key}")
         result = self._func(*args, **kwargs)
         data_cache.set(self._key, result, self._ttl_seconds)
         return result

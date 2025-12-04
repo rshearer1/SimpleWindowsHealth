@@ -201,6 +201,47 @@ class Theme:
     """
     
     # =========================================================================
+    # ACCENT COLOR PRESETS
+    # =========================================================================
+    ACCENT_COLORS = {
+        "Blue": {
+            "primary": "#0078d4",
+            "hover": "#1a86dc", 
+            "pressed": "#006cc1",
+            "light": "#4da3e8",
+            "subtle": "rgba(0, 120, 212, 0.15)",
+        },
+        "Green": {
+            "primary": "#107c10",
+            "hover": "#1a9c1a",
+            "pressed": "#0d6b0d",
+            "light": "#54b054",
+            "subtle": "rgba(16, 124, 16, 0.15)",
+        },
+        "Purple": {
+            "primary": "#881798",
+            "hover": "#a020a8",
+            "pressed": "#6b1280",
+            "light": "#b060c0",
+            "subtle": "rgba(136, 23, 152, 0.15)",
+        },
+        "Orange": {
+            "primary": "#ca5010",
+            "hover": "#da6820",
+            "pressed": "#a84000",
+            "light": "#e08050",
+            "subtle": "rgba(202, 80, 16, 0.15)",
+        },
+        "Red": {
+            "primary": "#d13438",
+            "hover": "#e04448",
+            "pressed": "#b02028",
+            "light": "#e06060",
+            "subtle": "rgba(209, 52, 56, 0.15)",
+        },
+    }
+    
+    # =========================================================================
     # SURFACE COLORS - Elevation System
     # Using slightly warmer dark grey for better visual comfort
     # =========================================================================
@@ -404,6 +445,48 @@ class Theme:
         """Apply dialog shadow."""
         return Theme.apply_shadow(widget, blur_radius=Theme.SHADOW_BLUR_XL, 
                                    offset_y=8, opacity=120)
+    
+    @staticmethod
+    def style_accent_button(btn, style_type: str = "primary"):
+        """Style a button with current accent color and tag it for refresh.
+        
+        Args:
+            btn: QPushButton to style
+            style_type: "primary" for filled, "outline" for bordered
+        """
+        btn.setProperty("accent_style", style_type)
+        if style_type == "primary":
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    border-radius: {Theme.RADIUS_SM}px;
+                    padding: 8px 16px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.ACCENT_HOVER};
+                }}
+                QPushButton:pressed {{
+                    background: {Theme.PRIMARY_PRESSED};
+                }}
+            """)
+        elif style_type == "outline":
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {Theme.ACCENT};
+                    border: 1px solid {Theme.ACCENT};
+                    border-radius: {Theme.RADIUS_SM}px;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.ACCENT_SUBTLE};
+                }}
+            """)
 
 
 # =============================================================================
@@ -1784,6 +1867,8 @@ class NavIcon(QWidget):
 class SidebarItem(QFrame):
     """Refined sidebar navigation item"""
     
+    clicked = pyqtSignal()  # Signal emitted when item is clicked
+    
     def __init__(self, icon_name: str, label: str, parent=None):
         super().__init__(parent)
         self.icon_name = icon_name
@@ -1809,6 +1894,11 @@ class SidebarItem(QFrame):
         layout.addWidget(self.label)
         layout.addStretch()
     
+    def mousePressEvent(self, event):  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+    
     def set_active(self, active: bool):
         self.is_active = active
         self._update_style()
@@ -1819,15 +1909,15 @@ class SidebarItem(QFrame):
             # Selected state: glowing left border, glass background
             self.setStyleSheet(f"""
                 SidebarItem {{
-                    background: rgba(0, 120, 212, 0.2);
-                    border-left: 3px solid {Theme.GLOW_INFO};
+                    background: {Theme.ACCENT_SUBTLE};
+                    border-left: 3px solid {Theme.ACCENT};
                     border-radius: 0px;
                     margin-left: 0px;
                     margin-right: 12px;
                     padding-left: 9px;
                 }}
             """)
-            self.icon.set_color(Theme.GLOW_INFO)
+            self.icon.set_color(Theme.ACCENT)
             self.label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-weight: 600;")
         else:
             # Default state: transparent
@@ -3435,20 +3525,7 @@ class DriversPage(QWidget):
         devmgr_btn = QPushButton("Open Device Manager")
         devmgr_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         devmgr_btn.clicked.connect(self._open_device_manager)
-        devmgr_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {Theme.ACCENT};
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: {Theme.RADIUS_SM}px;
-                font-size: 13px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background: {Theme.ACCENT_HOVER};
-            }}
-        """)
+        Theme.style_accent_button(devmgr_btn, "primary")
         header.addWidget(devmgr_btn)
         
         main_layout.addLayout(header)
@@ -4771,10 +4848,41 @@ class AppSettings:
     def set(self, key: str, value):
         self.settings[key] = value
         self.save()
+        # Notify listeners of change
+        if key == "accent_color":
+            apply_accent_color_from_settings()
+            # Trigger UI refresh if main window exists
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app:
+                for widget in app.topLevelWidgets():
+                    if hasattr(widget, 'refresh_accent_colors'):
+                        widget.refresh_accent_colors()
 
 
 # Global settings instance
 app_settings = AppSettings()
+
+
+def apply_accent_color_from_settings():
+    """Apply the saved accent color to the Theme class"""
+    accent_name = app_settings.get("accent_color", "Blue")
+    if accent_name in Theme.ACCENT_COLORS:
+        colors = Theme.ACCENT_COLORS[accent_name]
+        Theme.PRIMARY = colors["primary"]
+        Theme.PRIMARY_HOVER = colors["hover"]
+        Theme.PRIMARY_PRESSED = colors["pressed"]
+        Theme.PRIMARY_LIGHT = colors["light"]
+        Theme.ACCENT = colors["primary"]
+        Theme.ACCENT_HOVER = colors["hover"]
+        Theme.ACCENT_SUBTLE = colors["subtle"]
+        Theme.BORDER_ACCENT = colors["primary"]
+        # Update gradient
+        Theme.GRADIENT_ACCENT = f"qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {colors['primary']}, stop:1 {colors['light']})"
+
+
+# Apply accent color on startup
+apply_accent_color_from_settings()
 
 
 class StartupPage(QWidget):
@@ -5303,20 +5411,7 @@ class EventsPage(QWidget):
         self.viewer_btn = QPushButton("Open Event Viewer")
         self.viewer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.viewer_btn.clicked.connect(self._open_event_viewer)
-        self.viewer_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {Theme.ACCENT};
-                color: white;
-                border: none;
-                padding: 10px 24px;
-                border-radius: {Theme.RADIUS_SM}px;
-                font-size: 13px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background: {Theme.ACCENT_HOVER};
-            }}
-        """)
+        Theme.style_accent_button(self.viewer_btn, "primary")
         header.addWidget(self.viewer_btn)
         
         self.content_layout.addLayout(header)
@@ -5660,7 +5755,7 @@ class EventsPage(QWidget):
                 font-size: 12px;
             }}
             QPushButton:hover {{
-                background: rgba(0, 120, 212, 0.1);
+                background: {Theme.ACCENT_SUBTLE};
             }}
         """)
         btn_layout.addWidget(export_btn)
@@ -8724,24 +8819,7 @@ class SystemPage(QWidget):
         self.scan_btn = QPushButton("Scan System")
         self.scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.scan_btn.clicked.connect(self.scan_system)
-        self.scan_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {Theme.ACCENT};
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: {Theme.RADIUS_SM}px;
-                font-size: 13px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background: {Theme.ACCENT_HOVER};
-            }}
-            QPushButton:disabled {{
-                background: {Theme.BG_CARD_HOVER};
-                color: {Theme.TEXT_TERTIARY};
-            }}
-        """)
+        Theme.style_accent_button(self.scan_btn, "primary")
         header.addWidget(self.scan_btn)
         
         # SFC Scan button
@@ -10027,7 +10105,8 @@ class HardwareDetailCard(QFrame):
         self.chevron.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
         header_layout.addWidget(self.chevron)
         
-        self.header.mousePressEvent = self._toggle_expanded
+        # Install event filter for header click handling
+        self.header.installEventFilter(self)
         self.main_layout.addWidget(self.header)
         
         # Content container - give it explicit background
@@ -10045,9 +10124,14 @@ class HardwareDetailCard(QFrame):
         
         self.main_layout.addWidget(self.content)
     
-    def _toggle_expanded(self, event):
-        """Toggle expanded/collapsed state"""
-        self.setExpanded(not self.is_expanded)
+    def eventFilter(self, watched, event):
+        """Handle header clicks via event filter"""
+        from PyQt6.QtCore import QEvent
+        if watched == self.header and event is not None:
+            if event.type() == QEvent.Type.MouseButtonPress:
+                self.setExpanded(not self.is_expanded)
+                return True
+        return super().eventFilter(watched, event)
     
     def setExpanded(self, expanded: bool):
         """Set expanded state"""
@@ -10270,26 +10354,7 @@ class HardwarePage(QWidget):
         self.refresh_btn = QPushButton("Refresh Hardware Info")
         self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.refresh_btn.clicked.connect(self.refresh_hardware)
-        self.refresh_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {Theme.ACCENT}, stop:1 {Theme.ACCENT_LIGHT});
-                color: white;
-                border: none;
-                padding: 10px 24px;
-                border-radius: {Theme.RADIUS_SM}px;
-                font-size: 13px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {Theme.ACCENT_LIGHT}, stop:1 {Theme.ACCENT});
-            }}
-            QPushButton:disabled {{
-                background: {Theme.BG_CARD_HOVER};
-                color: {Theme.TEXT_TERTIARY};
-            }}
-        """)
+        Theme.style_accent_button(self.refresh_btn, "primary")
         # Add glow effect to refresh button per spec
         Theme.apply_shadow(self.refresh_btn, blur_radius=16, offset_y=4, 
                            color=Theme.ACCENT, opacity=120)
@@ -11206,11 +11271,11 @@ class SettingsPage(QWidget):
             if key in self.controls:
                 checked = app_settings.get(key, False)
                 self.controls[key].setProperty("checked", checked)
-                self._update_toggle_style(self.controls[key], checked)
+                self._update_toggle_style(self.controls[key], bool(checked))
     
     def _create_dropdown(self, options: list, setting_key: str | None = None) -> QWidget:
         """Create a styled dropdown"""
-        from PyQt6.QtWidgets import QComboBox
+        from PyQt6.QtWidgets import QComboBox, QMessageBox
         
         combo = QComboBox()
         combo.addItems(options)
@@ -11241,7 +11306,11 @@ class SettingsPage(QWidget):
         
         # Connect to save on change
         if setting_key:
-            combo.currentTextChanged.connect(lambda text: app_settings.set(setting_key, text))
+            def on_change(text):
+                old_value = app_settings.get(setting_key)
+                if old_value != text:
+                    app_settings.set(setting_key, text)
+            combo.currentTextChanged.connect(on_change)
         
         return combo
     
@@ -11251,24 +11320,29 @@ class SettingsPage(QWidget):
         toggle.setFixedSize(44, 24)
         toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle.setProperty("checked", initial)
+        toggle.setProperty("setting_key", setting_key)
         
         self._update_toggle_style(toggle, initial)
         
-        # Store setting key and create toggle behavior
-        toggle.setProperty("setting_key", setting_key)
-        
-        def toggle_click(event):
-            checked = not toggle.property("checked")
-            toggle.setProperty("checked", checked)
-            self._update_toggle_style(toggle, checked)
-            # Save the setting
-            key = toggle.property("setting_key")
-            if key:
-                app_settings.set(key, checked)
-        
-        toggle.mousePressEvent = toggle_click
+        # Install event filter for click handling
+        toggle.installEventFilter(self)
         
         return toggle
+    
+    def eventFilter(self, watched, event):
+        """Handle toggle clicks via event filter"""
+        from PyQt6.QtCore import QEvent
+        if event is not None and event.type() == QEvent.Type.MouseButtonPress:
+            if isinstance(watched, QFrame) and watched.property("checked") is not None:
+                checked = not watched.property("checked")
+                watched.setProperty("checked", checked)
+                self._update_toggle_style(watched, bool(checked))
+                # Save the setting
+                key = watched.property("setting_key")
+                if key:
+                    app_settings.set(key, checked)
+                return True
+        return super().eventFilter(watched, event)
     
     def _update_toggle_style(self, toggle: QFrame, checked: bool):
         """Update toggle visual state"""
@@ -11408,13 +11482,13 @@ class CustomTitleBar(QFrame):
         if self.parent_window:
             self.parent_window.close()
     
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+    def mousePressEvent(self, event):  # type: ignore[override]
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = event.globalPosition().toPoint()
         super().mousePressEvent(event)
     
-    def mouseMoveEvent(self, event):
-        if self._drag_pos is not None and self.parent_window:
+    def mouseMoveEvent(self, event):  # type: ignore[override]
+        if event is not None and self._drag_pos is not None and self.parent_window:
             # If maximized, restore before dragging
             if self.parent_window.isMaximized():
                 self.parent_window.showNormal()
@@ -11431,12 +11505,12 @@ class CustomTitleBar(QFrame):
                 self._drag_pos = event.globalPosition().toPoint()
         super().mouseMoveEvent(event)
     
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event):  # type: ignore[override]
         self._drag_pos = None
         super().mouseReleaseEvent(event)
     
-    def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+    def mouseDoubleClickEvent(self, event):  # type: ignore[override]
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self._toggle_maximize()
         super().mouseDoubleClickEvent(event)
 
@@ -11609,16 +11683,18 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.content_stack, 1)
         
         # Status bar
-        self.statusBar().setStyleSheet(f"""
-            QStatusBar {{
-                background: {Theme.BG_SIDEBAR};
-                color: {Theme.TEXT_TERTIARY};
-                border-top: 1px solid {Theme.BORDER};
-                padding: 6px 16px;
-                font-size: 11px;
-            }}
-        """)
-        self.statusBar().showMessage("Ready")
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.setStyleSheet(f"""
+                QStatusBar {{
+                    background: {Theme.BG_SIDEBAR};
+                    color: {Theme.TEXT_TERTIARY};
+                    border-top: 1px solid {Theme.BORDER};
+                    padding: 6px 16px;
+                    font-size: 11px;
+                }}
+            """)
+            status_bar.showMessage("Ready")
         
         # Start background prefetch after a short delay to let UI settle
         QTimer.singleShot(500, self._prefetch_data)
@@ -11754,7 +11830,7 @@ class MainWindow(QMainWindow):
         
         for nav_id, icon, label in nav_data:
             item = SidebarItem(icon, label)
-            item.mousePressEvent = lambda e, nid=nav_id: self.navigate(nid)
+            item.clicked.connect(lambda nid=nav_id: self.navigate(nid))
             self.nav_items[nav_id] = item
             layout.addWidget(item)
         
@@ -11765,7 +11841,7 @@ class MainWindow(QMainWindow):
         # Settings at bottom
         layout.addSpacing(8)
         settings = SidebarItem("gear", "Settings")
-        settings.mousePressEvent = lambda e: self.navigate("settings")
+        settings.clicked.connect(lambda: self.navigate("settings"))
         self.nav_items["settings"] = settings
         layout.addWidget(settings)
         layout.addSpacing(12)
@@ -11818,6 +11894,77 @@ class MainWindow(QMainWindow):
                 method = getattr(page, method_name, None)
                 if method:
                     method(self.cached_data[cache_key])
+    
+    def refresh_accent_colors(self):
+        """Refresh all UI elements that use the accent color"""
+        from PyQt6.QtWidgets import QPushButton
+        
+        # Refresh sidebar items
+        for nav_id, item in self.nav_items.items():
+            item._update_style()
+        
+        # Refresh the Health Checker button
+        if hasattr(self, 'scan_btn'):
+            self.scan_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    border-radius: {Theme.RADIUS_SM}px;
+                    padding: 8px 16px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.ACCENT_HOVER};
+                }}
+                QPushButton:pressed {{
+                    background: {Theme.PRIMARY_PRESSED};
+                }}
+            """)
+        
+        # Refresh settings page toggles
+        if hasattr(self, 'settings_page'):
+            for key, control in self.settings_page.controls.items():
+                if isinstance(control, QFrame) and control.property("checked") is not None:
+                    checked = control.property("checked")
+                    self.settings_page._update_toggle_style(control, bool(checked))
+        
+        # Refresh all buttons with accent_style property
+        for btn in self.findChildren(QPushButton):
+            btn_style = btn.property("accent_style")
+            if btn_style == "primary":
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: {Theme.ACCENT};
+                        color: white;
+                        border: none;
+                        border-radius: {Theme.RADIUS_SM}px;
+                        padding: 8px 16px;
+                        font-size: 13px;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background: {Theme.ACCENT_HOVER};
+                    }}
+                    QPushButton:pressed {{
+                        background: {Theme.PRIMARY_PRESSED};
+                    }}
+                """)
+            elif btn_style == "outline":
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: transparent;
+                        color: {Theme.ACCENT};
+                        border: 1px solid {Theme.ACCENT};
+                        border-radius: {Theme.RADIUS_SM}px;
+                        padding: 6px 12px;
+                        font-size: 12px;
+                    }}
+                    QPushButton:hover {{
+                        background: {Theme.ACCENT_SUBTLE};
+                    }}
+                """)
     
     def run_scan(self):
         """Run full system scan - all checks run in parallel for speed"""
@@ -12215,7 +12362,9 @@ class MainWindow(QMainWindow):
         self._populate_pages_from_cache()
         
         # Update status bar
-        self.statusBar().showMessage(f"Scan complete - {passed} checks passed, {warnings} warnings, {errors} issues")
+        status_bar = self.statusBar()
+        if status_bar:
+            status_bar.showMessage(f"Scan complete - {passed} checks passed, {warnings} warnings, {errors} issues")
         
         # Set dialog to 100% and close
         self.scan_dialog.set_progress(100, "Complete")
@@ -12225,16 +12374,16 @@ class MainWindow(QMainWindow):
         """Populate all detail pages with cached scan data"""
         # Populate Startup page
         if self.cached_data.get("startup"):
-            self.startup_page.display_cached_data(self.cached_data["startup"])
+            self.startup_page.display_cached_data(self.cached_data["startup"])  # type: ignore[arg-type]
         
         # Populate Events page with cached event data
         if self.cached_data.get("events"):
             event_data = self.cached_data["events"]
-            self.events_page.display_cached_data(event_data)
+            self.events_page.display_cached_data(event_data)  # type: ignore[arg-type]
         
         # Populate System Files page - trigger detailed scan
         if self.scan_results.get("services"):
-            self.system_page.display_cached_data(self.scan_results.get("services"))
+            self.system_page.display_cached_data(self.scan_results.get("services"))  # type: ignore[arg-type]
         
         # Populate Drivers page - trigger a scan if not already done
         if not self.cached_data.get("drivers"):
@@ -12243,22 +12392,22 @@ class MainWindow(QMainWindow):
         
         # Populate Windows Update page - trigger detailed check
         if self.cached_data.get("updates"):
-            self.updates_page.display_cached_data(self.cached_data["updates"])
+            self.updates_page.display_cached_data(self.cached_data["updates"])  # type: ignore[arg-type]
         
         # Populate Storage page with cached volume data
         if self.cached_data.get("storage"):
-            self.storage_page.display_cached_data(self.cached_data["storage"])
+            self.storage_page.display_cached_data(self.cached_data["storage"])  # type: ignore[arg-type]
         
         # Populate Security page with cached defender data
         if self.cached_data.get("security"):
             defender = self.cached_data["security"]
             # Store in security page's cache and display
-            self.security_page.cached_defender_data = defender
-            self.security_page.display_defender_data(defender)
+            self.security_page.cached_defender_data = defender  # type: ignore[assignment]
+            self.security_page.display_defender_data(defender)  # type: ignore[arg-type]
         
         if self.cached_data.get("hardware"):
             hw_data = self.cached_data["hardware"]
-            self.hardware_page.display_cached_data(hw_data)
+            self.hardware_page.display_cached_data(hw_data)  # type: ignore[arg-type]
         
         # Trigger audio device scan (runs in background)
         QTimer.singleShot(500, self._scan_audio_devices)
@@ -12280,7 +12429,7 @@ class MainWindow(QMainWindow):
         """Run the check for a specific module"""
         page = self.pages.get(module_id)
         if page and hasattr(page, 'set_checking'):
-            page.set_checking()
+            page.set_checking()  # type: ignore[attr-defined]
             # Use timer to simulate async and allow UI to update
             QTimer.singleShot(100, lambda: self.check_methods[module_id]())
     
@@ -12472,7 +12621,7 @@ class MainWindow(QMainWindow):
         if not results:
             results.append(("info", "No hardware information available"))
         
-        self.pages["hardware"].show_results(results)
+        self.pages["hardware"].show_results(results)  # type: ignore[attr-defined]
         
         worst_status = "check"
         for status, _ in results:
@@ -12579,39 +12728,41 @@ class MainWindow(QMainWindow):
         else:
             self.unsetCursor()
     
-    def event(self, event):
+    def event(self, event):  # type: ignore[override]
         """Override event to handle cursor changes for resize zones"""
         from PyQt6.QtCore import QEvent
         
         # Handle hover/mouse move to update cursor for resize areas
-        if event.type() == QEvent.Type.HoverMove:
+        if event is not None and event.type() == QEvent.Type.HoverMove:
             if not self._resize_dir:  # Only update cursor when not actively resizing
-                self._update_cursor_for_position(self.mapToGlobal(event.position().toPoint()))
+                hover_event = event  # Cast for type checker
+                if hasattr(hover_event, 'position'):
+                    self._update_cursor_for_position(self.mapToGlobal(hover_event.position().toPoint()))
         
         return super().event(event)
     
-    def enterEvent(self, event):
+    def enterEvent(self, event):  # type: ignore[override]
         """Update cursor when mouse enters window"""
-        if hasattr(event, 'position'):
+        if event is not None and hasattr(event, 'position'):
             self._update_cursor_for_position(self.mapToGlobal(event.position().toPoint()))
         super().enterEvent(event)
     
-    def leaveEvent(self, event):
+    def leaveEvent(self, event):  # type: ignore[override]
         """Reset cursor when mouse leaves window"""
         if not self._resize_dir:
             self.unsetCursor()
         super().leaveEvent(event)
     
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+    def mousePressEvent(self, event):  # type: ignore[override]
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self._resize_dir = self._get_resize_direction(event.pos())
             if self._resize_dir:
                 self._resize_start_pos = event.globalPosition().toPoint()
                 self._resize_start_geo = self.geometry()
         super().mousePressEvent(event)
     
-    def mouseMoveEvent(self, event):
-        if self._resize_dir and self._resize_start_geo and event.buttons() & Qt.MouseButton.LeftButton:
+    def mouseMoveEvent(self, event):  # type: ignore[override]
+        if event is not None and self._resize_dir and self._resize_start_geo and event.buttons() & Qt.MouseButton.LeftButton:
             delta = event.globalPosition().toPoint() - self._resize_start_pos
             geo = self._resize_start_geo  # Original geometry at start of drag
             min_w, min_h = self.minimumWidth(), self.minimumHeight()
@@ -12647,12 +12798,12 @@ class MainWindow(QMainWindow):
         
         super().mouseMoveEvent(event)
     
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event):  # type: ignore[override]
         self._resize_dir = None
         self.unsetCursor()
         super().mouseReleaseEvent(event)
     
-    def closeEvent(self, event):
+    def closeEvent(self, event):  # type: ignore[override]
         """Clean up all running threads before closing"""
         # Helper to safely stop a thread
         def stop_thread(thread_attr):
@@ -12693,9 +12844,10 @@ class MainWindow(QMainWindow):
         
         # Stop the metrics collector in overview page
         if hasattr(self, 'overview') and hasattr(self.overview, 'metrics_collector'):
-            self.overview.metrics_collector.stop()
+            self.overview.metrics_collector.stop()  # type: ignore[attr-defined]
         
-        event.accept()
+        if event is not None:
+            event.accept()
 
 
 # =============================================================================

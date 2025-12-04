@@ -1,0 +1,14 @@
+{
+    "markdownlint.config": {
+        "default": false
+    },
+    "markdown.validate.enabled": false,
+    "[markdown]": {
+        "editor.wordWrap": "on",
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
+    }
+}
