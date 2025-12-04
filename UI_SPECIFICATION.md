@@ -16,7 +16,7 @@ This application draws inspiration from **Microsoft PowerToys**, **Windows Secur
 
 ### Layout Architecture (Three-Panel Design)
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  TITLE BAR (32px)                                            ─  □  ×       │
 ├──────────────┬──────────────────────────────────────────────────────────────┤
@@ -47,7 +47,7 @@ This application draws inspiration from **Microsoft PowerToys**, **Windows Secur
 ├──────────────┴──────────────────────────────────────────────────────────────┤
 │  STATUS BAR (28px)   Ready  │  12 checks passed  │  2 warnings  │  0 errors │
 └─────────────────────────────────────────────────────────────────────────────┘
-```
+```text
 
 ---
 
@@ -90,15 +90,15 @@ Material Design expresses elevation through progressively lighter surfaces:
 
 ### Primary Color (Purple 200 - Material Baseline)
 
-```
+```txt
 PRIMARY         = #bb86fc    (Purple 200 - main accent)
 PRIMARY_VARIANT = #3700b3    (Purple 700 - dark variant)
 ON_PRIMARY      = #000000    (Text on primary surfaces)
-```
+```txt
 
 ### Accent/Secondary Colors (Desaturated)
 
-```
+```txt
 ACCENT          = #82b1ff    (Blue 200 - Windows-inspired)
 ACCENT_HOVER    = #448aff    (Blue A200)
 ACCENT_LIGHT    = #b3e5fc    (Light Blue 100)
@@ -119,11 +119,11 @@ SECONDARY       = #03dac6    (Teal 200)
 
 ### Borders
 
-```
+```txt
 BORDER        = #3a3a3a    (Subtle - 12% white on surface)
 BORDER_LIGHT  = #454545    (Emphasis)
 BORDER_ACCENT = #bb86fc    (Primary color for focus states)
-```
+```txt
 
 ### Shadow System
 

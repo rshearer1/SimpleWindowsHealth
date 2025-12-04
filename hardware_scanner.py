@@ -18,25 +18,27 @@ from enum import Enum
 import winreg
 from datetime import datetime
 
-# Performance utilities
+# Performance utilities - define fallbacks first, then override if import succeeds
+def timed(operation_name: Optional[str] = None):
+    def decorator(func):
+        return func
+    return decorator
+
+def cached(key, ttl_seconds=300):
+    def decorator(func):
+        return func
+    return decorator
+
+class TimingContext:
+    def __init__(self, name): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+
 try:
-    from perf_utils import timed, cached, data_cache, TimingContext
+    from perf_utils import timed, cached, data_cache, TimingContext  # type: ignore
     PERF_UTILS_AVAILABLE = True
 except ImportError:
     PERF_UTILS_AVAILABLE = False
-    # Provide no-op fallbacks
-    def timed(name=None):
-        def decorator(func):
-            return func
-        return decorator
-    def cached(key, ttl=300):
-        def decorator(func):
-            return func
-        return decorator
-    class TimingContext:
-        def __init__(self, name): pass
-        def __enter__(self): return self
-        def __exit__(self, *args): return False
 
 
 class HealthStatus(Enum):
@@ -64,6 +66,22 @@ class CPUInfo:
     utilization_percent: float = 0.0
     temperature_c: Optional[float] = None
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended properties
+    device_id: str = ""
+    processor_id: str = ""
+    revision: str = ""
+    stepping: str = ""
+    family: str = ""
+    voltage_caps: str = ""
+    external_clock_mhz: int = 0
+    l1_cache_kb: int = 0
+    virtualization_enabled: bool = False
+    address_width: int = 0
+    data_width: int = 0
+    status_info: str = ""
+    cpu_status: str = ""
+    power_management: List[str] = field(default_factory=list)
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -79,6 +97,27 @@ class GPUInfo:
     temperature_c: Optional[float] = None
     utilization_percent: Optional[float] = None
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended properties
+    device_id: str = ""
+    pnp_device_id: str = ""
+    video_processor: str = ""
+    video_architecture: str = ""
+    video_memory_type: str = ""
+    adapter_dac_type: str = ""
+    min_refresh_rate: int = 0
+    max_refresh_rate: int = 0
+    bits_per_pixel: int = 0
+    color_planes: int = 0
+    inf_filename: str = ""
+    inf_section: str = ""
+    installed_display_drivers: str = ""
+    monochrome: bool = False
+    video_mode_description: str = ""
+    availability: str = ""
+    config_error_code: int = 0
+    caption: str = ""
+    description: str = ""
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -91,6 +130,18 @@ class RAMSlot:
     speed_mhz: int = 0
     form_factor: str = "Unknown"
     memory_type: str = "Unknown"
+    # Extended properties
+    serial_number: str = ""
+    device_locator: str = ""
+    configured_clock_speed: int = 0
+    configured_voltage: float = 0.0
+    min_voltage: float = 0.0
+    max_voltage: float = 0.0
+    data_width: int = 0
+    total_width: int = 0
+    type_detail: str = ""
+    asset_tag: str = ""
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -104,6 +155,13 @@ class RAMInfo:
     slots_total: int = 0
     slots: List[RAMSlot] = field(default_factory=list)
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended properties
+    total_physical_memory: int = 0
+    total_virtual_memory: int = 0
+    available_virtual_memory: int = 0
+    page_file_total: int = 0
+    page_file_free: int = 0
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -121,6 +179,34 @@ class MotherboardInfo:
     tpm_present: bool = False
     tpm_version: str = "Unknown"
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended motherboard properties
+    baseboard_status: str = ""
+    baseboard_hosting_board: bool = False
+    baseboard_hot_swappable: bool = False
+    baseboard_removable: bool = False
+    baseboard_replaceable: bool = False
+    baseboard_config_options: List[str] = field(default_factory=list)
+    # Extended BIOS properties
+    bios_release_date: str = ""
+    smbios_version: str = ""
+    smbios_major: int = 0
+    smbios_minor: int = 0
+    bios_characteristics: List[str] = field(default_factory=list)
+    embedded_controller_major: int = 0
+    embedded_controller_minor: int = 0
+    primary_bios: bool = False
+    # System info
+    system_manufacturer: str = ""
+    system_model: str = ""
+    system_type: str = ""
+    system_family: str = ""
+    system_sku: str = ""
+    # Chassis info
+    chassis_manufacturer: str = ""
+    chassis_type: str = ""
+    chassis_serial: str = ""
+    chassis_asset_tag: str = ""
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -136,6 +222,29 @@ class StorageDrive:
     temperature_c: Optional[float] = None
     power_on_hours: Optional[int] = None
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended properties
+    device_id: str = ""
+    pnp_device_id: str = ""
+    caption: str = ""
+    description: str = ""
+    index: int = 0
+    partitions: int = 0
+    bytes_per_sector: int = 0
+    sectors_per_track: int = 0
+    total_heads: int = 0
+    total_cylinders: int = 0
+    total_sectors: int = 0
+    total_tracks: int = 0
+    compression_method: str = ""
+    manufacturer: str = ""
+    scsi_bus: int = 0
+    scsi_port: int = 0
+    scsi_lun: int = 0
+    scsi_target_id: int = 0
+    signature: str = ""
+    # SMART attributes (if available)
+    smart_attributes: Dict[str, Any] = field(default_factory=dict)
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -149,6 +258,20 @@ class StorageVolume:
     free_gb: float = 0.0
     utilization_percent: float = 0.0
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended properties
+    volume_serial: str = ""
+    description: str = ""
+    drive_type: str = ""
+    compressed: bool = False
+    supports_quotas: bool = False
+    supports_disk_quotas: bool = False
+    quotas_disabled: bool = False
+    quotas_incomplete: bool = False
+    quotas_rebuilding: bool = False
+    block_size: int = 0
+    maximum_component_length: int = 0
+    supports_file_based_compression: bool = False
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -176,6 +299,32 @@ class NetworkAdapter:
     link_state: str = "Unknown"  # Up, Down, Disconnected
     dhcp_enabled: bool = False
     status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended properties
+    device_id: str = ""
+    pnp_device_id: str = ""
+    guid: str = ""
+    index: int = 0
+    interface_index: int = 0
+    net_connection_id: str = ""
+    manufacturer: str = ""
+    service_name: str = ""
+    time_of_last_reset: str = ""
+    permanent_address: str = ""
+    physical_adapter: bool = False
+    # Connection info
+    dhcp_server: str = ""
+    dhcp_lease_obtained: str = ""
+    dhcp_lease_expires: str = ""
+    wins_primary: str = ""
+    wins_secondary: str = ""
+    # Statistics
+    bytes_received: int = 0
+    bytes_sent: int = 0
+    packets_received: int = 0
+    packets_sent: int = 0
+    errors_received: int = 0
+    errors_sent: int = 0
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -188,6 +337,97 @@ class SensorInfo:
     min_value: Optional[float] = None
     max_value: Optional[float] = None
     status: HealthStatus = HealthStatus.UNKNOWN
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AudioDevice:
+    """Audio device information"""
+    name: str = "Unknown"
+    manufacturer: str = "Unknown"
+    device_id: str = ""
+    pnp_device_id: str = ""
+    status: str = "Unknown"
+    driver_version: str = ""
+    driver_date: str = ""
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class USBDevice:
+    """USB device information"""
+    name: str = "Unknown"
+    device_id: str = ""
+    pnp_device_id: str = ""
+    description: str = ""
+    manufacturer: str = ""
+    status: str = "Unknown"
+    service: str = ""
+    class_guid: str = ""
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class USBController:
+    """USB controller information"""
+    name: str = "Unknown"
+    manufacturer: str = ""
+    device_id: str = ""
+    pnp_device_id: str = ""
+    protocol_supported: str = ""
+    status: str = "Unknown"
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MonitorInfo:
+    """Monitor information"""
+    name: str = "Unknown"
+    manufacturer: str = ""
+    device_id: str = ""
+    pnp_device_id: str = ""
+    screen_width: int = 0
+    screen_height: int = 0
+    pixels_per_x_logical_inch: int = 0
+    pixels_per_y_logical_inch: int = 0
+    monitor_type: str = ""
+    availability: str = ""
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class BatteryInfo:
+    """Battery information (for laptops)"""
+    name: str = "Unknown"
+    device_id: str = ""
+    status: str = "Unknown"
+    battery_status: int = 0  # 1=Discharging, 2=AC, etc.
+    chemistry: str = ""
+    design_capacity: int = 0
+    full_charge_capacity: int = 0
+    estimated_charge_remaining: int = 0
+    estimated_run_time: int = 0
+    expected_life: int = 0
+    time_on_battery: int = 0
+    time_to_full_charge: int = 0
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PrinterInfo:
+    """Printer information"""
+    name: str = "Unknown"
+    device_id: str = ""
+    driver_name: str = ""
+    port_name: str = ""
+    printer_status: str = ""
+    print_processor: str = ""
+    shared: bool = False
+    share_name: str = ""
+    local: bool = False
+    network: bool = False
+    default: bool = False
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -202,6 +442,13 @@ class HardwareSnapshot:
     network_adapters: List[NetworkAdapter] = field(default_factory=list)
     sensors: List[SensorInfo] = field(default_factory=list)
     overall_status: HealthStatus = HealthStatus.UNKNOWN
+    # Extended hardware collections
+    audio_devices: List[AudioDevice] = field(default_factory=list)
+    usb_devices: List[USBDevice] = field(default_factory=list)
+    usb_controllers: List[USBController] = field(default_factory=list)
+    monitors: List[MonitorInfo] = field(default_factory=list)
+    batteries: List[BatteryInfo] = field(default_factory=list)
+    printers: List[PrinterInfo] = field(default_factory=list)
 
 
 def _run_wmic(wmic_class: str, properties: List[str], timeout: int = 10) -> List[Dict[str, str]]:
@@ -237,6 +484,50 @@ def _run_wmic(wmic_class: str, properties: List[str], timeout: int = 10) -> List
                 else:
                     row = {headers[i]: values[i].strip() for i in range(len(headers))}
                 results.append(row)
+        
+        return results
+    except Exception:
+        return []
+
+
+def _run_wmic_list(wmic_class: str, properties: List[str], timeout: int = 10) -> List[Dict[str, str]]:
+    """Run WMIC command with /format:list and parse output.
+    
+    This is more reliable than CSV format when fields contain commas.
+    """
+    try:
+        props = ",".join(properties)
+        cmd = f'wmic {wmic_class} get {props} /format:list'
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        
+        # Parse list format: Key=Value, records separated by double blank lines
+        results = []
+        current_record: Dict[str, str] = {}
+        blank_count = 0
+        
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if not line:
+                blank_count += 1
+                # Two or more blank lines = definite record separator
+                if blank_count >= 2 and current_record:
+                    results.append(current_record)
+                    current_record = {}
+            elif '=' in line:
+                blank_count = 0
+                key, _, value = line.partition('=')
+                current_record[key.strip()] = value.strip()
+        
+        # Don't forget last record
+        if current_record:
+            results.append(current_record)
         
         return results
     except Exception:
@@ -286,20 +577,29 @@ def _parse_size_to_mb(size_bytes: str) -> int:
 
 @timed("collect_cpu_info")
 def collect_cpu_info() -> CPUInfo:
-    """Collect CPU information"""
+    """Collect comprehensive CPU information"""
     cpu = CPUInfo()
     
     try:
-        # Get CPU details from WMI
+        # Get CPU details from WMI - only use valid Win32_Processor properties
+        # Note: L1InstructionCacheSize, L1DataCacheSize, VirtualizationFirmwareEnabled don't exist
         results = _run_wmic(
             "cpu",
             ["Name", "Manufacturer", "NumberOfCores", "NumberOfLogicalProcessors",
              "MaxClockSpeed", "CurrentClockSpeed", "Architecture", "SocketDesignation",
-             "L2CacheSize", "L3CacheSize", "LoadPercentage"]
+             "L2CacheSize", "L3CacheSize", "LoadPercentage", "DeviceID", "ProcessorId",
+             "Revision", "Stepping", "Family", "VoltageCaps", "ExtClock",
+             "AddressWidth", "DataWidth", "Status", "CpuStatus", "PowerManagementSupported",
+             "Caption", "Description", "AssetTag", "PartNumber", "SerialNumber",
+             "SecondLevelAddressTranslationExtensions", "VMMonitorModeExtensions"]
         )
         
         if results:
             r = results[0]
+            # Store all raw properties
+            cpu.raw_properties = r.copy()
+            
+            # Basic properties
             cpu.name = r.get("Name", "Unknown").strip()
             cpu.manufacturer = r.get("Manufacturer", "Unknown")
             cpu.cores = int(r.get("NumberOfCores", 0) or 0)
@@ -312,9 +612,40 @@ def collect_cpu_info() -> CPUInfo:
             cpu.l3_cache_kb = int(r.get("L3CacheSize", 0) or 0)
             cpu.utilization_percent = float(r.get("LoadPercentage", 0) or 0)
             
+            # Extended properties
+            cpu.device_id = r.get("DeviceID", "")
+            cpu.processor_id = r.get("ProcessorId", "")
+            cpu.revision = r.get("Revision", "")
+            cpu.stepping = r.get("Stepping", "")
+            cpu.family = r.get("Family", "")
+            cpu.voltage_caps = r.get("VoltageCaps", "")
+            cpu.external_clock_mhz = int(r.get("ExtClock", 0) or 0)
+            
+            # Check virtualization via VMMonitorModeExtensions instead
+            cpu.virtualization_enabled = r.get("VMMonitorModeExtensions", "").upper() == "TRUE"
+            cpu.address_width = int(r.get("AddressWidth", 0) or 0)
+            cpu.data_width = int(r.get("DataWidth", 0) or 0)
+            cpu.status_info = r.get("Status", "")
+            cpu.cpu_status = r.get("CpuStatus", "")
+            
             # Architecture mapping
             arch_map = {"0": "x86", "5": "ARM", "9": "x64", "12": "ARM64"}
             cpu.architecture = arch_map.get(r.get("Architecture", ""), "Unknown")
+        
+        # Get L1 cache from Win32_CacheMemory (not available in Win32_Processor)
+        try:
+            cache_results = _run_wmic(
+                "path Win32_CacheMemory",
+                ["Purpose", "InstalledSize", "Level"]
+            )
+            l1_total = 0
+            for cache in cache_results:
+                purpose = cache.get("Purpose", "")
+                if "L1" in purpose:
+                    l1_total += int(cache.get("InstalledSize", 0) or 0)
+            cpu.l1_cache_kb = l1_total
+        except Exception:
+            pass
         
         # Determine health status
         if cpu.utilization_percent > 90:
@@ -330,19 +661,32 @@ def collect_cpu_info() -> CPUInfo:
 
 @timed("collect_gpu_info")
 def collect_gpu_info() -> List[GPUInfo]:
-    """Collect GPU information"""
+    """Collect comprehensive GPU information"""
     gpus = []
     
     try:
-        results = _run_wmic(
+        # Use list format because InstalledDisplayDrivers can contain commas
+        # which breaks CSV parsing
+        results = _run_wmic_list(
             "path win32_videocontroller",
             ["Name", "AdapterCompatibility", "DriverVersion", "DriverDate",
              "AdapterRAM", "CurrentHorizontalResolution", "CurrentVerticalResolution",
-             "CurrentRefreshRate", "Status"]
+             "CurrentRefreshRate", "Status", "DeviceID", "PNPDeviceID",
+             "VideoProcessor", "VideoArchitecture", "VideoMemoryType",
+             "AdapterDACType", "MinRefreshRate", "MaxRefreshRate",
+             "CurrentBitsPerPixel", "CurrentNumberOfColors",
+             "InfFilename", "InfSection", "InstalledDisplayDrivers",
+             "Monochrome", "VideoModeDescription", "Availability",
+             "ConfigManagerErrorCode", "Caption", "Description",
+             "AcceleratorCapabilities", "SystemName", "SpecificationVersion"]
         )
         
         for r in results:
             gpu = GPUInfo()
+            # Store all raw properties
+            gpu.raw_properties = r.copy()
+            
+            # Basic properties
             gpu.name = r.get("Name", "Unknown")
             gpu.manufacturer = r.get("AdapterCompatibility", "Unknown")
             gpu.driver_version = r.get("DriverVersion", "Unknown")
@@ -368,6 +712,27 @@ def collect_gpu_info() -> List[GPUInfo]:
             
             gpu.refresh_rate = int(r.get("CurrentRefreshRate", 0) or 0)
             
+            # Extended properties
+            gpu.device_id = r.get("DeviceID", "")
+            gpu.pnp_device_id = r.get("PNPDeviceID", "")
+            gpu.video_processor = r.get("VideoProcessor", "")
+            gpu.video_architecture = r.get("VideoArchitecture", "")
+            gpu.video_memory_type = r.get("VideoMemoryType", "")
+            gpu.adapter_dac_type = r.get("AdapterDACType", "")
+            gpu.min_refresh_rate = int(r.get("MinRefreshRate", 0) or 0)
+            gpu.max_refresh_rate = int(r.get("MaxRefreshRate", 0) or 0)
+            gpu.bits_per_pixel = int(r.get("CurrentBitsPerPixel", 0) or 0)
+            gpu.color_planes = 0  # ColorPlanes is not a valid Win32_VideoController property
+            gpu.inf_filename = r.get("InfFilename", "")
+            gpu.inf_section = r.get("InfSection", "")
+            gpu.installed_display_drivers = r.get("InstalledDisplayDrivers", "")
+            gpu.monochrome = r.get("Monochrome", "").lower() == "true"
+            gpu.video_mode_description = r.get("VideoModeDescription", "")
+            gpu.availability = r.get("Availability", "")
+            gpu.config_error_code = int(r.get("ConfigManagerErrorCode", 0) or 0)
+            gpu.caption = r.get("Caption", "")
+            gpu.description = r.get("Description", "")
+            
             # Status
             status_str = r.get("Status", "")
             if status_str.lower() == "ok":
@@ -385,7 +750,7 @@ def collect_gpu_info() -> List[GPUInfo]:
 
 @timed("collect_ram_info")
 def collect_ram_info() -> RAMInfo:
-    """Collect RAM information"""
+    """Collect comprehensive RAM information"""
     ram = RAMInfo()
     
     try:
@@ -412,11 +777,21 @@ def collect_ram_info() -> RAMInfo:
         ram.used_gb = round(ram.total_gb - ram.available_gb, 2)
         ram.utilization_percent = mem_status.dwMemoryLoad
         
-        # Get per-slot details
+        # Extended memory stats
+        ram.total_physical_memory = mem_status.ullTotalPhys
+        ram.total_virtual_memory = mem_status.ullTotalVirtual
+        ram.available_virtual_memory = mem_status.ullAvailVirtual
+        ram.page_file_total = mem_status.ullTotalPageFile
+        ram.page_file_free = mem_status.ullAvailPageFile
+        
+        # Get per-slot details with ALL properties
         results = _run_wmic(
             "memorychip",
             ["BankLabel", "Manufacturer", "PartNumber", "Capacity",
-             "Speed", "FormFactor", "MemoryType", "SMBIOSMemoryType"]
+             "Speed", "FormFactor", "MemoryType", "SMBIOSMemoryType",
+             "SerialNumber", "DeviceLocator", "ConfiguredClockSpeed",
+             "ConfiguredVoltage", "MinVoltage", "MaxVoltage",
+             "DataWidth", "TotalWidth", "TypeDetail", "Tag", "AssetTag"]
         )
         
         form_factor_map = {
@@ -434,6 +809,10 @@ def collect_ram_info() -> RAMInfo:
         
         for r in results:
             slot = RAMSlot()
+            # Store all raw properties
+            slot.raw_properties = r.copy()
+            
+            # Basic properties
             slot.slot = r.get("BankLabel", "Unknown")
             slot.manufacturer = r.get("Manufacturer", "Unknown").strip()
             slot.part_number = r.get("PartNumber", "Unknown").strip()
@@ -447,6 +826,21 @@ def collect_ram_info() -> RAMInfo:
                 slot.memory_type = memory_type_map[mem_type]
             else:
                 slot.memory_type = memory_type_map.get(r.get("MemoryType", ""), "Unknown")
+            
+            # Extended properties
+            slot.serial_number = r.get("SerialNumber", "")
+            slot.device_locator = r.get("DeviceLocator", "")
+            slot.configured_clock_speed = int(r.get("ConfiguredClockSpeed", 0) or 0)
+            try:
+                slot.configured_voltage = float(r.get("ConfiguredVoltage", 0) or 0) / 1000  # mV to V
+                slot.min_voltage = float(r.get("MinVoltage", 0) or 0) / 1000
+                slot.max_voltage = float(r.get("MaxVoltage", 0) or 0) / 1000
+            except (ValueError, TypeError):
+                pass
+            slot.data_width = int(r.get("DataWidth", 0) or 0)
+            slot.total_width = int(r.get("TotalWidth", 0) or 0)
+            slot.type_detail = r.get("TypeDetail", "")
+            slot.asset_tag = r.get("AssetTag", "")
             
             ram.slots.append(slot)
         
@@ -468,33 +862,47 @@ def collect_ram_info() -> RAMInfo:
 
 
 @timed("collect_motherboard_info")
-@cached("hw_motherboard", ttl_seconds=300.0)  # Cache for 5 min - static data
+@cached("hw_motherboard", ttl_seconds=300)  # Cache for 5 min - static data
 def collect_motherboard_info() -> MotherboardInfo:
-    """Collect motherboard and BIOS information (cached - static data)"""
+    """Collect comprehensive motherboard and BIOS information (cached - static data)"""
     mb = MotherboardInfo()
     
     try:
-        # Motherboard info
+        # Motherboard info - get ALL properties
         results = _run_wmic(
             "baseboard",
-            ["Manufacturer", "Product", "Version", "SerialNumber"]
+            ["Manufacturer", "Product", "Version", "SerialNumber",
+             "Status", "HostingBoard", "HotSwappable", "Removable", "Replaceable",
+             "ConfigOptions", "Tag", "Model", "Name", "SKU", "PoweredOn"]
         )
         
         if results:
             r = results[0]
+            mb.raw_properties["baseboard"] = r.copy()
             mb.manufacturer = r.get("Manufacturer", "Unknown")
             mb.product = r.get("Product", "Unknown")
             mb.version = r.get("Version", "")
             mb.serial_number = r.get("SerialNumber", "Unknown")
+            mb.baseboard_status = r.get("Status", "")
+            mb.baseboard_hosting_board = r.get("HostingBoard", "").lower() == "true"
+            mb.baseboard_hot_swappable = r.get("HotSwappable", "").lower() == "true"
+            mb.baseboard_removable = r.get("Removable", "").lower() == "true"
+            mb.baseboard_replaceable = r.get("Replaceable", "").lower() == "true"
         
-        # BIOS info
+        # BIOS info - get ALL properties
         bios_results = _run_wmic(
             "bios",
-            ["Manufacturer", "SMBIOSBIOSVersion", "ReleaseDate"]
+            ["Manufacturer", "SMBIOSBIOSVersion", "ReleaseDate",
+             "SMBIOSMajorVersion", "SMBIOSMinorVersion", "BIOSVersion",
+             "EmbeddedControllerMajorVersion", "EmbeddedControllerMinorVersion",
+             "PrimaryBIOS", "Name", "Caption", "Description", "SerialNumber",
+             "SoftwareElementID", "Status", "Version", "CurrentLanguage",
+             "InstallableLanguages"]
         )
         
         if bios_results:
             r = bios_results[0]
+            mb.raw_properties["bios"] = r.copy()
             mb.bios_vendor = r.get("Manufacturer", "Unknown")
             mb.bios_version = r.get("SMBIOSBIOSVersion", "Unknown")
             
@@ -504,8 +912,64 @@ def collect_motherboard_info() -> MotherboardInfo:
                 try:
                     dt = datetime.strptime(bios_date_raw[:8], "%Y%m%d")
                     mb.bios_date = dt.strftime("%Y-%m-%d")
+                    mb.bios_release_date = bios_date_raw
                 except Exception:
                     mb.bios_date = bios_date_raw[:10]
+            
+            mb.smbios_major = int(r.get("SMBIOSMajorVersion", 0) or 0)
+            mb.smbios_minor = int(r.get("SMBIOSMinorVersion", 0) or 0)
+            mb.smbios_version = f"{mb.smbios_major}.{mb.smbios_minor}"
+            mb.embedded_controller_major = int(r.get("EmbeddedControllerMajorVersion", 0) or 0)
+            mb.embedded_controller_minor = int(r.get("EmbeddedControllerMinorVersion", 0) or 0)
+            mb.primary_bios = r.get("PrimaryBIOS", "").lower() == "true"
+        
+        # System info
+        system_results = _run_wmic(
+            "computersystem",
+            ["Manufacturer", "Model", "SystemType", "SystemFamily", "SystemSKUNumber",
+             "TotalPhysicalMemory", "NumberOfProcessors", "NumberOfLogicalProcessors",
+             "Domain", "Workgroup", "UserName", "PrimaryOwnerName"]
+        )
+        
+        if system_results:
+            r = system_results[0]
+            mb.raw_properties["system"] = r.copy()
+            mb.system_manufacturer = r.get("Manufacturer", "")
+            mb.system_model = r.get("Model", "")
+            mb.system_type = r.get("SystemType", "")
+            mb.system_family = r.get("SystemFamily", "")
+            mb.system_sku = r.get("SystemSKUNumber", "")
+        
+        # Chassis info
+        chassis_results = _run_wmic(
+            "systemenclosure",
+            ["Manufacturer", "ChassisTypes", "SerialNumber", "SMBIOSAssetTag",
+             "Tag", "Version", "LockPresent", "SecurityStatus"]
+        )
+        
+        chassis_type_map = {
+            "1": "Other", "2": "Unknown", "3": "Desktop", "4": "Low Profile Desktop",
+            "5": "Pizza Box", "6": "Mini Tower", "7": "Tower", "8": "Portable",
+            "9": "Laptop", "10": "Notebook", "11": "Hand Held", "12": "Docking Station",
+            "13": "All in One", "14": "Sub Notebook", "15": "Space-Saving",
+            "16": "Lunch Box", "17": "Main Server Chassis", "18": "Expansion Chassis",
+            "19": "SubChassis", "20": "Bus Expansion Chassis", "21": "Peripheral Chassis",
+            "22": "RAID Chassis", "23": "Rack Mount Chassis", "24": "Sealed-Case PC",
+            "30": "Tablet", "31": "Convertible", "32": "Detachable"
+        }
+        
+        if chassis_results:
+            r = chassis_results[0]
+            mb.raw_properties["chassis"] = r.copy()
+            mb.chassis_manufacturer = r.get("Manufacturer", "")
+            mb.chassis_serial = r.get("SerialNumber", "")
+            mb.chassis_asset_tag = r.get("SMBIOSAssetTag", "")
+            
+            chassis_type_raw = r.get("ChassisTypes", "")
+            # ChassisTypes is typically {number} format
+            chassis_num = re.search(r'\d+', chassis_type_raw)
+            if chassis_num:
+                mb.chassis_type = chassis_type_map.get(chassis_num.group(), chassis_type_raw)
         
         # Check UEFI/Secure Boot via registry
         firmware_type = _get_registry_value(
@@ -537,19 +1001,28 @@ def collect_motherboard_info() -> MotherboardInfo:
 
 @timed("collect_storage_info")
 def collect_storage_info() -> StorageInfo:
-    """Collect storage information"""
+    """Collect comprehensive storage information"""
     storage = StorageInfo()
     
     try:
-        # Physical drives
+        # Physical drives - get ALL properties
         drive_results = _run_wmic(
             "diskdrive",
             ["Model", "SerialNumber", "InterfaceType", "MediaType",
-             "Size", "FirmwareRevision", "Status"]
+             "Size", "FirmwareRevision", "Status", "DeviceID", "PNPDeviceID",
+             "Caption", "Description", "Index", "Partitions", "BytesPerSector",
+             "SectorsPerTrack", "TotalHeads", "TotalCylinders", "TotalSectors",
+             "TotalTracks", "CompressionMethod", "Manufacturer", "SCSIBus",
+             "SCSIPort", "SCSILogicalUnit", "SCSITargetId", "Signature",
+             "Name", "SystemName", "Capabilities"]
         )
         
         for r in drive_results:
             drive = StorageDrive()
+            # Store all raw properties
+            drive.raw_properties = r.copy()
+            
+            # Basic properties
             drive.model = r.get("Model", "Unknown")
             drive.serial_number = r.get("SerialNumber", "Unknown").strip()
             drive.interface_type = r.get("InterfaceType", "Unknown")
@@ -564,6 +1037,27 @@ def collect_storage_info() -> StorageInfo:
             
             drive.capacity_gb = _parse_size_to_gb(r.get("Size", "0"))
             drive.firmware_version = r.get("FirmwareRevision", "Unknown")
+            
+            # Extended properties
+            drive.device_id = r.get("DeviceID", "")
+            drive.pnp_device_id = r.get("PNPDeviceID", "")
+            drive.caption = r.get("Caption", "")
+            drive.description = r.get("Description", "")
+            drive.index = int(r.get("Index", 0) or 0)
+            drive.partitions = int(r.get("Partitions", 0) or 0)
+            drive.bytes_per_sector = int(r.get("BytesPerSector", 0) or 0)
+            drive.sectors_per_track = int(r.get("SectorsPerTrack", 0) or 0)
+            drive.total_heads = int(r.get("TotalHeads", 0) or 0)
+            drive.total_cylinders = int(r.get("TotalCylinders", 0) or 0)
+            drive.total_sectors = int(r.get("TotalSectors", 0) or 0)
+            drive.total_tracks = int(r.get("TotalTracks", 0) or 0)
+            drive.compression_method = r.get("CompressionMethod", "")
+            drive.manufacturer = r.get("Manufacturer", "")
+            drive.scsi_bus = int(r.get("SCSIBus", 0) or 0)
+            drive.scsi_port = int(r.get("SCSIPort", 0) or 0)
+            drive.scsi_lun = int(r.get("SCSILogicalUnit", 0) or 0)
+            drive.scsi_target_id = int(r.get("SCSITargetId", 0) or 0)
+            drive.signature = r.get("Signature", "")
             
             status = r.get("Status", "")
             if status.lower() == "ok":
@@ -596,14 +1090,22 @@ def collect_storage_info() -> StorageInfo:
                                 elif health.lower() in ["unhealthy", "critical"]:
                                     drive.status = HealthStatus.CRITICAL
         
-        # Logical volumes
+        # Logical volumes - get ALL properties
         vol_results = _run_wmic(
             "logicaldisk where DriveType=3",
-            ["DeviceID", "VolumeName", "FileSystem", "Size", "FreeSpace"]
+            ["DeviceID", "VolumeName", "FileSystem", "Size", "FreeSpace",
+             "VolumeSerialNumber", "Description", "DriveType", "Compressed",
+             "SupportsQuotas", "SupportsDiskQuotas", "QuotasDisabled",
+             "QuotasIncomplete", "QuotasRebuilding", "BlockSize",
+             "MaximumComponentLength", "SupportsFileBasedCompression", "MediaType"]
         )
         
         for r in vol_results:
             vol = StorageVolume()
+            # Store all raw properties
+            vol.raw_properties = r.copy()
+            
+            # Basic properties
             vol.drive_letter = r.get("DeviceID", "")
             vol.label = r.get("VolumeName", "") or "Local Disk"
             vol.file_system = r.get("FileSystem", "")
@@ -613,6 +1115,20 @@ def collect_storage_info() -> StorageInfo:
             
             if vol.capacity_gb > 0:
                 vol.utilization_percent = round((vol.used_gb / vol.capacity_gb) * 100, 1)
+            
+            # Extended properties
+            vol.volume_serial = r.get("VolumeSerialNumber", "")
+            vol.description = r.get("Description", "")
+            vol.drive_type = r.get("DriveType", "")
+            vol.compressed = r.get("Compressed", "").lower() == "true"
+            vol.supports_quotas = r.get("SupportsQuotas", "").lower() == "true"
+            vol.supports_disk_quotas = r.get("SupportsDiskQuotas", "").lower() == "true"
+            vol.quotas_disabled = r.get("QuotasDisabled", "").lower() == "true"
+            vol.quotas_incomplete = r.get("QuotasIncomplete", "").lower() == "true"
+            vol.quotas_rebuilding = r.get("QuotasRebuilding", "").lower() == "true"
+            vol.block_size = int(r.get("BlockSize", 0) or 0)
+            vol.maximum_component_length = int(r.get("MaximumComponentLength", 0) or 0)
+            vol.supports_file_based_compression = r.get("SupportsFileBasedCompression", "").lower() == "true"
             
             # Status based on free space
             if vol.utilization_percent > 95:
@@ -748,6 +1264,7 @@ def collect_sensor_info() -> List[SensorInfo]:
         
         for r in temp_results:
             sensor = SensorInfo()
+            sensor.raw_properties = r.copy()
             sensor.name = r.get("InstanceName", "Thermal Zone")
             sensor.sensor_type = "Temperature"
             
@@ -778,6 +1295,217 @@ def collect_sensor_info() -> List[SensorInfo]:
     return sensors
 
 
+@timed("collect_audio_devices")
+def collect_audio_devices() -> List[AudioDevice]:
+    """Collect audio device information"""
+    devices = []
+    
+    try:
+        results = _run_wmic(
+            "sounddev",
+            ["Name", "Manufacturer", "DeviceID", "PNPDeviceID", "Status",
+             "Caption", "Description", "ProductName", "StatusInfo"]
+        )
+        
+        for r in results:
+            device = AudioDevice()
+            device.raw_properties = r.copy()
+            device.name = r.get("Name", "Unknown")
+            device.manufacturer = r.get("Manufacturer", "Unknown")
+            device.device_id = r.get("DeviceID", "")
+            device.pnp_device_id = r.get("PNPDeviceID", "")
+            device.status = r.get("Status", "Unknown")
+            devices.append(device)
+            
+    except Exception:
+        pass
+    
+    return devices
+
+
+@timed("collect_usb_devices")
+def collect_usb_devices() -> List[USBDevice]:
+    """Collect USB device information"""
+    devices = []
+    
+    try:
+        # Get USB hub/controller info
+        results = _run_wmic(
+            "path Win32_USBHub",
+            ["Name", "DeviceID", "PNPDeviceID", "Description", "Manufacturer",
+             "Status", "Service", "ClassGuid", "Caption"]
+        )
+        
+        for r in results:
+            device = USBDevice()
+            device.raw_properties = r.copy()
+            device.name = r.get("Name", "Unknown")
+            device.device_id = r.get("DeviceID", "")
+            device.pnp_device_id = r.get("PNPDeviceID", "")
+            device.description = r.get("Description", "")
+            device.manufacturer = r.get("Manufacturer", "")
+            device.status = r.get("Status", "Unknown")
+            device.service = r.get("Service", "")
+            device.class_guid = r.get("ClassGuid", "")
+            devices.append(device)
+            
+    except Exception:
+        pass
+    
+    return devices
+
+
+@timed("collect_usb_controllers")
+def collect_usb_controllers() -> List[USBController]:
+    """Collect USB controller information"""
+    controllers = []
+    
+    try:
+        results = _run_wmic(
+            "path Win32_USBController",
+            ["Name", "Manufacturer", "DeviceID", "PNPDeviceID", "ProtocolSupported",
+             "Status", "Caption", "Description", "StatusInfo"]
+        )
+        
+        protocol_map = {
+            "0": "Unknown", "1": "Other", "16": "USB 1.0", "17": "USB 1.1",
+            "18": "USB 2.0", "19": "USB 3.0"
+        }
+        
+        for r in results:
+            controller = USBController()
+            controller.raw_properties = r.copy()
+            controller.name = r.get("Name", "Unknown")
+            controller.manufacturer = r.get("Manufacturer", "")
+            controller.device_id = r.get("DeviceID", "")
+            controller.pnp_device_id = r.get("PNPDeviceID", "")
+            controller.protocol_supported = protocol_map.get(
+                r.get("ProtocolSupported", "0"), r.get("ProtocolSupported", "Unknown")
+            )
+            controller.status = r.get("Status", "Unknown")
+            controllers.append(controller)
+            
+    except Exception:
+        pass
+    
+    return controllers
+
+
+@timed("collect_monitors")
+def collect_monitors() -> List[MonitorInfo]:
+    """Collect monitor/display information"""
+    monitors = []
+    
+    try:
+        results = _run_wmic(
+            "desktopmonitor",
+            ["Name", "MonitorManufacturer", "DeviceID", "PNPDeviceID",
+             "ScreenWidth", "ScreenHeight", "PixelsPerXLogicalInch",
+             "PixelsPerYLogicalInch", "MonitorType", "Availability",
+             "Caption", "Description", "Status"]
+        )
+        
+        for r in results:
+            monitor = MonitorInfo()
+            monitor.raw_properties = r.copy()
+            monitor.name = r.get("Name", "Unknown")
+            monitor.manufacturer = r.get("MonitorManufacturer", "")
+            monitor.device_id = r.get("DeviceID", "")
+            monitor.pnp_device_id = r.get("PNPDeviceID", "")
+            monitor.screen_width = int(r.get("ScreenWidth", 0) or 0)
+            monitor.screen_height = int(r.get("ScreenHeight", 0) or 0)
+            monitor.pixels_per_x_logical_inch = int(r.get("PixelsPerXLogicalInch", 0) or 0)
+            monitor.pixels_per_y_logical_inch = int(r.get("PixelsPerYLogicalInch", 0) or 0)
+            monitor.monitor_type = r.get("MonitorType", "")
+            monitor.availability = r.get("Availability", "")
+            monitors.append(monitor)
+            
+    except Exception:
+        pass
+    
+    return monitors
+
+
+@timed("collect_batteries")
+def collect_batteries() -> List[BatteryInfo]:
+    """Collect battery information (for laptops)"""
+    batteries = []
+    
+    try:
+        results = _run_wmic(
+            "path Win32_Battery",
+            ["Name", "DeviceID", "Status", "BatteryStatus", "Chemistry",
+             "DesignCapacity", "FullChargeCapacity", "EstimatedChargeRemaining",
+             "EstimatedRunTime", "ExpectedLife", "TimeOnBattery", "TimeToFullCharge",
+             "Caption", "Description", "Availability"]
+        )
+        
+        chemistry_map = {
+            "1": "Other", "2": "Unknown", "3": "Lead Acid", "4": "Nickel Cadmium",
+            "5": "Nickel Metal Hydride", "6": "Lithium-ion", "7": "Zinc Air",
+            "8": "Lithium Polymer"
+        }
+        
+        for r in results:
+            battery = BatteryInfo()
+            battery.raw_properties = r.copy()
+            battery.name = r.get("Name", "Unknown")
+            battery.device_id = r.get("DeviceID", "")
+            battery.status = r.get("Status", "Unknown")
+            battery.battery_status = int(r.get("BatteryStatus", 0) or 0)
+            battery.chemistry = chemistry_map.get(
+                r.get("Chemistry", "2"), r.get("Chemistry", "Unknown")
+            )
+            battery.design_capacity = int(r.get("DesignCapacity", 0) or 0)
+            battery.full_charge_capacity = int(r.get("FullChargeCapacity", 0) or 0)
+            battery.estimated_charge_remaining = int(r.get("EstimatedChargeRemaining", 0) or 0)
+            battery.estimated_run_time = int(r.get("EstimatedRunTime", 0) or 0)
+            battery.expected_life = int(r.get("ExpectedLife", 0) or 0)
+            battery.time_on_battery = int(r.get("TimeOnBattery", 0) or 0)
+            battery.time_to_full_charge = int(r.get("TimeToFullCharge", 0) or 0)
+            batteries.append(battery)
+            
+    except Exception:
+        pass
+    
+    return batteries
+
+
+@timed("collect_printers")
+def collect_printers() -> List[PrinterInfo]:
+    """Collect printer information"""
+    printers = []
+    
+    try:
+        results = _run_wmic(
+            "printer",
+            ["Name", "DeviceID", "DriverName", "PortName", "PrinterStatus",
+             "PrintProcessor", "Shared", "ShareName", "Local", "Network",
+             "Default", "Caption", "Description", "Status"]
+        )
+        
+        for r in results:
+            printer = PrinterInfo()
+            printer.raw_properties = r.copy()
+            printer.name = r.get("Name", "Unknown")
+            printer.device_id = r.get("DeviceID", "")
+            printer.driver_name = r.get("DriverName", "")
+            printer.port_name = r.get("PortName", "")
+            printer.printer_status = r.get("PrinterStatus", "")
+            printer.print_processor = r.get("PrintProcessor", "")
+            printer.shared = r.get("Shared", "").lower() == "true"
+            printer.share_name = r.get("ShareName", "")
+            printer.local = r.get("Local", "").lower() == "true"
+            printer.network = r.get("Network", "").lower() == "true"
+            printer.default = r.get("Default", "").lower() == "true"
+            printers.append(printer)
+            
+    except Exception:
+        pass
+    
+    return printers
+
+
 @timed("collect_hardware_snapshot")
 def collect_hardware_snapshot() -> HardwareSnapshot:
     """
@@ -797,6 +1525,14 @@ def collect_hardware_snapshot() -> HardwareSnapshot:
     snapshot.storage = collect_storage_info()
     snapshot.network_adapters = collect_network_info()
     snapshot.sensors = collect_sensor_info()
+    
+    # Extended hardware collections
+    snapshot.audio_devices = collect_audio_devices()
+    snapshot.usb_devices = collect_usb_devices()
+    snapshot.usb_controllers = collect_usb_controllers()
+    snapshot.monitors = collect_monitors()
+    snapshot.batteries = collect_batteries()
+    snapshot.printers = collect_printers()
     
     # Determine overall health status
     all_statuses = [snapshot.cpu.status, snapshot.ram.status, snapshot.motherboard.status]
@@ -822,9 +1558,25 @@ def get_hardware_summary() -> dict:
     """Get a quick summary of hardware for UI display"""
     snapshot = collect_hardware_snapshot()
     
-    # Format GPU info
-    gpu_name = snapshot.gpus[0].name if snapshot.gpus else "Unknown"
-    gpu_vram = snapshot.gpus[0].vram_mb if snapshot.gpus else 0
+    # Format GPU info - prefer real GPU over virtual adapters
+    primary_gpu = None
+    for gpu in snapshot.gpus:
+        # Skip virtual/mirror adapters - prefer GPUs with VRAM
+        if gpu.vram_mb > 0:
+            primary_gpu = gpu
+            break
+        # Also skip by name patterns for virtual adapters
+        name_lower = gpu.name.lower()
+        if 'mirror' not in name_lower and 'virtual' not in name_lower and 'remote' not in name_lower:
+            if primary_gpu is None:
+                primary_gpu = gpu
+    
+    # Fall back to first GPU if no real one found
+    if primary_gpu is None and snapshot.gpus:
+        primary_gpu = snapshot.gpus[0]
+    
+    gpu_name = primary_gpu.name if primary_gpu else "Unknown"
+    gpu_vram = primary_gpu.vram_mb if primary_gpu else 0
     
     # Format storage
     total_storage = sum(d.capacity_gb for d in snapshot.storage.physical_drives)
@@ -841,8 +1593,8 @@ def get_hardware_summary() -> dict:
         "gpu": {
             "name": gpu_name,
             "vram_mb": gpu_vram,
-            "driver": snapshot.gpus[0].driver_version if snapshot.gpus else "Unknown",
-            "status": snapshot.gpus[0].status.value if snapshot.gpus else "unknown"
+            "driver": primary_gpu.driver_version if primary_gpu else "Unknown",
+            "status": primary_gpu.status.value if primary_gpu else "unknown"
         },
         "ram": {
             "total_gb": snapshot.ram.total_gb,

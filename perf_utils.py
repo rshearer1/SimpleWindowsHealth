@@ -97,7 +97,7 @@ class PerfLogger:
 perf_logger = PerfLogger()
 
 
-def timed(operation_name: str = None):
+def timed(operation_name: Optional[str] = None):
     """Decorator to time function execution"""
     def decorator(func: Callable) -> Callable:
         op_name = operation_name or func.__name__
@@ -211,31 +211,42 @@ class DataCache:
 data_cache = DataCache()
 
 
+class CachedFunction:
+    """Wrapper for cached function with refresh and invalidate methods"""
+    
+    def __init__(self, func: Callable, key: str, ttl_seconds: float):
+        self._func = func
+        self._key = key
+        self._ttl_seconds = ttl_seconds
+        functools.update_wrapper(self, func)
+    
+    def __call__(self, *args, **kwargs):
+        # Check cache first
+        cached_value = data_cache.get(self._key)
+        if cached_value is not None:
+            print(f"[CACHE] HIT: {self._key}")
+            return cached_value
+        
+        # Execute function and cache result
+        print(f"[CACHE] MISS: {self._key}")
+        result = self._func(*args, **kwargs)
+        data_cache.set(self._key, result, self._ttl_seconds)
+        return result
+    
+    def refresh(self, *args, **kwargs):
+        """Force refresh by invalidating cache and calling function"""
+        data_cache.invalidate(self._key)
+        return self(*args, **kwargs)
+    
+    def invalidate(self):
+        """Invalidate the cached value"""
+        data_cache.invalidate(self._key)
+
+
 def cached(key: str, ttl_seconds: float = 300.0):
     """Decorator to cache function results"""
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            # Check cache first
-            cached_value = data_cache.get(key)
-            if cached_value is not None:
-                print(f"[CACHE] HIT: {key}")
-                return cached_value
-            
-            # Execute function and cache result
-            print(f"[CACHE] MISS: {key}")
-            result = func(*args, **kwargs)
-            data_cache.set(key, result, ttl_seconds)
-            return result
-        
-        # Add method to force refresh
-        def refresh(*args, **kwargs):
-            data_cache.invalidate(key)
-            return wrapper(*args, **kwargs)
-        
-        wrapper.refresh = refresh
-        wrapper.invalidate = lambda: data_cache.invalidate(key)
-        return wrapper
+    def decorator(func: Callable) -> CachedFunction:
+        return CachedFunction(func, key, ttl_seconds)
     
     return decorator
 

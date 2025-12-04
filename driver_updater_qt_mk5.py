@@ -38,7 +38,7 @@ from driver_backend import (
 
 # Performance utilities
 try:
-    from perf_utils import timed, TimingContext, perf_logger, BatchUpdater
+    from perf_utils import timed, TimingContext, perf_logger, BatchUpdater # pyright: ignore[reportAssignmentType]
     PERF_UTILS_AVAILABLE = True
 except ImportError:
     PERF_UTILS_AVAILABLE = False
@@ -165,11 +165,11 @@ def get_cached_app_icon(app_name: str, size: int = 32) -> QPixmap | None:
     """Get app icon with caching to avoid repeated registry lookups"""
     # Use a simple module-level cache
     if not hasattr(get_cached_app_icon, '_cache'):
-        get_cached_app_icon._cache = {}
+        get_cached_app_icon._cache = {} # type: ignore
     
     cache_key = f"{app_name}_{size}"
-    if cache_key in get_cached_app_icon._cache:
-        return get_cached_app_icon._cache[cache_key]
+    if cache_key in get_cached_app_icon._cache: # type: ignore
+        return get_cached_app_icon._cache[cache_key] # pyright: ignore[reportFunctionMemberAccess]
     
     pixmap = get_app_icon_from_registry(app_name)
     if pixmap:
@@ -177,7 +177,7 @@ def get_cached_app_icon(app_name: str, size: int = 32) -> QPixmap | None:
         pixmap = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, 
                                Qt.TransformationMode.SmoothTransformation)
     
-    get_cached_app_icon._cache[cache_key] = pixmap
+    get_cached_app_icon._cache[cache_key] = pixmap # type: ignore
     return pixmap
 
 
@@ -543,7 +543,7 @@ class HardwareScanWorker(QObject):
         """Execute the hardware scan"""
         try:
             if HARDWARE_SCANNER_AVAILABLE:
-                result = get_hardware_summary()
+                result = get_hardware_summary() # type: ignore
                 self.finished.emit(result)
             else:
                 self.error.emit("Hardware scanner module not available")
@@ -994,7 +994,7 @@ class StatusIcon(QWidget):
             self._stop_glow_animation()
             self.update()
     
-    def paintEvent(self, event):
+    def paintEvent(self, event): # type: ignore
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
@@ -1159,7 +1159,7 @@ class AnimatedButton(QPushButton):
             self._shadow.setBlurRadius(self._hover_shadow_blur)
         super().enterEvent(event)
     
-    def leaveEvent(self, event):
+    def leaveEvent(self, event): # type: ignore
         """Reset shadow on leave"""
         if self._shadow:
             self._shadow.setBlurRadius(self._normal_shadow_blur)
@@ -1211,7 +1211,7 @@ class ModernSpinner(QWidget):
         self.color = QColor(color)
         self.update()
     
-    def paintEvent(self, event):
+    def paintEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
@@ -1296,7 +1296,7 @@ class GlowButton(QPushButton):
             self._glow_effect.setBlurRadius(24)
         super().enterEvent(event)
     
-    def leaveEvent(self, event):
+    def leaveEvent(self, event): # type: ignore
         """Reset glow on leave"""
         if self._glow_effect:
             glow_qcolor = QColor(self.glow_color)
@@ -1477,7 +1477,7 @@ class ModernListRow(QFrame):
         if hasattr(self, 'subtitle_label'):
             self.subtitle_label.setText(subtitle)
     
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event): # type: ignore
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
@@ -1625,7 +1625,7 @@ class NavIcon(QWidget):
         self.color = color
         self.update()
     
-    def paintEvent(self, event):
+    def paintEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
@@ -1860,7 +1860,7 @@ class SidebarItem(QFrame):
             self.icon.set_color(Theme.TEXT_PRIMARY)
             self.label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-weight: normal;")
     
-    def leaveEvent(self, event):
+    def leaveEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
         self._update_style()
 
 
@@ -1895,7 +1895,7 @@ class ScoreRing(QWidget):
             self.score += diff * 0.1
         self.update()
     
-    def paintEvent(self, event):
+    def paintEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
@@ -2010,7 +2010,7 @@ class GlassCard(QFrame):
         }
         return colors.get(self._status, QColor(0, 0, 0, 0))
     
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
         self.clicked.emit()
         super().mousePressEvent(event)
     
@@ -8652,14 +8652,14 @@ class SecurityPage(QWidget):
     def _update_defender_definitions(self):
         """Update Windows Defender definitions"""
         subprocess.Popen(
-            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Update-MpSignature"],
+            ["powershell", "-Command", "Update-MpSignature"],
             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
         )
     
     def _run_quick_scan(self):
         """Run a quick Windows Defender scan"""
         subprocess.Popen(
-            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Start-MpScan -ScanType QuickScan"],
+            ["powershell", "-Command", "Start-MpScan -ScanType QuickScan"],
             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
         )
     
@@ -9760,15 +9760,19 @@ class RealtimeGraphPanel(QFrame):
 
 class HardwareInfoCard(QFrame):
     """Compact card for displaying hardware category information"""
-    
-    def __init__(self, title: str, icon_char: str, parent=None):
+    title_clicked = pyqtSignal(str)  # Emits card_id when title is clicked
+
+    def __init__(self, title: str, icon_char: str, card_id: str = "", parent=None):
         super().__init__(parent)
         self.title_text = title
         self.icon_char = icon_char
+        self.card_id = card_id
         self.is_expanded = True
         self.info_rows = []
         self.setup_ui()
-    
+        # Apply card shadow per UI spec section 14.6
+        Theme.apply_card_shadow(self)
+
     def setup_ui(self):
         self.setStyleSheet(f"""
             HardwareInfoCard {{
@@ -9779,13 +9783,13 @@ class HardwareInfoCard(QFrame):
         """)
         
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(16, 12, 16, 12)
+        self.main_layout.setContentsMargins(20, 16, 20, 16)  # Spec: 20px padding
         self.main_layout.setSpacing(8)
         
         # Header (clickable to expand/collapse)
         header = QHBoxLayout()
         header.setSpacing(10)
-        
+
         # Icon container (smaller)
         icon_container = QFrame()
         icon_container.setFixedSize(28, 28)
@@ -9800,20 +9804,29 @@ class HardwareInfoCard(QFrame):
         icon_label.setStyleSheet(f"background: transparent; color: white; font-size: 12px; font-weight: bold;")
         icon_layout.addWidget(icon_label)
         header.addWidget(icon_container)
-        
-        # Title
-        title = QLabel(self.title_text)
-        title.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_PRIMARY};
-            font-size: 14px;
-            font-weight: 600;
+
+        # Title - clickable button styled as label
+        self.title_btn = QPushButton(self.title_text)
+        self.title_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.title_btn.clicked.connect(self._on_title_clicked)
+        self.title_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Theme.TEXT_PRIMARY};
+                font-size: 14px;
+                font-weight: 600;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                color: {Theme.ACCENT};
+                text-decoration: underline;
+            }}
         """)
-        header.addWidget(title)
-        
-        header.addStretch()
-        
-        # Status chip
+        header.addWidget(self.title_btn)
+
+        header.addStretch()        # Status chip
         self.status_chip = QLabel("OK")
         self.status_chip.setFixedHeight(22)
         self.status_chip.setStyleSheet(f"""
@@ -9844,6 +9857,11 @@ class HardwareInfoCard(QFrame):
         
         self.main_layout.addWidget(self.content)
     
+    def _on_title_clicked(self):
+        """Handle title button click - emit signal with card_id"""
+        if self.card_id:
+            self.title_clicked.emit(self.card_id)
+
     def set_status(self, status: str, text: str = ""):
         """Set the status chip"""
         # Common style base - note the fixed height is set on widget itself
@@ -9933,6 +9951,172 @@ class HardwareInfoCard(QFrame):
         self.content_layout.addWidget(label)
 
 
+class HardwareDetailCard(QFrame):
+    """Expandable card for displaying detailed hardware information"""
+    
+    def __init__(self, title: str, accent_color: str = "", parent=None):
+        super().__init__(parent)
+        self.title_text = title
+        self.accent_color = accent_color or Theme.ACCENT
+        self.is_expanded = True
+        self.info_rows = []
+        self.setup_ui()
+        # Apply card shadow per UI spec section 14.6
+        Theme.apply_card_shadow(self)
+    
+    def setup_ui(self):
+        # Use object name for more reliable stylesheet targeting
+        self.setObjectName("HardwareDetailCard")
+        self.setStyleSheet(f"""
+            QFrame#HardwareDetailCard {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.BORDER};
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        # Ensure the frame is drawn (not transparent)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setAutoFillBackground(True)
+        
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+        
+        # Header (clickable to expand/collapse)
+        self.header = QFrame()
+        self.header.setObjectName("DetailCardHeader")
+        self.header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header.setStyleSheet(f"""
+            QFrame#DetailCardHeader {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-bottom: 1px solid {Theme.BORDER};
+            }}
+        """)
+        header_layout = QHBoxLayout(self.header)
+        header_layout.setContentsMargins(16, 12, 16, 12)
+        header_layout.setSpacing(12)
+        
+        # Accent bar
+        accent_bar = QFrame()
+        accent_bar.setFixedSize(4, 24)
+        accent_bar.setStyleSheet(f"background: {self.accent_color}; border-radius: 2px;")
+        header_layout.addWidget(accent_bar)
+        
+        # Title
+        self.title_label = QLabel(self.title_text)
+        self.title_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 15px;
+            font-weight: 600;
+        """)
+        header_layout.addWidget(self.title_label)
+        
+        header_layout.addStretch()
+        
+        # Item count
+        self.count_label = QLabel("")
+        self.count_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        header_layout.addWidget(self.count_label)
+        
+        # Expand/collapse chevron
+        self.chevron = QLabel("▾")
+        self.chevron.setFixedSize(20, 20)
+        self.chevron.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chevron.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        header_layout.addWidget(self.chevron)
+        
+        self.header.mousePressEvent = self._toggle_expanded
+        self.main_layout.addWidget(self.header)
+        
+        # Content container - give it explicit background
+        self.content = QFrame()
+        self.content.setObjectName("DetailCardContent")
+        self.content.setStyleSheet(f"""
+            QFrame#DetailCardContent {{
+                background: {Theme.BG_CARD};
+                border: none;
+            }}
+        """)
+        self.content_layout = QVBoxLayout(self.content)
+        self.content_layout.setContentsMargins(20, 12, 20, 16)
+        self.content_layout.setSpacing(6)
+        
+        self.main_layout.addWidget(self.content)
+    
+    def _toggle_expanded(self, event):
+        """Toggle expanded/collapsed state"""
+        self.setExpanded(not self.is_expanded)
+    
+    def setExpanded(self, expanded: bool):
+        """Set expanded state"""
+        self.is_expanded = expanded
+        self.content.setVisible(expanded)
+        self.chevron.setText("▾" if expanded else "▸")
+    
+    def ensureVisible(self):
+        """Scroll this card into view"""
+        # Find parent scroll area and scroll to this widget
+        parent = self.parent()
+        while parent:
+            if isinstance(parent, QScrollArea):
+                # Get the scroll area's viewport and ensure this widget is visible
+                parent.ensureWidgetVisible(self, 50, 50)
+                break
+            parent = parent.parent() if hasattr(parent, 'parent') else None
+    
+    def clear_info(self):
+        """Clear all info rows"""
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
+            if item:
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+        self.info_rows = []
+    
+    def add_section_header(self, title: str):
+        """Add a section header"""
+        label = QLabel(title)
+        label.setStyleSheet(f"""
+            background: transparent;
+            color: {self.accent_color};
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 8px;
+            margin-bottom: 4px;
+        """)
+        self.content_layout.addWidget(label)
+    
+    def add_info_row(self, label: str, value: str, highlight: bool = False):
+        """Add an info row with label and value"""
+        row = QHBoxLayout()
+        row.setSpacing(16)
+        row.setContentsMargins(0, 2, 0, 2)
+        
+        label_widget = QLabel(label)
+        label_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        label_widget.setFixedWidth(140)
+        row.addWidget(label_widget)
+        
+        value_color = Theme.ACCENT_LIGHT if highlight else Theme.TEXT_PRIMARY
+        value_widget = QLabel(str(value) if value else "—")
+        value_widget.setStyleSheet(f"background: transparent; color: {value_color}; font-size: 12px;")
+        value_widget.setWordWrap(True)
+        row.addWidget(value_widget, 1)
+        
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        container.setLayout(row)
+        self.content_layout.addWidget(container)
+        self.info_rows.append(container)
+    
+    def set_count(self, count: int, unit: str = "items"):
+        """Set the item count display"""
+        self.count_label.setText(f"{count} {unit}")
+
+
 class HardwareSummaryGrid(QFrame):
     """Grid showing quick hardware summary stats with improved styling"""
     
@@ -9949,7 +10133,8 @@ class HardwareSummaryGrid(QFrame):
                 border-radius: {Theme.RADIUS_LG}px;
             }}
         """)
-        Theme.apply_shadow(self, blur_radius=10, offset_y=2, opacity=40)
+        # Shadow per spec section 14.6 - standard card shadow
+        Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -10081,13 +10266,14 @@ class HardwarePage(QWidget):
         self.last_updated.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
         header.addWidget(self.last_updated)
         
-        # Refresh button
+        # Refresh button with gradient and glow per spec section 14.5
         self.refresh_btn = QPushButton("Refresh Hardware Info")
         self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.refresh_btn.clicked.connect(self.refresh_hardware)
         self.refresh_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.ACCENT};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {Theme.ACCENT}, stop:1 {Theme.ACCENT_LIGHT});
                 color: white;
                 border: none;
                 padding: 10px 24px;
@@ -10096,13 +10282,17 @@ class HardwarePage(QWidget):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background: {Theme.ACCENT_HOVER};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {Theme.ACCENT_LIGHT}, stop:1 {Theme.ACCENT});
             }}
             QPushButton:disabled {{
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_TERTIARY};
             }}
         """)
+        # Add glow effect to refresh button per spec
+        Theme.apply_shadow(self.refresh_btn, blur_radius=16, offset_y=4, 
+                           color=Theme.ACCENT, opacity=120)
         header.addWidget(self.refresh_btn)
         
         # Device Manager button
@@ -10128,21 +10318,99 @@ class HardwarePage(QWidget):
         
         self.content_layout.addLayout(header)
         
+        # Tab buttons
+        tab_container = QHBoxLayout()
+        tab_container.setSpacing(0)
+        
+        self.overview_tab_btn = QPushButton("Overview")
+        self.overview_tab_btn.setCheckable(True)
+        self.overview_tab_btn.setChecked(True)
+        self.overview_tab_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.overview_tab_btn.clicked.connect(lambda: self._switch_tab(0))
+        tab_container.addWidget(self.overview_tab_btn)
+        
+        self.details_tab_btn = QPushButton("Full Details")
+        self.details_tab_btn.setCheckable(True)
+        self.details_tab_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.details_tab_btn.clicked.connect(lambda: self._switch_tab(1))
+        tab_container.addWidget(self.details_tab_btn)
+        
+        tab_container.addStretch()
+        
+        # Style the tab buttons per spec section 5.5
+        self.overview_tab_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_SECONDARY};
+                border: 1px solid {Theme.BORDER};
+                padding: 10px 24px;
+                font-size: 13px;
+                font-weight: 500;
+                border-top-left-radius: {Theme.RADIUS_SM}px;
+                border-bottom-left-radius: {Theme.RADIUS_SM}px;
+                border-top-right-radius: 0;
+                border-bottom-right-radius: 0;
+            }}
+            QPushButton:checked {{
+                background: {Theme.ACCENT};
+                color: white;
+                border-color: {Theme.ACCENT};
+            }}
+            QPushButton:hover:!checked {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        self.details_tab_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_SECONDARY};
+                border: 1px solid {Theme.BORDER};
+                border-left: none;
+                padding: 10px 24px;
+                font-size: 13px;
+                font-weight: 500;
+                border-top-left-radius: 0;
+                border-bottom-left-radius: 0;
+                border-top-right-radius: {Theme.RADIUS_SM}px;
+                border-bottom-right-radius: {Theme.RADIUS_SM}px;
+            }}
+            QPushButton:checked {{
+                background: {Theme.ACCENT};
+                color: white;
+                border-color: {Theme.ACCENT};
+            }}
+            QPushButton:hover:!checked {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        
+        self.content_layout.addLayout(tab_container)
+        
+        # Tab stack widget
+        self.tab_stack = QStackedWidget()
+        self.content_layout.addWidget(self.tab_stack, 1)
+        
+        # === Overview Tab ===
+        overview_widget = QWidget()
+        overview_layout = QVBoxLayout(overview_widget)
+        overview_layout.setContentsMargins(0, 16, 0, 0)
+        overview_layout.setSpacing(20)
+        
         # Status/loading indicator
         self.status_label = QLabel("Click 'Refresh Hardware Info' to scan your system")
         self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.content_layout.addWidget(self.status_label)
+        overview_layout.addWidget(self.status_label)
         
         # Summary grid
         self.summary_grid = HardwareSummaryGrid()
         self.summary_grid.setVisible(False)
-        self.content_layout.addWidget(self.summary_grid)
+        overview_layout.addWidget(self.summary_grid)
         
         # Real-time monitoring graphs
         self.graph_panel = RealtimeGraphPanel()
         self.graph_panel.setVisible(False)
-        self.content_layout.addWidget(self.graph_panel)
+        overview_layout.addWidget(self.graph_panel)
         
         # Hardware cards container - use grid layout for two columns
         self.cards_container = QWidget()
@@ -10162,19 +10430,24 @@ class HardwarePage(QWidget):
             ("storage", "Storage", "S", 2, 0),
             ("network", "Network", "N", 2, 1),
         ]
-        
+
         for card_id, title, icon, row, col in card_configs:
-            card = HardwareInfoCard(title, icon)
+            card = HardwareInfoCard(title, icon, card_id)
+            card.title_clicked.connect(self._navigate_to_detail)
             self.cards[card_id] = card
             self.cards_layout.addWidget(card, row, col)
-        
+
         self.cards_container.setVisible(False)
-        self.content_layout.addWidget(self.cards_container)
+        overview_layout.addWidget(self.cards_container)
+        overview_layout.addStretch()
         
-        self.content_layout.addStretch()
+        self.tab_stack.addWidget(overview_widget)
+        
+        # === Full Details Tab ===
+        self._setup_details_tab()
         
         scroll.setWidget(content)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
@@ -10182,6 +10455,60 @@ class HardwarePage(QWidget):
         # Background worker setup
         self._worker = None
         self._thread = None
+    
+    def _setup_details_tab(self):
+        """Setup the Full Details tab with expandable sections for each hardware component"""
+        details_scroll = QScrollArea()
+        details_scroll.setWidgetResizable(True)
+        details_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        details_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+        details_layout.setContentsMargins(0, 16, 0, 16)
+        details_layout.setSpacing(16)
+        
+        # Store detail cards for population later
+        self.detail_cards = {}
+        
+        # Create detail sections
+        detail_configs = [
+            ("cpu_detail", "Processor (CPU) - Full Details", Theme.ACCENT),
+            ("gpu_detail", "Graphics (GPU) - Full Details", Theme.SUCCESS),
+            ("ram_detail", "Memory (RAM) - Full Details", Theme.WARNING),
+            ("motherboard_detail", "Motherboard - Full Details", Theme.INFO),
+            ("storage_detail", "Storage - Full Details", Theme.SECONDARY),
+            ("network_detail", "Network - Full Details", Theme.ERROR),
+        ]
+        
+        for card_id, title, color in detail_configs:
+            card = HardwareDetailCard(title, color)
+            self.detail_cards[card_id] = card
+            details_layout.addWidget(card)
+        
+        details_layout.addStretch()
+        details_scroll.setWidget(details_widget)
+        self.tab_stack.addWidget(details_scroll)
+    
+    def _switch_tab(self, index: int):
+        """Switch between Overview and Full Details tabs"""
+        self.tab_stack.setCurrentIndex(index)
+        self.overview_tab_btn.setChecked(index == 0)
+        self.details_tab_btn.setChecked(index == 1)
+    
+    def _navigate_to_detail(self, card_id: str):
+        """Navigate to detailed view for the specified hardware component."""
+        # Switch to Full Details tab
+        self._switch_tab(1)
+        
+        # Scroll to the corresponding detail card
+        detail_key = f"{card_id}_detail"
+        if detail_key in self.detail_cards:
+            card = self.detail_cards[detail_key]
+            # Ensure the card is visible by scrolling to it
+            card.setExpanded(True)
+            # Use a timer to allow the UI to update before scrolling
+            QTimer.singleShot(100, lambda: card.ensureVisible())
     
     def refresh_hardware(self):
         """Refresh hardware information using background thread"""
@@ -10279,6 +10606,9 @@ class HardwarePage(QWidget):
         
         # Populate Network card
         self._populate_network_card(snapshot.network_adapters)
+        
+        # Populate Full Details tab
+        self._populate_detail_cards(snapshot)
     
     def _populate_cpu_card(self, cpu):
         """Populate CPU information card"""
@@ -10481,6 +10811,176 @@ class HardwarePage(QWidget):
         if not adapters:
             card.add_info_row("Status", "No adapters found")
             card.set_status("warning", "None")
+    
+    def _populate_detail_cards(self, snapshot):
+        """Populate the Full Details tab with comprehensive hardware information"""
+        # CPU Details
+        if "cpu_detail" in self.detail_cards and snapshot.cpu:
+            card = self.detail_cards["cpu_detail"]
+            card.clear_info()
+            cpu = snapshot.cpu
+            card.add_info_row("Processor", cpu.name, highlight=True)
+            card.add_info_row("Manufacturer", cpu.manufacturer)
+            card.add_info_row("Architecture", f"{cpu.architecture} ({cpu.address_width}-bit)")
+            card.add_info_row("Cores / Threads", f"{cpu.cores} cores / {cpu.threads} threads")
+            card.add_info_row("Base Clock", f"{cpu.max_clock_mhz} MHz")
+            card.add_info_row("Current Clock", f"{cpu.current_clock_mhz} MHz")
+            if cpu.l1_cache_kb > 0:
+                card.add_info_row("L1 Cache", f"{cpu.l1_cache_kb} KB")
+            if cpu.l2_cache_kb > 0:
+                card.add_info_row("L2 Cache", f"{cpu.l2_cache_kb} KB")
+            if cpu.l3_cache_kb > 0:
+                card.add_info_row("L3 Cache", f"{cpu.l3_cache_kb} KB")
+            card.add_info_row("Socket", cpu.socket)
+            card.add_info_row("Stepping", cpu.stepping)
+            card.add_info_row("Family", cpu.family)
+            card.add_info_row("Revision", str(cpu.revision))
+            card.add_info_row("Processor ID", cpu.processor_id)
+            card.add_info_row("Device ID", cpu.device_id)
+            if cpu.voltage_caps:
+                card.add_info_row("Voltage Caps", cpu.voltage_caps)
+            if cpu.external_clock_mhz > 0:
+                card.add_info_row("External Clock", f"{cpu.external_clock_mhz} MHz")
+        
+        # GPU Details
+        if "gpu_detail" in self.detail_cards and snapshot.gpus:
+            card = self.detail_cards["gpu_detail"]
+            card.clear_info()
+            for i, gpu in enumerate(snapshot.gpus):
+                if i > 0:
+                    card.add_info_row("", "")  # Spacer
+                card.add_info_row(f"GPU {i+1}", gpu.name, highlight=True)
+                card.add_info_row("Video Processor", gpu.video_processor)
+                if gpu.vram_mb > 0:
+                    card.add_info_row("VRAM", f"{gpu.vram_mb} MB")
+                card.add_info_row("Resolution", f"{gpu.resolution} @ {gpu.refresh_rate}Hz")
+                card.add_info_row("Bits/Pixel", str(gpu.bits_per_pixel))
+                card.add_info_row("Driver Version", gpu.driver_version)
+                card.add_info_row("Driver Date", gpu.driver_date)
+                card.add_info_row("DAC Type", gpu.adapter_dac_type)
+                card.add_info_row("Video Mode", gpu.video_mode_description)
+                card.add_info_row("Status", str(gpu.status.value) if hasattr(gpu.status, 'value') else str(gpu.status))
+                card.add_info_row("PNP Device ID", gpu.pnp_device_id[:60] + "..." if len(gpu.pnp_device_id) > 60 else gpu.pnp_device_id)
+                if gpu.installed_display_drivers:
+                    drivers = gpu.installed_display_drivers[:100] + "..." if len(gpu.installed_display_drivers) > 100 else gpu.installed_display_drivers
+                    card.add_info_row("Display Drivers", drivers)
+        
+        # RAM Details
+        if "ram_detail" in self.detail_cards and snapshot.ram:
+            card = self.detail_cards["ram_detail"]
+            card.clear_info()
+            mem = snapshot.ram
+            card.add_info_row("Total Physical", f"{mem.total_gb:.1f} GB", highlight=True)
+            card.add_info_row("Available", f"{mem.available_gb:.1f} GB")
+            card.add_info_row("Used", f"{mem.used_gb:.1f} GB ({mem.utilization_percent:.0f}%)")
+            if mem.total_virtual_memory > 0:
+                card.add_info_row("Total Virtual", f"{mem.total_virtual_memory / (1024**3):.1f} GB")
+            if mem.available_virtual_memory > 0:
+                card.add_info_row("Available Virtual", f"{mem.available_virtual_memory / (1024**3):.1f} GB")
+            if mem.page_file_total > 0:
+                card.add_info_row("Page File Total", f"{mem.page_file_total / (1024**3):.1f} GB")
+            if mem.page_file_free > 0:
+                card.add_info_row("Page File Free", f"{mem.page_file_free / (1024**3):.1f} GB")
+            
+            # RAM slot details
+            if mem.slots:
+                card.add_info_row("", "")  # Spacer
+                card.add_info_row("RAM Modules", f"{len(mem.slots)} installed", highlight=True)
+                for i, slot in enumerate(mem.slots):
+                    card.add_info_row(f"Slot {i+1}", f"{slot.capacity_gb:.0f} GB {slot.memory_type} @ {slot.speed_mhz} MHz")
+                    card.add_info_row("  Manufacturer", slot.manufacturer)
+                    card.add_info_row("  Part Number", slot.part_number)
+                    card.add_info_row("  Serial", slot.serial_number)
+                    card.add_info_row("  Form Factor", slot.form_factor)
+                    card.add_info_row("  Locator", slot.device_locator)
+        
+        # Motherboard Details
+        if "motherboard_detail" in self.detail_cards and snapshot.motherboard:
+            card = self.detail_cards["motherboard_detail"]
+            card.clear_info()
+            mb = snapshot.motherboard
+            card.add_info_row("Manufacturer", mb.manufacturer, highlight=True)
+            card.add_info_row("Product", mb.product)
+            card.add_info_row("Serial Number", mb.serial_number)
+            card.add_info_row("Version", mb.version)
+            
+            # System info
+            if mb.system_manufacturer:
+                card.add_info_row("", "")  # Spacer
+                card.add_info_row("System", mb.system_manufacturer, highlight=True)
+                card.add_info_row("Model", mb.system_model)
+                card.add_info_row("System Type", mb.system_type)
+                card.add_info_row("SKU", mb.system_sku)
+            
+            # BIOS info
+            if mb.bios_vendor:
+                card.add_info_row("", "")  # Spacer
+                card.add_info_row("BIOS", mb.bios_vendor, highlight=True)
+                card.add_info_row("BIOS Version", mb.bios_version)
+                card.add_info_row("BIOS Date", mb.bios_date)
+                card.add_info_row("SMBIOS Version", mb.smbios_version)
+            
+            # Chassis info
+            if mb.chassis_manufacturer:
+                card.add_info_row("", "")  # Spacer
+                card.add_info_row("Chassis", mb.chassis_manufacturer, highlight=True)
+                card.add_info_row("Chassis Type", mb.chassis_type)
+                card.add_info_row("Chassis Serial", mb.chassis_serial)
+        
+        # Storage Details
+        if "storage_detail" in self.detail_cards and snapshot.storage:
+            card = self.detail_cards["storage_detail"]
+            card.clear_info()
+            storage = snapshot.storage
+            
+            # Physical drives
+            if storage.physical_drives:
+                card.add_info_row("Physical Drives", f"{len(storage.physical_drives)}", highlight=True)
+                for drive in storage.physical_drives:
+                    card.add_info_row("Drive", f"{drive.model} ({drive.capacity_gb:.0f} GB)")
+                    card.add_info_row("  Type", f"{drive.media_type} • {drive.interface_type}")
+                    card.add_info_row("  Serial", drive.serial_number)
+                    card.add_info_row("  Firmware", drive.firmware_version)
+                    card.add_info_row("  SMART", drive.smart_status)
+            
+            # Logical volumes
+            if storage.volumes:
+                card.add_info_row("", "")  # Spacer
+                card.add_info_row("Volumes", f"{len(storage.volumes)}", highlight=True)
+                for vol in storage.volumes:
+                    free_pct = (vol.free_gb / vol.capacity_gb) * 100 if vol.capacity_gb > 0 else 0
+                    card.add_info_row(f"Drive {vol.drive_letter}", f"{vol.capacity_gb:.0f} GB ({free_pct:.0f}% free)")
+                    card.add_info_row("  Label", vol.label if vol.label else "(No label)")
+                    card.add_info_row("  File System", vol.file_system)
+        
+        # Network Details
+        if "network_detail" in self.detail_cards and snapshot.network_adapters:
+            card = self.detail_cards["network_detail"]
+            card.clear_info()
+            
+            for i, adapter in enumerate(snapshot.network_adapters):
+                if i > 0:
+                    card.add_info_row("", "")  # Spacer
+                card.add_info_row(f"Adapter {i+1}", adapter.name[:50] + "..." if len(adapter.name) > 50 else adapter.name, highlight=True)
+                card.add_info_row("Type", adapter.adapter_type)
+                card.add_info_row("Status", adapter.link_state)
+                if adapter.speed_mbps > 0:
+                    speed_str = f"{adapter.speed_mbps / 1000:.1f} Gbps" if adapter.speed_mbps >= 1000 else f"{adapter.speed_mbps} Mbps"
+                    card.add_info_row("Speed", speed_str)
+                card.add_info_row("MAC Address", adapter.mac_address)
+                card.add_info_row("IPv4", adapter.ipv4_address)
+                card.add_info_row("Subnet", adapter.subnet_mask)
+                if adapter.gateway:
+                    card.add_info_row("Gateway", adapter.gateway)
+                if adapter.ipv6_address and adapter.ipv6_address != "Not assigned":
+                    card.add_info_row("IPv6", adapter.ipv6_address[:40] + "..." if len(adapter.ipv6_address) > 40 else adapter.ipv6_address)
+                if adapter.dns_servers:
+                    card.add_info_row("DNS", ", ".join(adapter.dns_servers[:2]))
+                card.add_info_row("DHCP Enabled", "Yes" if adapter.dhcp_enabled else "No")
+                if adapter.dhcp_server:
+                    card.add_info_row("DHCP Server", adapter.dhcp_server)
+                card.add_info_row("Manufacturer", adapter.manufacturer)
+                card.add_info_row("PNP Device ID", adapter.pnp_device_id[:50] + "..." if len(adapter.pnp_device_id) > 50 else adapter.pnp_device_id)
     
     def open_device_manager(self):
         """Open Windows Device Manager"""
@@ -10789,6 +11289,159 @@ class SettingsPage(QWidget):
 
 
 # =============================================================================
+# CUSTOM TITLE BAR - Outlook-style window controls
+# =============================================================================
+
+class CustomTitleBar(QFrame):
+    """Custom title bar with Outlook-style window controls.
+    
+    Features:
+    - Draggable title bar for window movement
+    - Minimize, maximize/restore, close buttons
+    - Smooth hover effects
+    - Matches the dark theme aesthetic
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self._drag_pos = None
+        self._is_maximized = False
+        self.setFixedHeight(32)
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            CustomTitleBar {{
+                background: {Theme.BG_SIDEBAR};
+                border: none;
+            }}
+        """)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # App icon (small)
+        icon_label = QLabel("🏥")
+        icon_label.setStyleSheet(f"background: transparent; font-size: 14px;")
+        layout.addWidget(icon_label)
+        
+        layout.addSpacing(8)
+        
+        # Window title
+        self.title_label = QLabel("Windows Health Checker Pro")
+        self.title_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 12px;
+            font-weight: 500;
+        """)
+        layout.addWidget(self.title_label)
+        
+        layout.addStretch()
+        
+        # Window control buttons (Outlook-style)
+        btn_style_base = f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Theme.TEXT_SECONDARY};
+                font-size: 10px;
+                font-family: 'Segoe MDL2 Assets', 'Segoe UI Symbol';
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background: {Theme.SURFACE_04DP};
+            }}
+        """
+        
+        # Minimize button
+        self.minimize_btn = QPushButton("—")
+        self.minimize_btn.setFixedSize(46, 32)
+        self.minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.minimize_btn.setStyleSheet(btn_style_base)
+        self.minimize_btn.clicked.connect(self._minimize_window)
+        layout.addWidget(self.minimize_btn)
+        
+        # Maximize/Restore button
+        self.maximize_btn = QPushButton("□")
+        self.maximize_btn.setFixedSize(46, 32)
+        self.maximize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.maximize_btn.setStyleSheet(btn_style_base)
+        self.maximize_btn.clicked.connect(self._toggle_maximize)
+        layout.addWidget(self.maximize_btn)
+        
+        # Close button (red hover like Outlook)
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setFixedSize(46, 32)
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Theme.TEXT_SECONDARY};
+                font-size: 10px;
+            }}
+            QPushButton:hover {{
+                background: #c42b1c;
+                color: white;
+            }}
+        """)
+        self.close_btn.clicked.connect(self._close_window)
+        layout.addWidget(self.close_btn)
+    
+    def _minimize_window(self):
+        if self.parent_window:
+            self.parent_window.showMinimized()
+    
+    def _toggle_maximize(self):
+        if self.parent_window:
+            if self.parent_window.isMaximized():
+                self.parent_window.showNormal()
+                self.maximize_btn.setText("□")
+            else:
+                self.parent_window.showMaximized()
+                self.maximize_btn.setText("❐")
+    
+    def _close_window(self):
+        if self.parent_window:
+            self.parent_window.close()
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if self._drag_pos is not None and self.parent_window:
+            # If maximized, restore before dragging
+            if self.parent_window.isMaximized():
+                self.parent_window.showNormal()
+                self.maximize_btn.setText("□")
+                # Reposition window so cursor is at center of title bar
+                self._drag_pos = event.globalPosition().toPoint()
+                self.parent_window.move(
+                    self._drag_pos.x() - self.parent_window.width() // 2,
+                    self._drag_pos.y() - 16
+                )
+            else:
+                delta = event.globalPosition().toPoint() - self._drag_pos
+                self.parent_window.move(self.parent_window.pos() + delta)
+                self._drag_pos = event.globalPosition().toPoint()
+        super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
+    
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._toggle_maximize()
+        super().mouseDoubleClickEvent(event)
+
+
+# =============================================================================
 # MAIN WINDOW
 # =============================================================================
 
@@ -10797,6 +11450,18 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        
+        # Enable frameless window for custom title bar
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)  # Enable hover events
+        
+        # For window resizing
+        self._resize_margin = 8  # Larger margin for easier targeting
+        self._resize_dir = None
+        self._resize_start_pos = None
+        self._resize_start_geo = None
+        self.setMouseTracking(True)
         
         # Initialize backends
         self.scanner = DriverScanner()
@@ -10830,11 +11495,25 @@ class MainWindow(QMainWindow):
         
         central = QWidget()
         central.setStyleSheet(f"background: {Theme.BG_WINDOW};")
+        central.setMouseTracking(True)  # Enable mouse tracking for resize cursors
         self.setCentralWidget(central)
         
-        main_layout = QHBoxLayout(central)
+        # Main vertical layout: title bar + content
+        outer_layout = QVBoxLayout(central)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        
+        # Custom title bar (Outlook-style)
+        self.title_bar = CustomTitleBar(self)
+        outer_layout.addWidget(self.title_bar)
+        
+        # Content area (sidebar + pages)
+        content_area = QWidget()
+        content_area.setStyleSheet("background: transparent;")
+        main_layout = QHBoxLayout(content_area)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        outer_layout.addWidget(content_area, 1)
         
         # Sidebar
         sidebar = self.create_sidebar()
@@ -11648,7 +12327,7 @@ class MainWindow(QMainWindow):
         try:
             # Run Update-MpSignature
             subprocess.Popen(
-                ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', 'Update-MpSignature'],
+                ['powershell', '-Command', 'Update-MpSignature'],
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             QMessageBox.information(
@@ -11666,7 +12345,7 @@ class MainWindow(QMainWindow):
         from PyQt6.QtWidgets import QMessageBox
         try:
             subprocess.Popen(
-                ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', 'Start-MpScan -ScanType QuickScan'],
+                ['powershell', '-Command', 'Start-MpScan -ScanType QuickScan'],
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             QMessageBox.information(
@@ -11824,9 +12503,9 @@ class MainWindow(QMainWindow):
                  'Start-Process', 'cmd', '-ArgumentList', '"/k sfc /scannow"', '-Verb', 'RunAs'],
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
-            self.statusBar().showMessage("SFC scan launched in elevated terminal")
+            self.statusBar().showMessage("SFC scan launched in elevated terminal") # type: ignore
         except Exception as e:
-            self.statusBar().showMessage(f"Failed to launch SFC: {e}")
+            self.statusBar().showMessage(f"Failed to launch SFC: {e}") # type: ignore
     
     def _scan_drivers_background(self):
         """Trigger driver scan after full system scan completes"""
@@ -11847,14 +12526,131 @@ class MainWindow(QMainWindow):
                  'Start-Process', 'cmd', '-ArgumentList', f'"/k {dism_cmd}"', '-Verb', 'RunAs'],
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
-            self.statusBar().showMessage("DISM repair launched in elevated terminal")
+            self.statusBar().showMessage("DISM repair launched in elevated terminal") # pyright: ignore[reportOptionalMemberAccess]
         except Exception as e:
-            self.statusBar().showMessage(f"Failed to launch DISM: {e}")
+            self.statusBar().showMessage(f"Failed to launch DISM: {e}") # pyright: ignore[reportOptionalMemberAccess]
     
     def check_event_logs(self):
         """Check Windows event logs - delegates to EventsPage"""
         # EventsPage handles its own scanning and display
         self.events_page.load_events()
+    
+    def _get_resize_direction(self, pos):
+        """Determine resize direction based on cursor position"""
+        rect = self.rect()
+        margin = self._resize_margin
+        
+        left = pos.x() < margin
+        right = pos.x() > rect.width() - margin
+        top = pos.y() < margin
+        bottom = pos.y() > rect.height() - margin
+        
+        if top and left:
+            return "top_left"
+        elif top and right:
+            return "top_right"
+        elif bottom and left:
+            return "bottom_left"
+        elif bottom and right:
+            return "bottom_right"
+        elif left:
+            return "left"
+        elif right:
+            return "right"
+        elif top:
+            return "top"
+        elif bottom:
+            return "bottom"
+        return None
+    
+    def _update_cursor_for_position(self, global_pos):
+        """Update cursor based on global mouse position relative to window"""
+        local_pos = self.mapFromGlobal(global_pos)
+        resize_dir = self._get_resize_direction(local_pos)
+        
+        if resize_dir in ("left", "right"):
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif resize_dir in ("top", "bottom"):
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        elif resize_dir in ("top_left", "bottom_right"):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif resize_dir in ("top_right", "bottom_left"):
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        else:
+            self.unsetCursor()
+    
+    def event(self, event):
+        """Override event to handle cursor changes for resize zones"""
+        from PyQt6.QtCore import QEvent
+        
+        # Handle hover/mouse move to update cursor for resize areas
+        if event.type() == QEvent.Type.HoverMove:
+            if not self._resize_dir:  # Only update cursor when not actively resizing
+                self._update_cursor_for_position(self.mapToGlobal(event.position().toPoint()))
+        
+        return super().event(event)
+    
+    def enterEvent(self, event):
+        """Update cursor when mouse enters window"""
+        if hasattr(event, 'position'):
+            self._update_cursor_for_position(self.mapToGlobal(event.position().toPoint()))
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Reset cursor when mouse leaves window"""
+        if not self._resize_dir:
+            self.unsetCursor()
+        super().leaveEvent(event)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._resize_dir = self._get_resize_direction(event.pos())
+            if self._resize_dir:
+                self._resize_start_pos = event.globalPosition().toPoint()
+                self._resize_start_geo = self.geometry()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if self._resize_dir and self._resize_start_geo and event.buttons() & Qt.MouseButton.LeftButton:
+            delta = event.globalPosition().toPoint() - self._resize_start_pos
+            geo = self._resize_start_geo  # Original geometry at start of drag
+            min_w, min_h = self.minimumWidth(), self.minimumHeight()
+            
+            # Start with original geometry values
+            new_x = geo.x()
+            new_y = geo.y()
+            new_w = geo.width()
+            new_h = geo.height()
+            
+            if "right" in self._resize_dir:
+                new_w = max(min_w, geo.width() + delta.x())
+            if "bottom" in self._resize_dir:
+                new_h = max(min_h, geo.height() + delta.y())
+            if "left" in self._resize_dir:
+                proposed_w = geo.width() - delta.x()
+                if proposed_w >= min_w:
+                    new_w = proposed_w
+                    new_x = geo.x() + delta.x()
+                else:
+                    new_w = min_w
+                    new_x = geo.x() + geo.width() - min_w
+            if "top" in self._resize_dir:
+                proposed_h = geo.height() - delta.y()
+                if proposed_h >= min_h:
+                    new_h = proposed_h
+                    new_y = geo.y() + delta.y()
+                else:
+                    new_h = min_h
+                    new_y = geo.y() + geo.height() - min_h
+            
+            self.setGeometry(new_x, new_y, new_w, new_h)
+        
+        super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        self._resize_dir = None
+        self.unsetCursor()
+        super().mouseReleaseEvent(event)
     
     def closeEvent(self, event):
         """Clean up all running threads before closing"""
