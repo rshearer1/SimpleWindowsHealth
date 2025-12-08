@@ -1252,6 +1252,19 @@ class HealthChecker:
                 $partitions = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($disk.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition"
                 $partCount = if ($partitions) { @($partitions).Count } else { 0 }
                 
+                # Get drive letters for this disk
+                $driveLetters = @()
+                if ($partitions) {
+                    foreach ($partition in $partitions) {
+                        $logicalDisks = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($partition.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToPartition"
+                        if ($logicalDisks) {
+                            foreach ($ld in $logicalDisks) {
+                                $driveLetters += $ld.DeviceID
+                            }
+                        }
+                    }
+                }
+                
                 $output.Disks += @{
                     Model = $disk.Model
                     SerialNumber = $disk.SerialNumber
@@ -1261,6 +1274,7 @@ class HealthChecker:
                     InterfaceType = $disk.InterfaceType
                     Partitions = $partCount
                     Index = $disk.Index
+                    DriveLetters = ($driveLetters | Sort-Object) -join ', '
                 }
             }
         } catch {}

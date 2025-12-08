@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QScrollArea, QProgressBar,
     QStackedWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
-    QSizePolicy, QDialog, QGridLayout, QTextEdit, QSpacerItem
+    QSizePolicy, QDialog, QGridLayout, QTextEdit, QSpacerItem, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, pyqtSignal, QThread, QObject
 from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QFontDatabase, QPainterPath, QIcon, QPixmap
@@ -101,6 +101,126 @@ class AnimatedStackedWidget(QStackedWidget):
 # ICON EXTRACTION UTILITIES
 # =============================================================================
 
+# Check for QtWinExtras availability (PyQt5 only, not available in PyQt6)
+QTWIN_EXTRAS_AVAILABLE = False
+QtWin = None
+try:
+    from PyQt6.QtWinExtras import QtWin  # type: ignore
+    QTWIN_EXTRAS_AVAILABLE = True
+except ImportError:
+    pass
+
+# Check for pywin32 availability
+PYWIN32_AVAILABLE = False
+try:
+    import win32gui  # type: ignore
+    import win32ui  # type: ignore
+    import win32con  # type: ignore
+    PYWIN32_AVAILABLE = True
+except ImportError:
+    pass
+
+
+def extract_icon_from_exe(exe_path: str, size: int = 32) -> QPixmap | None:
+    """Extract icon from an executable using Windows Shell32 API"""
+    if not os.path.exists(exe_path):
+        return None
+    
+    try:
+        # Use Shell32 to extract icon
+        shell32 = ctypes.windll.shell32
+        
+        # ExtractIconExW returns the number of icons
+        large_icons = (ctypes.c_void_p * 1)()
+        small_icons = (ctypes.c_void_p * 1)()
+        
+        # Extract the first icon (index 0)
+        result = shell32.ExtractIconExW(exe_path, 0, large_icons, small_icons, 1)
+        
+        if result > 0:
+            # Use large icon for better quality
+            hicon = large_icons[0] if large_icons[0] else small_icons[0]
+            
+            if hicon:
+                # Method 1: Try QtWinExtras if available (PyQt5 only)
+                if QTWIN_EXTRAS_AVAILABLE and QtWin:
+                    try:
+                        pixmap = QtWin.fromHICON(hicon)
+                        # Clean up the icon handle
+                        ctypes.windll.user32.DestroyIcon(hicon)
+                        if small_icons[0]:
+                            ctypes.windll.user32.DestroyIcon(small_icons[0])
+                        return pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                                            Qt.TransformationMode.SmoothTransformation)
+                    except Exception:
+                        pass
+                
+                # Method 2: Use pywin32 if available
+                if PYWIN32_AVAILABLE:
+                    try:
+                        # Get icon info
+                        info = win32gui.GetIconInfo(hicon)  # type: ignore
+                        hbmColor = info[4]
+                        
+                        if hbmColor:
+                            # Get bitmap dimensions
+                            bmp = win32gui.GetObject(hbmColor)  # type: ignore
+                            width, height = bmp.bmWidth, bmp.bmHeight
+                            
+                            # Create compatible DC
+                            hdc = win32gui.GetDC(0)  # type: ignore
+                            hdc_mem = win32gui.CreateCompatibleDC(hdc)  # type: ignore
+                            old_bmp = win32gui.SelectObject(hdc_mem, hbmColor)  # type: ignore
+                            
+                            # Create QImage from DC
+                            from PyQt6.QtGui import QImage
+                            img = QImage(width, height, QImage.Format.Format_ARGB32)
+                            
+                            # Copy pixels
+                            for y in range(height):
+                                for x in range(width):
+                                    pixel = win32gui.GetPixel(hdc_mem, x, y)  # type: ignore
+                                    r = pixel & 0xFF
+                                    g = (pixel >> 8) & 0xFF
+                                    b = (pixel >> 16) & 0xFF
+                                    img.setPixelColor(x, y, QColor(r, g, b))
+                            
+                            # Clean up
+                            win32gui.SelectObject(hdc_mem, old_bmp)  # type: ignore
+                            win32gui.DeleteDC(hdc_mem)  # type: ignore
+                            win32gui.ReleaseDC(0, hdc)  # type: ignore
+                            win32gui.DeleteObject(hbmColor)  # type: ignore
+                            if info[3]:
+                                win32gui.DeleteObject(info[3])  # type: ignore
+                            ctypes.windll.user32.DestroyIcon(hicon)
+                            if small_icons[0]:
+                                ctypes.windll.user32.DestroyIcon(small_icons[0])
+                            
+                            pixmap = QPixmap.fromImage(img)
+                            if not pixmap.isNull():
+                                return pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                                                    Qt.TransformationMode.SmoothTransformation)
+                    except Exception:
+                        pass
+                
+                # Clean up handles if we didn't use them
+                ctypes.windll.user32.DestroyIcon(hicon)
+                if small_icons[0]:
+                    ctypes.windll.user32.DestroyIcon(small_icons[0])
+        
+        # Method 3: Fall back to QIcon which sometimes works for exe files
+        icon = QIcon(exe_path)
+        if not icon.isNull():
+            pixmap = icon.pixmap(size, size)
+            if not pixmap.isNull():
+                return pixmap
+                
+    except Exception:
+        pass
+    
+    return None
+
+
 def get_app_icon_from_registry(app_name: str) -> QPixmap | None:
     """Try to extract application icon from Windows registry install location"""
     import winreg
@@ -126,28 +246,37 @@ def get_app_icon_from_registry(app_name: str) -> QPixmap | None:
                             try:
                                 display_name, _ = winreg.QueryValueEx(subkey, "DisplayName")
                                 if app_name_lower in display_name.lower():
-                                    # Found the app, try to get icon
+                                    # Found the app, try to get DisplayIcon first
                                     try:
                                         display_icon, _ = winreg.QueryValueEx(subkey, "DisplayIcon")
-                                        icon_path = display_icon.split(",")[0].strip('"')
+                                        # DisplayIcon can be "path,index" format
+                                        icon_path = display_icon.split(",")[0].strip('"').strip()
+                                        
                                         if os.path.exists(icon_path):
-                                            icon = QIcon(icon_path)
-                                            if not icon.isNull():
-                                                return icon.pixmap(32, 32)
+                                            # Try to extract icon from the file
+                                            pixmap = extract_icon_from_exe(icon_path, 32)
+                                            if pixmap and not pixmap.isNull():
+                                                return pixmap
+                                            
+                                            # If it's an .ico file, load directly
+                                            if icon_path.lower().endswith('.ico'):
+                                                icon = QIcon(icon_path)
+                                                if not icon.isNull():
+                                                    return icon.pixmap(32, 32)
                                     except:
                                         pass
                                     
-                                    # Try InstallLocation
+                                    # Try InstallLocation to find exe
                                     try:
                                         install_loc, _ = winreg.QueryValueEx(subkey, "InstallLocation")
                                         if install_loc and os.path.isdir(install_loc):
-                                            # Look for exe files
+                                            # Look for main exe files
                                             for f in os.listdir(install_loc):
                                                 if f.endswith('.exe'):
                                                     exe_path = os.path.join(install_loc, f)
-                                                    icon = QIcon(exe_path)
-                                                    if not icon.isNull():
-                                                        return icon.pixmap(32, 32)
+                                                    pixmap = extract_icon_from_exe(exe_path, 32)
+                                                    if pixmap and not pixmap.isNull():
+                                                        return pixmap
                                     except:
                                         pass
                             except:
@@ -559,7 +688,7 @@ QScrollBar::handle:horizontal:hover {{
 
 QProgressBar {{
     background: {Theme.SURFACE_02DP};
-    border: 1px solid {Theme.BORDER};
+    border: none;
     border-radius: 5px;
     height: 10px;
 }}
@@ -572,7 +701,7 @@ QProgressBar::chunk {{
 
 QTextEdit {{
     background: {Theme.SURFACE_02DP};
-    border: 1px solid {Theme.BORDER};
+    border: none;
     border-radius: {Theme.RADIUS_MD}px;
     padding: 12px;
     color: {Theme.TEXT_PRIMARY};
@@ -588,7 +717,7 @@ QDialog {{
 QPushButton {{
     background: {Theme.SURFACE_04DP};
     color: {Theme.TEXT_PRIMARY};
-    border: 1px solid {Theme.BORDER};
+    border: none;
     border-radius: {Theme.RADIUS_SM}px;
     padding: 10px 20px;
     font-weight: 500;
@@ -596,7 +725,6 @@ QPushButton {{
 
 QPushButton:hover {{
     background: {Theme.SURFACE_08DP};
-    border-color: {Theme.PRIMARY};
     color: {Theme.PRIMARY_LIGHT};
 }}
 
@@ -609,6 +737,68 @@ QPushButton:disabled {{
     background: {Theme.SURFACE_01DP};
     color: {Theme.TEXT_DISABLED};
     border-color: transparent;
+}}
+
+QComboBox {{
+    background: {Theme.BG_CARD_HOVER};
+    color: {Theme.TEXT_PRIMARY};
+    border: none;
+    border-radius: {Theme.RADIUS_SM}px;
+    padding: 6px 12px;
+}}
+
+QComboBox::drop-down {{
+    border: none;
+    width: 20px;
+}}
+
+QComboBox QAbstractItemView {{
+    background: {Theme.BG_CARD};
+    color: {Theme.TEXT_PRIMARY};
+    border: none;
+    outline: none;
+    selection-background-color: {Theme.ACCENT};
+}}
+
+QComboBox QAbstractItemView::item {{
+    background: {Theme.BG_CARD};
+    color: {Theme.TEXT_PRIMARY};
+    border: none;
+    padding: 8px 12px;
+    min-height: 24px;
+}}
+
+QComboBox QAbstractItemView::item:hover {{
+    background: {Theme.BG_CARD_HOVER};
+}}
+
+QComboBox QAbstractItemView::item:selected {{
+    background: {Theme.ACCENT};
+    color: white;
+}}
+
+QListView {{
+    background: {Theme.BG_CARD};
+    border: none;
+    outline: none;
+}}
+
+QMenu {{
+    background: {Theme.BG_CARD};
+    color: {Theme.TEXT_PRIMARY};
+    border: none;
+    border-radius: {Theme.RADIUS_SM}px;
+    padding: 4px;
+}}
+
+QMenu::item {{
+    background: transparent;
+    padding: 8px 16px;
+    border-radius: {Theme.RADIUS_SM}px;
+}}
+
+QMenu::item:selected {{
+    background: {Theme.BG_CARD_HOVER};
 }}
 """
 
@@ -1216,7 +1406,7 @@ class AnimatedButton(QPushButton):
                 AnimatedButton {{
                     background: {Theme.BG_ELEVATED};
                     color: {Theme.TEXT_PRIMARY};
-                    border: 1px solid {Theme.BORDER};
+                    border: none;
                     border-radius: {Theme.RADIUS_SM}px;
                     padding: 10px 20px;
                     font-size: 13px;
@@ -1224,7 +1414,6 @@ class AnimatedButton(QPushButton):
                 }}
                 AnimatedButton:hover {{
                     background: {Theme.BG_CARD_HOVER};
-                    border-color: {Theme.TEXT_TERTIARY};
                 }}
                 AnimatedButton:pressed {{
                     background: {Theme.BG_CARD};
@@ -1232,7 +1421,6 @@ class AnimatedButton(QPushButton):
                 AnimatedButton:disabled {{
                     background: {Theme.BG_CARD};
                     color: {Theme.TEXT_DISABLED};
-                    border-color: {Theme.BORDER};
                 }}
             """)
     
@@ -1522,7 +1710,7 @@ class ModernListRow(QFrame):
                 QPushButton {{
                     background: {Theme.BG_ELEVATED};
                     color: {Theme.TEXT_SECONDARY};
-                    border: 1px solid {Theme.BORDER};
+                    border: none;
                     padding: 4px 14px;
                     border-radius: 4px;
                     font-size: 11px;
@@ -1531,7 +1719,6 @@ class ModernListRow(QFrame):
                 QPushButton:hover {{
                     background: {Theme.BG_CARD_HOVER};
                     color: {Theme.TEXT_PRIMARY};
-                    border-color: {Theme.ACCENT};
                 }}
             """)
         btn.clicked.connect(callback)
@@ -1623,7 +1810,7 @@ class ModernListContainer(QFrame):
         self.setStyleSheet(f"""
             ModernListContainer {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -1862,6 +2049,38 @@ class NavIcon(QWidget):
                 start_angle = -45
                 span_angle = 90
                 painter.drawArc(cx, cy - radius, radius * 2, radius * 2, start_angle * 16, span_angle * 16)
+        
+        elif self.icon_name == "wrench":
+            # Wrench/tools icon
+            import math
+            # Wrench handle (diagonal)
+            painter.drawLine(m + 2, s - m - 2, s // 2, s // 2)
+            # Wrench head (hexagonal shape at top)
+            cx, cy = s // 2 + 3, s // 2 - 3
+            head_size = 4
+            path = QPainterPath()
+            path.moveTo(cx - head_size, cy - 1)
+            path.lineTo(cx - 1, cy - head_size)
+            path.lineTo(cx + head_size - 1, cy - head_size + 1)
+            path.lineTo(cx + head_size, cy + 1)
+            path.lineTo(cx + 1, cy + head_size)
+            path.lineTo(cx - head_size + 1, cy + head_size - 1)
+            path.closeSubpath()
+            painter.drawPath(path)
+            # Opening in wrench head
+            painter.drawLine(cx + 2, cy - 2, s - m - 1, m + 1)
+        
+        elif self.icon_name == "package":
+            # Package/box icon for winget
+            # Box outline
+            painter.drawRect(m + 1, m + 3, s - 2*m - 2, s - 2*m - 4)
+            # Top flap (closed box)
+            painter.drawLine(m + 1, m + 3, s // 2, m)
+            painter.drawLine(s - m - 1, m + 3, s // 2, m)
+            # Vertical tape line
+            painter.drawLine(s // 2, m + 3, s // 2, s - m - 1)
+            # Horizontal tape line  
+            painter.drawLine(m + 1, s // 2 + 1, s - m - 1, s // 2 + 1)
 
 
 class SidebarItem(QFrame):
@@ -2365,6 +2584,215 @@ class HealthSummaryCard(QWidget):
         self.timestamp_label.setText(f"Last scan: {datetime.now().strftime('%I:%M %p')}")
 
 
+class TipsCarousel(QFrame):
+    """Rotating carousel of Windows health and safety tips"""
+    
+    TIPS = [
+        ("💡", "Keep Windows Updated", "Enable automatic updates to protect against the latest security threats and get new features."),
+        ("🛡️", "Use Windows Defender", "Windows Defender provides real-time protection against viruses, malware, and other threats."),
+        ("💾", "Back Up Your Data", "Use Windows Backup or File History to regularly back up important files to an external drive or cloud."),
+        ("🔒", "Enable BitLocker", "Encrypt your drives with BitLocker to protect your data if your device is lost or stolen."),
+        ("🧹", "Clean Up Disk Space", "Run Disk Cleanup monthly to remove temporary files and free up storage space."),
+        ("⚡", "Manage Startup Programs", "Disable unnecessary startup programs to improve boot time and system performance."),
+        ("🔐", "Use Strong Passwords", "Create unique, complex passwords and consider using Windows Hello for biometric login."),
+        ("📡", "Secure Your Network", "Use WPA3 WiFi encryption and keep your router firmware updated."),
+        ("🚫", "Avoid Suspicious Downloads", "Only download software from trusted sources like the Microsoft Store or official websites."),
+        ("🔄", "Restart Regularly", "Restart your PC weekly to apply updates and clear temporary memory issues."),
+        ("🛠️", "Check Driver Updates", "Keep device drivers updated for better performance and security."),
+        ("📊", "Monitor System Health", "Use this tool regularly to check for issues before they become problems."),
+        ("🌐", "Use a Secure Browser", "Keep your browser updated and use extensions to block malicious websites."),
+        ("⏰", "Schedule Scans", "Set up weekly antivirus scans during off-hours for comprehensive protection."),
+        ("🔔", "Review App Permissions", "Periodically check which apps have access to your camera, microphone, and location."),
+    ]
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._current_index = 0
+        self._fade_opacity = 1.0
+        self._is_fading_out = False
+        self.setup_ui()
+        self._setup_timer()
+        Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=50)
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            TipsCarousel {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 {Theme.BG_CARD}, stop:1 {Theme.BG_ELEVATED});
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        self.setFixedHeight(90)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
+        
+        # Icon with colored background
+        self.icon_container = QFrame()
+        self.icon_container.setFixedSize(50, 50)
+        self.icon_container.setStyleSheet(f"""
+            background: {Theme.ACCENT}25;
+            border-radius: 12px;
+        """)
+        icon_layout = QHBoxLayout(self.icon_container)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.icon_label = QLabel("💡")
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setStyleSheet("background: transparent; font-size: 24px;")
+        icon_layout.addWidget(self.icon_label)
+        layout.addWidget(self.icon_container)
+        
+        # Text content
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(4)
+        
+        # Header with "Tip" label
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
+        
+        tip_badge = QLabel("TIP")
+        tip_badge.setStyleSheet(f"""
+            background: {Theme.ACCENT};
+            color: white;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+        """)
+        tip_badge.setFixedHeight(16)
+        header_layout.addWidget(tip_badge)
+        
+        self.title_label = QLabel("Keep Windows Updated")
+        self.title_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 14px;
+            font-weight: 600;
+        """)
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        
+        # Navigation dots
+        self.dots_layout = QHBoxLayout()
+        self.dots_layout.setSpacing(4)
+        self.dot_labels = []
+        for i in range(len(self.TIPS)):
+            dot = QLabel("●")
+            dot.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 6px;")
+            dot.setCursor(Qt.CursorShape.PointingHandCursor)
+            dot.mousePressEvent = lambda e, idx=i: self._go_to_tip(idx)
+            self.dots_layout.addWidget(dot)
+            self.dot_labels.append(dot)
+        header_layout.addLayout(self.dots_layout)
+        
+        text_layout.addLayout(header_layout)
+        
+        self.description_label = QLabel("Enable automatic updates to protect against the latest security threats.")
+        self.description_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 12px;
+        """)
+        self.description_label.setWordWrap(True)
+        text_layout.addWidget(self.description_label)
+        
+        layout.addLayout(text_layout, 1)
+        
+        # Navigation buttons
+        nav_layout = QVBoxLayout()
+        nav_layout.setSpacing(4)
+        
+        prev_btn = QPushButton("‹")
+        prev_btn.setFixedSize(24, 24)
+        prev_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        prev_btn.clicked.connect(self._prev_tip)
+        prev_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                border-radius: 12px;
+                font-size: 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        nav_layout.addWidget(prev_btn)
+        
+        next_btn = QPushButton("›")
+        next_btn.setFixedSize(24, 24)
+        next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        next_btn.clicked.connect(self._next_tip)
+        next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                border-radius: 12px;
+                font-size: 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        nav_layout.addWidget(next_btn)
+        
+        layout.addLayout(nav_layout)
+        
+        self._update_display()
+    
+    def _setup_timer(self):
+        """Setup auto-rotation timer"""
+        self._rotation_timer = QTimer(self)
+        self._rotation_timer.timeout.connect(self._next_tip)
+        self._rotation_timer.start(8000)  # Rotate every 8 seconds
+    
+    def _update_display(self):
+        """Update the display with current tip"""
+        icon, title, description = self.TIPS[self._current_index]
+        self.icon_label.setText(icon)
+        self.title_label.setText(title)
+        self.description_label.setText(description)
+        
+        # Update dots
+        for i, dot in enumerate(self.dot_labels):
+            if i == self._current_index:
+                dot.setStyleSheet(f"background: transparent; color: {Theme.ACCENT}; font-size: 8px;")
+            else:
+                dot.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 6px;")
+    
+    def _next_tip(self):
+        """Go to next tip"""
+        self._current_index = (self._current_index + 1) % len(self.TIPS)
+        self._update_display()
+        self._reset_timer()
+    
+    def _prev_tip(self):
+        """Go to previous tip"""
+        self._current_index = (self._current_index - 1) % len(self.TIPS)
+        self._update_display()
+        self._reset_timer()
+    
+    def _go_to_tip(self, index: int):
+        """Go to specific tip"""
+        self._current_index = index
+        self._update_display()
+        self._reset_timer()
+    
+    def _reset_timer(self):
+        """Reset the auto-rotation timer"""
+        self._rotation_timer.stop()
+        self._rotation_timer.start(8000)
+
+
 class ActivityItem(QFrame):
     """Single activity log item with glowing status indicator"""
     
@@ -2465,7 +2893,7 @@ class StartupProgramsCard(QFrame):
         self.setStyleSheet(f"""
             StartupProgramsCard {{
                 background: {Theme.GLASS_BG};
-                border: 1px solid {Theme.GLASS_BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_LG}px;
             }}
         """)
@@ -2533,7 +2961,7 @@ class StartupProgramsCard(QFrame):
         # Separator
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        sep.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addWidget(sep)
         
         # Details list (top offenders)
@@ -2551,7 +2979,7 @@ class StartupProgramsCard(QFrame):
             QPushButton {{
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 8px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
@@ -2559,7 +2987,6 @@ class StartupProgramsCard(QFrame):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_ELEVATED};
-                border-color: {Theme.ACCENT};
             }}
         """)
         self.action_btn.clicked.connect(self.on_manage_clicked)
@@ -2655,7 +3082,7 @@ class BootSecurityCard(QFrame):
         self.setStyleSheet(f"""
             BootSecurityCard {{
                 background: {Theme.GLASS_BG};
-                border: 1px solid {Theme.GLASS_BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_LG}px;
             }}
         """)
@@ -2727,7 +3154,7 @@ class BootSecurityCard(QFrame):
         # Separator
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        sep.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         info_layout.addWidget(sep)
         
         # BIOS Mode row
@@ -2787,6 +3214,189 @@ class BootSecurityCard(QFrame):
         pass  # Placeholder for future backend hook
 
 
+class SystemInfoCard(QFrame):
+    """Card showing Fast Startup status and live system uptime"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        self.load_data()
+        self._setup_shadow()
+        self._start_uptime_timer()
+    
+    def _setup_shadow(self):
+        """Apply card shadow for elevation"""
+        Theme.apply_shadow(self, blur_radius=16, offset_y=4, opacity=80)
+    
+    def _start_uptime_timer(self):
+        """Start timer to update uptime every second"""
+        self.uptime_timer = QTimer(self)
+        self.uptime_timer.timeout.connect(self._update_uptime)
+        self.uptime_timer.start(1000)  # Update every second
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            SystemInfoCard {{
+                background: {Theme.GLASS_BG};
+                border: none;
+                border-radius: {Theme.RADIUS_LG}px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        
+        # Icon container (Fluent style)
+        icon_container = QFrame()
+        icon_container.setFixedSize(32, 32)
+        icon_container.setStyleSheet(f"""
+            background: {Theme.BG_CARD_HOVER};
+            border-radius: {Theme.RADIUS_SM}px;
+        """)
+        icon_layout = QHBoxLayout(icon_container)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_label = QLabel("⏱")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px;")
+        icon_layout.addWidget(icon_label)
+        header.addWidget(icon_container)
+        
+        title = QLabel("System Info")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 15px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        layout.addLayout(header)
+        
+        # Info rows container
+        info_container = QFrame()
+        info_container.setStyleSheet(f"""
+            background: {Theme.BG_CARD_HOVER};
+            border-radius: {Theme.RADIUS_SM}px;
+        """)
+        info_layout = QVBoxLayout(info_container)
+        info_layout.setContentsMargins(14, 12, 14, 12)
+        info_layout.setSpacing(10)
+        
+        # Fast Startup row
+        fast_startup_row = QHBoxLayout()
+        fast_startup_row.setSpacing(8)
+        
+        fs_label = QLabel("Fast Startup")
+        fs_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        fast_startup_row.addWidget(fs_label)
+        fast_startup_row.addStretch()
+        
+        self.fast_startup_status = QLabel("Checking...")
+        self.fast_startup_status.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        fast_startup_row.addWidget(self.fast_startup_status)
+        
+        self.fast_startup_dot = QLabel("●")
+        self.fast_startup_dot.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 10px;")
+        fast_startup_row.addWidget(self.fast_startup_dot)
+        
+        info_layout.addLayout(fast_startup_row)
+        
+        # Separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
+        info_layout.addWidget(sep)
+        
+        # Uptime row
+        uptime_row = QHBoxLayout()
+        uptime_row.setSpacing(8)
+        
+        uptime_label = QLabel("System Uptime")
+        uptime_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        uptime_row.addWidget(uptime_label)
+        uptime_row.addStretch()
+        
+        self.uptime_status = QLabel("Calculating...")
+        self.uptime_status.setStyleSheet(f"background: transparent; color: {Theme.GLOW_INFO}; font-size: 13px; font-weight: 600;")
+        uptime_row.addWidget(self.uptime_status)
+        
+        info_layout.addLayout(uptime_row)
+        
+        layout.addWidget(info_container)
+    
+    def load_data(self):
+        """Load Fast Startup status"""
+        fast_startup = self._check_fast_startup()
+        
+        if fast_startup is True:
+            self.fast_startup_status.setText("Enabled")
+            self.fast_startup_status.setStyleSheet(f"background: transparent; color: {Theme.GLOW_SUCCESS}; font-size: 13px; font-weight: 600;")
+            self.fast_startup_dot.setStyleSheet(f"background: transparent; color: {Theme.GLOW_SUCCESS}; font-size: 10px;")
+        elif fast_startup is False:
+            self.fast_startup_status.setText("Disabled")
+            self.fast_startup_status.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px; font-weight: 600;")
+            self.fast_startup_dot.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 10px;")
+        else:
+            self.fast_startup_status.setText("Unknown")
+            self.fast_startup_status.setStyleSheet(f"background: transparent; color: {Theme.GLOW_WARNING}; font-size: 13px; font-weight: 600;")
+            self.fast_startup_dot.setStyleSheet(f"background: transparent; color: {Theme.GLOW_WARNING}; font-size: 10px;")
+        
+        # Initial uptime update
+        self._update_uptime()
+    
+    def _check_fast_startup(self):
+        """Check if Fast Startup (Hybrid Boot) is enabled"""
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Control\Session Manager\Power",
+                0,
+                winreg.KEY_READ
+            )
+            value, _ = winreg.QueryValueEx(key, "HiberbootEnabled")
+            winreg.CloseKey(key)
+            return value == 1
+        except:
+            return None
+    
+    def _update_uptime(self):
+        """Update the uptime display"""
+        try:
+            import ctypes
+            # GetTickCount64 returns milliseconds since system start
+            kernel32 = ctypes.windll.kernel32
+            kernel32.GetTickCount64.restype = ctypes.c_ulonglong
+            uptime_ms = kernel32.GetTickCount64()
+            
+            # Convert to seconds
+            uptime_seconds = uptime_ms // 1000
+            
+            days = uptime_seconds // 86400
+            hours = (uptime_seconds % 86400) // 3600
+            minutes = (uptime_seconds % 3600) // 60
+            seconds = uptime_seconds % 60
+            
+            if days > 0:
+                uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+            elif hours > 0:
+                uptime_str = f"{hours}h {minutes}m {seconds}s"
+            elif minutes > 0:
+                uptime_str = f"{minutes}m {seconds}s"
+            else:
+                uptime_str = f"{seconds}s"
+            
+            self.uptime_status.setText(uptime_str)
+        except:
+            self.uptime_status.setText("Unknown")
+
+
 class ScanProgressDialog(QDialog):
     """Refined scan progress dialog"""
     
@@ -2802,7 +3412,7 @@ class ScanProgressDialog(QDialog):
         self.setStyleSheet(f"""
             QDialog {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_LG}px;
             }}
         """)
@@ -2907,7 +3517,7 @@ class ScanProgressDialog(QDialog):
             QPushButton {{
                 background: {Theme.BG_ELEVATED};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 18px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
@@ -3007,6 +3617,10 @@ class OverviewPage(QWidget):
         """)
         layout.addWidget(title)
         
+        # Tips Carousel at top
+        self.tips_carousel = TipsCarousel()
+        layout.addWidget(self.tips_carousel)
+        
         # Health summary card
         self.health_card = HealthSummaryCard()
         layout.addWidget(self.health_card)
@@ -3057,6 +3671,18 @@ class OverviewPage(QWidget):
         
         layout.addLayout(cards_row)
         
+        # Second row - System Info card
+        cards_row2 = QHBoxLayout()
+        cards_row2.setSpacing(16)
+        
+        self.system_info_card = SystemInfoCard()
+        cards_row2.addWidget(self.system_info_card, 1)
+        
+        # Spacer to match layout (or add another card here later)
+        cards_row2.addStretch(1)
+        
+        layout.addLayout(cards_row2)
+        
         # Recent Activity section
         activity_header = QLabel("Recent Activity")
         activity_header.setStyleSheet(f"""
@@ -3072,9 +3698,10 @@ class OverviewPage(QWidget):
         self.activity_container = QFrame()
         self.activity_container.setStyleSheet(f"""
             background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
+            border: none;
             border-radius: {Theme.RADIUS_MD}px;
         """)
+        Theme.apply_shadow(self.activity_container)
         self.activity_layout = QVBoxLayout(self.activity_container)
         self.activity_layout.setContentsMargins(4, 8, 4, 8)
         self.activity_layout.setSpacing(0)
@@ -3101,10 +3728,11 @@ class OverviewPage(QWidget):
         self.tools_container.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(self.tools_container)
         tools_layout = QVBoxLayout(self.tools_container)
         tools_layout.setContentsMargins(16, 16, 16, 16)
         tools_layout.setSpacing(10)
@@ -3303,7 +3931,7 @@ class ModulePage(QWidget):
         self.results_container = QFrame()
         self.results_container.setStyleSheet(f"""
             background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
+            border: none;
             border-radius: {Theme.RADIUS_MD}px;
         """)
         self.results_layout = QVBoxLayout(self.results_container)
@@ -3538,7 +4166,7 @@ class DriversPage(QWidget):
         tab_items = [
             ("installed", "Installed Drivers"),
             ("cleanup", "Driver Cleanup"),
-            ("updates", "Updates & Resources"),
+            ("updates", "Updates && Resources"),
         ]
         
         for tab_id, tab_label in tab_items:
@@ -3678,9 +4306,10 @@ class DriversPage(QWidget):
             QFrame {{
                 background: {Theme.BG_CARD};
                 border-radius: {Theme.RADIUS_MD}px;
-                border: 1px solid {Theme.BORDER};
+                border: none;
             }}
         """)
+        Theme.apply_shadow(card)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(40, 40, 40, 40)
         card_layout.setSpacing(16)
@@ -3778,7 +4407,7 @@ class DriversPage(QWidget):
         stats_frame.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -3863,7 +4492,7 @@ class DriversPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -3871,9 +4500,9 @@ class DriversPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
+        Theme.apply_shadow(rescan_btn)
         rescan_layout.addWidget(rescan_btn)
         rescan_layout.addStretch()
         
@@ -3927,9 +4556,10 @@ class DriversPage(QWidget):
             QFrame {{
                 background: {Theme.INFO_BG};
                 border-radius: {Theme.RADIUS_MD}px;
-                border: 1px solid {Theme.INFO};
+                border: none;
             }}
         """)
+        Theme.apply_shadow(info_card)
         info_layout = QHBoxLayout(info_card)
         info_layout.setContentsMargins(16, 12, 16, 12)
         
@@ -3952,9 +4582,10 @@ class DriversPage(QWidget):
                 QFrame {{
                     background: {Theme.SUCCESS_BG};
                     border-radius: {Theme.RADIUS_MD}px;
-                    border: 1px solid {Theme.SUCCESS};
+                    border: none;
                 }}
             """)
+            Theme.apply_shadow(clean_card)
             clean_layout = QVBoxLayout(clean_card)
             clean_layout.setContentsMargins(24, 24, 24, 24)
             clean_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -4054,7 +4685,7 @@ class DriversPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -4062,9 +4693,9 @@ class DriversPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
+        Theme.apply_shadow(rescan_btn)
         rescan_layout.addWidget(rescan_btn)
         rescan_layout.addStretch()
         
@@ -4304,6 +4935,11 @@ class DriversPage(QWidget):
         # Detect hardware
         vendors = self._detect_hardware_vendors()
         
+        # Check if any hardware was detected
+        has_detected = (vendors['nvidia_gpu'] or vendors['amd_gpu'] or vendors['intel_gpu'] or 
+                       vendors['intel_cpu'] or vendors['amd_cpu'] or vendors['realtek_audio'] or 
+                       vendors['realtek_network'] or vendors['intel_network'] or vendors.get('manufacturer'))
+        
         # Driver Resources section header
         resources_header = QLabel("Driver Download Resources")
         resources_header.setStyleSheet(f"""
@@ -4315,7 +4951,12 @@ class DriversPage(QWidget):
         """)
         self.updates_layout.insertWidget(self.updates_layout.count() - 1, resources_header)
         
-        resources_desc = QLabel("Recommended drivers based on your detected hardware. Other suggestions shown below.")
+        # Build description based on detected hardware
+        if has_detected:
+            desc_text = "Recommended drivers based on your detected hardware. Other suggestions shown below."
+        else:
+            desc_text = "Run a driver scan first to get personalized recommendations, or browse common drivers below."
+        resources_desc = QLabel(desc_text)
         resources_desc.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px; padding-bottom: 12px;")
         resources_desc.setWordWrap(True)
         self.updates_layout.insertWidget(self.updates_layout.count() - 1, resources_desc)
@@ -4323,7 +4964,6 @@ class DriversPage(QWidget):
         # =================================================================
         # DETECTED HARDWARE - Recommended drivers
         # =================================================================
-        has_detected = vendors['nvidia_gpu'] or vendors['amd_gpu'] or vendors['intel_gpu'] or vendors['intel_cpu'] or vendors['amd_cpu']
         
         if has_detected:
             detected_header = QLabel("⚡ Recommended for Your Hardware")
@@ -4420,6 +5060,28 @@ class DriversPage(QWidget):
                     status_text="Detected"
                 )
                 realtek_net_row.add_action_button("Download", lambda: self._open_url("https://www.realtek.com/en/component/zoo/category/network-interface-controllers-10-100-1000m-gigabit-ethernet-pci-express-software"), primary=True)
+            
+            # OEM/Manufacturer support page
+            mfr = vendors.get('manufacturer')
+            if mfr:
+                mfr_urls = {
+                    'dell': ("Dell Support", "https://www.dell.com/support/home"),
+                    'hp': ("HP Support", "https://support.hp.com/us-en/drivers"),
+                    'lenovo': ("Lenovo Support", "https://support.lenovo.com/us/en/"),
+                    'asus': ("ASUS Support", "https://www.asus.com/support/"),
+                    'msi': ("MSI Support", "https://www.msi.com/support"),
+                    'gigabyte': ("GIGABYTE Support", "https://www.gigabyte.com/Support"),
+                    'acer': ("Acer Support", "https://www.acer.com/ac/en/US/content/drivers"),
+                }
+                if mfr in mfr_urls:
+                    name, url = mfr_urls[mfr]
+                    mfr_row = detected_container.add_row(
+                        title=name,
+                        subtitle=f"✓ {mfr.title()} system detected • Get system-specific drivers",
+                        status="ok",
+                        status_text="Detected"
+                    )
+                    mfr_row.add_action_button("Open", lambda u=url: self._open_url(u), primary=True)
             
             self.updates_layout.insertWidget(self.updates_layout.count() - 1, detected_container)
         
@@ -4583,9 +5245,10 @@ class DriversPage(QWidget):
             QFrame {{
                 background: {Theme.BG_CARD};
                 border-radius: {Theme.RADIUS_MD}px;
-                border: 1px solid {Theme.BORDER};
+                border: none;
             }}
         """)
+        Theme.apply_shadow(wu_card)
         wu_layout = QHBoxLayout(wu_card)
         wu_layout.setContentsMargins(16, 16, 16, 16)
         
@@ -4749,7 +5412,7 @@ class DriversPage(QWidget):
         divider = QFrame()
         divider.setFixedWidth(1)
         divider.setFixedHeight(40)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addSpacing(24)
         layout.addWidget(divider)
         layout.addSpacing(24)
@@ -4946,15 +5609,16 @@ class StartupPage(QWidget):
         self.taskmgr_btn.clicked.connect(self.open_task_manager)
         self.taskmgr_btn.setStyleSheet(f"""
             QPushButton {{
-                background: transparent;
+                background: {Theme.BG_CARD};
                 color: {Theme.TEXT_SECONDARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 12px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
             }}
         """)
         header.addWidget(self.taskmgr_btn)
@@ -4966,11 +5630,11 @@ class StartupPage(QWidget):
         self.stats_frame.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        Theme.apply_shadow(self.stats_frame, blur_radius=12, offset_y=3, opacity=60)
         
         stats_layout = QHBoxLayout(self.stats_frame)
         stats_layout.setContentsMargins(24, 20, 24, 20)
@@ -5037,7 +5701,7 @@ class StartupPage(QWidget):
         divider = QFrame()
         divider.setFixedWidth(1)
         divider.setFixedHeight(40)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addSpacing(24)
         layout.addWidget(divider)
         layout.addSpacing(24)
@@ -5065,7 +5729,7 @@ class StartupPage(QWidget):
                     QPushButton {{
                         background: {Theme.BG_CARD};
                         color: {Theme.TEXT_SECONDARY};
-                        border: 1px solid {Theme.BORDER};
+                        border: none;
                         padding: 10px 24px;
                         border-radius: {Theme.RADIUS_SM}px;
                         font-size: 13px;
@@ -5394,7 +6058,7 @@ class EventsPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -5402,7 +6066,6 @@ class EventsPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(self.refresh_btn)
@@ -5427,11 +6090,11 @@ class EventsPage(QWidget):
         self.stats_frame.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        Theme.apply_shadow(self.stats_frame, blur_radius=12, offset_y=3, opacity=60)
         stats_layout = QHBoxLayout(self.stats_frame)
         stats_layout.setContentsMargins(24, 20, 24, 20)
         stats_layout.setSpacing(0)
@@ -5478,7 +6141,7 @@ class EventsPage(QWidget):
         divider = QFrame()
         divider.setFixedWidth(1)
         divider.setFixedHeight(40)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addSpacing(24)
         layout.addWidget(divider)
         layout.addSpacing(24)
@@ -5681,10 +6344,11 @@ class EventsPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 16, 20, 16)
@@ -5747,15 +6411,15 @@ class EventsPage(QWidget):
         export_btn.clicked.connect(self._export_event_log)
         export_btn.setStyleSheet(f"""
             QPushButton {{
-                background: transparent;
+                background: {Theme.BG_CARD_HOVER};
                 color: {Theme.ACCENT};
-                border: 1px solid {Theme.ACCENT};
+                border: none;
                 padding: 6px 12px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
             }}
             QPushButton:hover {{
-                background: {Theme.ACCENT_SUBTLE};
+                background: {Theme.BG_ELEVATED};
             }}
         """)
         btn_layout.addWidget(export_btn)
@@ -5771,10 +6435,11 @@ class EventsPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -5804,10 +6469,13 @@ class EventsPage(QWidget):
                 continue
                 
             row = QFrame()
+            # Use subtle separator only between rows, not a full border
+            separator_color = f"rgba(255, 255, 255, 0.05)" if i < len(events) - 1 else "transparent"
             row.setStyleSheet(f"""
                 QFrame {{
                     background: transparent;
-                    border-bottom: 1px solid {Theme.BORDER if i < len(events) - 1 else 'transparent'};
+                    border: none;
+                    border-bottom: 1px solid {separator_color};
                 }}
             """)
             row_layout = QVBoxLayout(row)
@@ -5942,7 +6610,7 @@ class AudioOscilloscope(QFrame):
         self.setStyleSheet(f"""
             AudioOscilloscope {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -6092,11 +6760,11 @@ class AudioDeviceCard(QFrame):
         self.setStyleSheet(f"""
             AudioDeviceCard {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
             AudioDeviceCard:hover {{
-                border-color: {Theme.ACCENT};
+                background: {Theme.BG_CARD_HOVER};
             }}
         """)
         
@@ -6161,7 +6829,7 @@ class AudioDeviceCard(QFrame):
             QPushButton {{
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 6px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
@@ -6169,7 +6837,6 @@ class AudioDeviceCard(QFrame):
             }}
             QPushButton:hover {{
                 background: {Theme.ACCENT};
-                border-color: {Theme.ACCENT};
                 color: white;
             }}
         """)
@@ -6345,7 +7012,7 @@ class AudioPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -6353,7 +7020,6 @@ class AudioPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(self.refresh_btn)
@@ -6406,7 +7072,7 @@ class AudioPage(QWidget):
         amp_frame = QFrame()
         amp_frame.setStyleSheet(f"""
             background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
+            border: none;
             border-radius: {Theme.RADIUS_MD}px;
         """)
         amp_layout = QVBoxLayout(amp_frame)
@@ -6485,7 +7151,7 @@ class AudioPage(QWidget):
                 QPushButton {{
                     background: transparent;
                     color: {Theme.TEXT_SECONDARY};
-                    border: 1px solid {Theme.BORDER};
+                    border: none;
                     padding: 4px 10px;
                     border-radius: 4px;
                     font-size: 10px;
@@ -6493,10 +7159,9 @@ class AudioPage(QWidget):
                 QPushButton:checked {{
                     background: {Theme.ACCENT};
                     color: white;
-                    border-color: {Theme.ACCENT};
                 }}
                 QPushButton:hover {{
-                    border-color: {Theme.ACCENT};
+                    background: rgba(255, 255, 255, 0.08);
                 }}
             """)
             if freq == "Mid":
@@ -6560,7 +7225,7 @@ class AudioPage(QWidget):
         test_section = QFrame()
         test_section.setStyleSheet(f"""
             background: {Theme.BG_CARD};
-            border: 1px solid {Theme.BORDER};
+            border: none;
             border-radius: {Theme.RADIUS_MD}px;
         """)
         test_layout = QVBoxLayout(test_section)
@@ -6605,14 +7270,15 @@ class AudioPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
-                border-color: {Theme.ACCENT};
+                background: {Theme.ACCENT};
+                color: white;
             }}
         """)
         test_btn_row.addWidget(self.play_left_btn)
@@ -6624,14 +7290,15 @@ class AudioPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
-                border-color: {Theme.ACCENT};
+                background: {Theme.ACCENT};
+                color: white;
             }}
         """)
         test_btn_row.addWidget(self.play_right_btn)
@@ -6887,7 +7554,7 @@ class WindowsUpdatePage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -6895,7 +7562,6 @@ class WindowsUpdatePage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(open_btn)
@@ -6913,16 +7579,16 @@ class WindowsUpdatePage(QWidget):
         self.stats_frame.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        Theme.apply_shadow(self.stats_frame, blur_radius=12, offset_y=3, opacity=60)
         self.stats_frame.setVisible(False)
         stats_layout = QHBoxLayout(self.stats_frame)
         stats_layout.setContentsMargins(24, 20, 24, 20)
         stats_layout.setSpacing(0)
-        
+
         self.stat_pending = self._create_stat("Pending", "—", Theme.WARNING)
         stats_layout.addWidget(self.stat_pending)
         self._add_stat_divider(stats_layout)
@@ -6986,7 +7652,7 @@ class WindowsUpdatePage(QWidget):
         divider = QFrame()
         divider.setFixedWidth(1)
         divider.setFixedHeight(40)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addSpacing(24)
         layout.addWidget(divider)
         layout.addSpacing(24)
@@ -7133,19 +7799,36 @@ class WindowsUpdatePage(QWidget):
             # Show "up to date" message
             up_to_date = QFrame()
             up_to_date.setStyleSheet(f"""
-                background: {Theme.BG_CARD};
-                border-radius: {Theme.RADIUS_MD}px;
-                border-left: 4px solid {Theme.SUCCESS};
+                QFrame {{
+                    background: {Theme.BG_CARD};
+                    border-radius: {Theme.RADIUS_MD}px;
+                }}
             """)
+            Theme.apply_shadow(up_to_date, blur_radius=12, offset_y=3, opacity=60)
+            
             up_to_date_layout = QHBoxLayout(up_to_date)
-            up_to_date_layout.setContentsMargins(16, 20, 16, 20)
+            up_to_date_layout.setContentsMargins(20, 20, 20, 20)
+            up_to_date_layout.setSpacing(14)
+            
+            # Success icon with background circle
+            icon_container = QFrame()
+            icon_container.setFixedSize(40, 40)
+            icon_container.setStyleSheet(f"""
+                background: {Theme.SUCCESS}22;
+                border-radius: 20px;
+            """)
+            icon_layout = QVBoxLayout(icon_container)
+            icon_layout.setContentsMargins(0, 0, 0, 0)
+            icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
             check_icon = QLabel("✓")
-            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 20px; font-weight: bold;")
-            up_to_date_layout.addWidget(check_icon)
+            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 18px; font-weight: bold;")
+            check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_layout.addWidget(check_icon)
+            up_to_date_layout.addWidget(icon_container)
             
             up_to_date_text = QLabel("Your device is up to date")
-            up_to_date_text.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
+            up_to_date_text.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 15px; font-weight: 500;")
             up_to_date_layout.addWidget(up_to_date_text)
             up_to_date_layout.addStretch()
             
@@ -7169,10 +7852,11 @@ class WindowsUpdatePage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -7190,13 +7874,13 @@ class WindowsUpdatePage(QWidget):
         header.addWidget(count_label)
         
         layout.addLayout(header)
-        
+
         # Separator
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        sep.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addWidget(sep)
-        
+
         # Updates list
         for update in updates[:10]:  # Limit to 10
             update_row = self._create_update_row(update)
@@ -7245,11 +7929,11 @@ class WindowsUpdatePage(QWidget):
         cat_color = Theme.ACCENT if 'Security' in category else Theme.TEXT_SECONDARY
         cat_label = QLabel(category)
         cat_label.setStyleSheet(f"""
-            background: transparent;
+            background: {Theme.BG_CARD_HOVER};
             color: {cat_color};
             font-size: 11px;
             padding: 2px 8px;
-            border: 1px solid {cat_color};
+            border: none;
             border-radius: 10px;
         """)
         top_row.addWidget(cat_label)
@@ -7295,28 +7979,28 @@ class WindowsUpdatePage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
+
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
-        
-        # Header
+        layout.setSpacing(8)        # Header
         header = QHBoxLayout()
         title_label = QLabel(title)
         title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;")
         header.addWidget(title_label)
         header.addStretch()
         layout.addLayout(header)
-        
+
         # Separator
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {Theme.BORDER};")
+        sep.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addWidget(sep)
-        
+
         # History list
         for entry in history[:15]:  # Limit to 15
             history_row = self._create_history_row(entry)
@@ -7325,14 +8009,19 @@ class WindowsUpdatePage(QWidget):
         return card
     
     def _create_history_row(self, entry: dict):
-        """Create a row for a history entry"""
+        """Create a row for a history entry with improved date formatting"""
         row = QFrame()
-        row.setStyleSheet("background: transparent;")
-        
+        row.setStyleSheet(f"""
+            QFrame {{
+                background: transparent;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            }}
+        """)
+
         layout = QHBoxLayout(row)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(8, 12, 8, 12)
         layout.setSpacing(12)
-        
+
         # Result icon
         result = entry.get('Result', 'Unknown')
         if result == 'Succeeded':
@@ -7344,29 +8033,67 @@ class WindowsUpdatePage(QWidget):
         else:
             icon = "○"
             icon_color = Theme.TEXT_TERTIARY
-        
+
         icon_label = QLabel(icon)
         icon_label.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 14px; font-weight: bold;")
         icon_label.setFixedWidth(20)
         layout.addWidget(icon_label)
-        
+
         # Title
         title = entry.get('Title', 'Unknown')
-        if len(title) > 80:
-            title = title[:80] + "..."
+        if len(title) > 70:
+            title = title[:70] + "..."
         title_label = QLabel(title)
-        title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
+        title_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px;")
         title_label.setWordWrap(True)
         layout.addWidget(title_label, 1)
-        
-        # Date
+
+        # Date - format more readable
         date = entry.get('Date', '')
-        date_label = QLabel(date)
-        date_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        formatted_date = self._format_update_date(date)
+        date_label = QLabel(formatted_date)
+        date_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px; min-width: 120px;")
+        date_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         layout.addWidget(date_label)
-        
+
         return row
-    
+
+    def _format_update_date(self, date_str: str) -> str:
+        """Format date string into a more readable format"""
+        if not date_str:
+            return "Unknown"
+        
+        try:
+            from datetime import datetime, timedelta
+            
+            # Try to parse common date formats
+            for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y"]:
+                try:
+                    dt = datetime.strptime(date_str.split('.')[0], fmt)
+                    now = datetime.now()
+                    diff = now - dt
+                    
+                    # Format based on how recent
+                    if diff.days == 0:
+                        hours = diff.seconds // 3600
+                        if hours == 0:
+                            mins = diff.seconds // 60
+                            return f"{mins} min ago" if mins > 1 else "Just now"
+                        return f"{hours}h ago" if hours < 12 else f"Today {dt.strftime('%H:%M')}"
+                    elif diff.days == 1:
+                        return f"Yesterday {dt.strftime('%H:%M')}"
+                    elif diff.days < 7:
+                        return f"{diff.days} days ago"
+                    else:
+                        return dt.strftime("%b %d, %Y")
+                except ValueError:
+                    continue
+            
+            # If parsing fails, return original but cleaned up
+            return date_str[:16] if len(date_str) > 16 else date_str
+        except Exception:
+            return date_str[:16] if len(date_str) > 16 else date_str
+
     def _open_windows_update(self):
         """Open Windows Update settings"""
         import subprocess
@@ -7463,7 +8190,7 @@ class StoragePage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -7471,7 +8198,6 @@ class StoragePage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(cleanup_btn)
@@ -7484,7 +8210,7 @@ class StoragePage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -7492,7 +8218,6 @@ class StoragePage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(settings_btn)
@@ -7510,11 +8235,11 @@ class StoragePage(QWidget):
         self.stats_frame.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(self.stats_frame, blur_radius=10, offset_y=2, opacity=40)
+        Theme.apply_shadow(self.stats_frame, blur_radius=12, offset_y=3, opacity=60)
         self.stats_frame.setVisible(False)
         stats_layout = QHBoxLayout(self.stats_frame)
         stats_layout.setContentsMargins(24, 20, 24, 20)
@@ -7561,7 +8286,7 @@ class StoragePage(QWidget):
         divider = QFrame()
         divider.setFixedWidth(1)
         divider.setFixedHeight(40)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addSpacing(24)
         layout.addWidget(divider)
         layout.addSpacing(24)
@@ -7705,10 +8430,11 @@ class StoragePage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -7752,11 +8478,11 @@ class StoragePage(QWidget):
         drive_type = vol.get('DriveType', 'Unknown')
         type_label = QLabel(drive_type)
         type_label.setStyleSheet(f"""
-            background: transparent;
+            background: {Theme.BG_ELEVATED};
             color: {Theme.TEXT_TERTIARY};
             font-size: 11px;
             padding: 2px 8px;
-            border: 1px solid {Theme.BORDER};
+            border: none;
             border-radius: 10px;
         """)
         top_row.addWidget(type_label)
@@ -7838,10 +8564,11 @@ class StoragePage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -7889,7 +8616,11 @@ class StoragePage(QWidget):
         model_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 500;")
         info_layout.addWidget(model_label)
         
+        # Build details string with drive letters if available
+        drive_letters = disk.get('DriveLetters', '')
         details = f"{disk.get('SizeGB', 0):.0f} GB • {media_type} • {disk.get('InterfaceType', 'Unknown')}"
+        if drive_letters:
+            details = f"{drive_letters} • {details}"
         details_label = QLabel(details)
         details_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
         info_layout.addWidget(details_label)
@@ -7911,10 +8642,11 @@ class StoragePage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -8408,14 +9140,13 @@ class SecurityPage(QWidget):
                 QPushButton {{
                     background: {Theme.BG_ELEVATED};
                     color: {Theme.TEXT_PRIMARY};
-                    border: 1px solid {Theme.BORDER};
+                    border: none;
                     padding: 8px 16px;
                     border-radius: {Theme.RADIUS_SM}px;
                     font-size: 12px;
                 }}
                 QPushButton:hover {{
                     background: {Theme.BG_CARD_HOVER};
-                    border-color: {Theme.ACCENT};
                 }}
             """)
             actions_layout.addWidget(btn)
@@ -8509,7 +9240,7 @@ class SecurityPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 20px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -8517,7 +9248,6 @@ class SecurityPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         actions_layout.addWidget(firewall_btn)
@@ -8532,7 +9262,7 @@ class SecurityPage(QWidget):
             QFrame {{
                 background: {Theme.BG_CARD};
                 border-radius: {Theme.RADIUS_MD}px;
-                border: 1px solid {Theme.BORDER};
+                border: none;
             }}
         """)
         
@@ -8830,7 +9560,7 @@ class SystemPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -8838,7 +9568,6 @@ class SystemPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(sfc_btn)
@@ -8851,7 +9580,7 @@ class SystemPage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -8859,7 +9588,6 @@ class SystemPage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
         header.addWidget(dism_btn)
@@ -8870,7 +9598,7 @@ class SystemPage(QWidget):
         self.reboot_banner = QFrame()
         self.reboot_banner.setStyleSheet(f"""
             background: {Theme.WARNING}22;
-            border: 1px solid {Theme.WARNING};
+            border: none;
             border-radius: {Theme.RADIUS_SM}px;
         """)
         self.reboot_banner.setVisible(False)
@@ -8899,11 +9627,11 @@ class SystemPage(QWidget):
         self.info_card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(self.info_card, blur_radius=12, offset_y=3, opacity=50)
+        Theme.apply_shadow(self.info_card, blur_radius=12, offset_y=3, opacity=60)
         self.info_card.setVisible(False)
         info_layout = QVBoxLayout(self.info_card)
         info_layout.setContentsMargins(24, 20, 24, 20)
@@ -9079,11 +9807,11 @@ class SystemPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=50)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -9182,11 +9910,11 @@ class SystemPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=50)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -9256,11 +9984,11 @@ class SystemPage(QWidget):
                 rp_card.setStyleSheet(f"""
                     QFrame {{
                         background: {Theme.BG_ELEVATED};
-                        border: 1px solid {Theme.BORDER};
+                        border: none;
                         border-radius: {Theme.RADIUS_SM}px;
                     }}
                     QFrame:hover {{
-                        border-color: {Theme.BORDER_LIGHT};
+                        background: {Theme.BG_CARD_HOVER};
                     }}
                 """)
                 
@@ -9333,11 +10061,11 @@ class SystemPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=50)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -9356,17 +10084,16 @@ class SystemPage(QWidget):
         open_btn.clicked.connect(self._open_programs_features)
         open_btn.setStyleSheet(f"""
             QPushButton {{
-                background: transparent;
+                background: {Theme.BG_CARD_HOVER};
                 color: {Theme.ACCENT};
-                border: 1px solid {Theme.ACCENT};
+                border: none;
                 padding: 6px 14px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 12px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
-                background: {Theme.ACCENT};
-                color: white;
+                background: {Theme.BG_ELEVATED};
             }}
         """)
         header.addWidget(open_btn)
@@ -9477,11 +10204,11 @@ class SystemPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
-        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=50)
+        Theme.apply_shadow(card, blur_radius=12, offset_y=3, opacity=60)
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -9703,7 +10430,7 @@ class RealtimeGraph(QFrame):
         self.setStyleSheet(f"""
             RealtimeGraph {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -9855,7 +10582,7 @@ class HardwareInfoCard(QFrame):
         self.setStyleSheet(f"""
             HardwareInfoCard {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -10048,7 +10775,7 @@ class HardwareDetailCard(QFrame):
         self.setStyleSheet(f"""
             QFrame#HardwareDetailCard {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -10201,6 +10928,241 @@ class HardwareDetailCard(QFrame):
         self.count_label.setText(f"{count} {unit}")
 
 
+class TemperatureMonitorCard(QFrame):
+    """Card showing real-time temperature readings from CPU, GPU, and drives"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.temp_widgets = {}
+        self._update_timer = None
+        self.setup_ui()
+        Theme.apply_shadow(self, blur_radius=12, offset_y=3, opacity=60)
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            TemperatureMonitorCard {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_LG}px;
+            }}
+        """)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 16, 20, 16)
+        main_layout.setSpacing(12)
+        
+        # Header
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        
+        # Icon
+        icon_container = QFrame()
+        icon_container.setFixedSize(32, 32)
+        icon_container.setStyleSheet(f"""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                stop:0 #ef4444, stop:1 #f97316);
+            border-radius: 8px;
+        """)
+        icon_layout = QHBoxLayout(icon_container)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_label = QLabel("🌡")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet("background: transparent; font-size: 16px;")
+        icon_layout.addWidget(icon_label)
+        header.addWidget(icon_container)
+        
+        title = QLabel("System Temperatures")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 15px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Status indicator
+        self.status_label = QLabel("Waiting for scan...")
+        self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        header.addWidget(self.status_label)
+        
+        main_layout.addLayout(header)
+        
+        # Temperature readings container
+        self.temps_container = QFrame()
+        self.temps_container.setStyleSheet(f"""
+            background: {Theme.BG_ELEVATED};
+            border-radius: {Theme.RADIUS_SM}px;
+        """)
+        temps_layout = QHBoxLayout(self.temps_container)
+        temps_layout.setContentsMargins(16, 12, 16, 12)
+        temps_layout.setSpacing(0)
+        
+        # Create temperature displays
+        temp_configs = [
+            ("cpu", "CPU", "—", "#ef4444"),
+            ("gpu", "GPU", "—", "#f97316"),
+            ("drive", "Drive", "—", "#eab308"),
+        ]
+        
+        for i, (temp_id, label, value, color) in enumerate(temp_configs):
+            if i > 0:
+                # Divider
+                temps_layout.addSpacing(20)
+                divider = QFrame()
+                divider.setFixedWidth(1)
+                divider.setFixedHeight(40)
+                divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
+                temps_layout.addWidget(divider)
+                temps_layout.addSpacing(20)
+            
+            temp_widget = self._create_temp_display(label, value, color)
+            self.temp_widgets[temp_id] = temp_widget
+            temps_layout.addWidget(temp_widget, 1)
+        
+        main_layout.addWidget(self.temps_container)
+        
+        # Info text
+        info_label = QLabel("💡 Temperature data is collected during hardware scan. Some sensors may not be available on all systems.")
+        info_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        info_label.setWordWrap(True)
+        main_layout.addWidget(info_label)
+    
+    def _create_temp_display(self, label: str, value: str, color: str) -> QFrame:
+        """Create a temperature display widget"""
+        frame = QFrame()
+        frame.setStyleSheet("background: transparent;")
+        
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Label
+        label_widget = QLabel(label)
+        label_widget.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+            font-weight: 500;
+        """)
+        label_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label_widget)
+        
+        # Value
+        value_widget = QLabel(value)
+        value_widget.setObjectName("value")
+        value_widget.setStyleSheet(f"""
+            background: transparent;
+            color: {color};
+            font-size: 24px;
+            font-weight: 700;
+        """)
+        value_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(value_widget)
+        
+        # Status text
+        status_widget = QLabel("")
+        status_widget.setObjectName("status")
+        status_widget.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 10px;
+        """)
+        status_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(status_widget)
+        
+        return frame
+    
+    def update_temperature(self, temp_id: str, temp_c: float | None, status_text: str = ""):
+        """Update a temperature reading"""
+        if temp_id not in self.temp_widgets:
+            return
+        
+        widget = self.temp_widgets[temp_id]
+        value_label = widget.findChild(QLabel, "value")
+        status_label = widget.findChild(QLabel, "status")
+        
+        if temp_c is not None:
+            # Determine color based on temperature
+            if temp_c >= 85:
+                color = "#ef4444"  # Red - Critical
+                status = "Critical"
+            elif temp_c >= 75:
+                color = "#f97316"  # Orange - Warning
+                status = "High"
+            elif temp_c >= 60:
+                color = "#eab308"  # Yellow - Warm
+                status = "Warm"
+            else:
+                color = "#22c55e"  # Green - Normal
+                status = "Normal"
+            
+            if value_label:
+                value_label.setText(f"{temp_c:.0f}°C")
+                value_label.setStyleSheet(f"""
+                    background: transparent;
+                    color: {color};
+                    font-size: 24px;
+                    font-weight: 700;
+                """)
+            if status_label:
+                status_label.setText(status_text if status_text else status)
+        else:
+            if value_label:
+                value_label.setText("N/A")
+                value_label.setStyleSheet(f"""
+                    background: transparent;
+                    color: {Theme.TEXT_TERTIARY};
+                    font-size: 24px;
+                    font-weight: 700;
+                """)
+            if status_label:
+                status_label.setText("Not available")
+    
+    def update_from_hardware_data(self, hardware_data: dict):
+        """Update all temperatures from hardware scan data"""
+        if not hardware_data:
+            return
+        
+        snapshot = hardware_data.get('snapshot')
+        if not snapshot:
+            return
+        
+        # CPU temperature
+        cpu_temp = None
+        if hasattr(snapshot, 'cpu') and snapshot.cpu:
+            cpu_temp = snapshot.cpu.temperature_c
+        self.update_temperature("cpu", cpu_temp)
+        
+        # GPU temperature
+        gpu_temp = None
+        if hasattr(snapshot, 'gpus') and snapshot.gpus:
+            for gpu in snapshot.gpus:
+                if gpu.temperature_c:
+                    gpu_temp = gpu.temperature_c
+                    break
+        self.update_temperature("gpu", gpu_temp)
+        
+        # Drive temperature (first drive with temp data)
+        drive_temp = None
+        if hasattr(snapshot, 'storage') and snapshot.storage:
+            for drive in snapshot.storage.physical_drives:
+                if hasattr(drive, 'temperature_c') and drive.temperature_c:
+                    drive_temp = drive.temperature_c
+                    break
+        self.update_temperature("drive", drive_temp)
+        
+        # Update status
+        temps_available = sum(1 for t in [cpu_temp, gpu_temp, drive_temp] if t is not None)
+        if temps_available > 0:
+            self.status_label.setText(f"{temps_available} sensor(s) detected")
+            self.status_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 11px;")
+        else:
+            self.status_label.setText("No sensors detected")
+            self.status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+
+
 class HardwareSummaryGrid(QFrame):
     """Grid showing quick hardware summary stats with improved styling"""
     
@@ -10213,7 +11175,7 @@ class HardwareSummaryGrid(QFrame):
         self.setStyleSheet(f"""
             HardwareSummaryGrid {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_LG}px;
             }}
         """)
@@ -10247,7 +11209,7 @@ class HardwareSummaryGrid(QFrame):
         divider = QFrame()
         divider.setFixedWidth(1)
         divider.setFixedHeight(50)
-        divider.setStyleSheet(f"background: {Theme.BORDER};")
+        divider.setStyleSheet("background: rgba(255, 255, 255, 0.08);")
         layout.addWidget(divider)
         layout.addSpacing(24)
     
@@ -10368,7 +11330,7 @@ class HardwarePage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 16px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
@@ -10376,9 +11338,9 @@ class HardwarePage(QWidget):
             }}
             QPushButton:hover {{
                 background: {Theme.BG_CARD_HOVER};
-                border-color: {Theme.ACCENT};
             }}
         """)
+        Theme.apply_shadow(devmgr_btn)
         header.addWidget(devmgr_btn)
         
         self.content_layout.addLayout(header)
@@ -10407,7 +11369,7 @@ class HardwarePage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_SECONDARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 padding: 10px 24px;
                 font-size: 13px;
                 font-weight: 500;
@@ -10419,7 +11381,6 @@ class HardwarePage(QWidget):
             QPushButton:checked {{
                 background: {Theme.ACCENT};
                 color: white;
-                border-color: {Theme.ACCENT};
             }}
             QPushButton:hover:!checked {{
                 background: {Theme.BG_CARD_HOVER};
@@ -10429,8 +11390,7 @@ class HardwarePage(QWidget):
             QPushButton {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_SECONDARY};
-                border: 1px solid {Theme.BORDER};
-                border-left: none;
+                border: none;
                 padding: 10px 24px;
                 font-size: 13px;
                 font-weight: 500;
@@ -10442,7 +11402,6 @@ class HardwarePage(QWidget):
             QPushButton:checked {{
                 background: {Theme.ACCENT};
                 color: white;
-                border-color: {Theme.ACCENT};
             }}
             QPushButton:hover:!checked {{
                 background: {Theme.BG_CARD_HOVER};
@@ -10471,6 +11430,11 @@ class HardwarePage(QWidget):
         self.summary_grid = HardwareSummaryGrid()
         self.summary_grid.setVisible(False)
         overview_layout.addWidget(self.summary_grid)
+        
+        # Temperature monitor card
+        self.temp_card = TemperatureMonitorCard()
+        self.temp_card.setVisible(False)
+        overview_layout.addWidget(self.temp_card)
         
         # Real-time monitoring graphs
         self.graph_panel = RealtimeGraphPanel()
@@ -10626,6 +11590,8 @@ class HardwarePage(QWidget):
         self._populate_hardware_info()
         self.status_label.setVisible(False)
         self.summary_grid.setVisible(True)
+        self.temp_card.setVisible(True)
+        self.temp_card.update_from_hardware_data(data)
         self.graph_panel.setVisible(True)
         self.graph_panel.start_monitoring()  # Start real-time updates
         self.cards_container.setVisible(True)
@@ -11067,6 +12033,1917 @@ class HardwarePage(QWidget):
         self.status_label.setVisible(True)
 
 
+class WindowsToolsPage(QWidget):
+    """Comprehensive page showing all Windows Settings and System Tools with a list menu"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_category = None
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Define all categories with their tools (name, command, description)
+        self.categories = [
+            # Windows Settings section
+            ("_settings_header", None, "SETTINGS", None),
+            ("system", "🖥️", "System", [
+                ("Display", "ms-settings:display", "Screen resolution, brightness, and display settings"),
+                ("Sound", "ms-settings:sound", "Volume, output devices, and sound preferences"),
+                ("Notifications", "ms-settings:notifications", "App notifications and focus assist"),
+                ("Power", "ms-settings:powersleep", "Sleep, screen timeout, and battery settings"),
+                ("Storage", "ms-settings:storagesense", "Disk usage and storage management"),
+                ("Multitasking", "ms-settings:multitasking", "Snap windows and virtual desktops"),
+                ("Activation", "ms-settings:activation", "Windows activation status and product key"),
+                ("About", "ms-settings:about", "Device specs, rename PC, and Windows version"),
+            ]),
+            ("network", "🌐", "Network", [
+                ("Wi-Fi", "ms-settings:network-wifi", "Connect to wireless networks"),
+                ("Ethernet", "ms-settings:network-ethernet", "Wired network adapter settings"),
+                ("VPN", "ms-settings:network-vpn", "Add and manage VPN connections"),
+                ("Mobile Hotspot", "ms-settings:network-mobilehotspot", "Share your internet connection"),
+                ("Proxy", "ms-settings:network-proxy", "Configure proxy server settings"),
+                ("Advanced Network", "ms-settings:network-advancedsettings", "Network adapters and data usage"),
+            ]),
+            ("personalize", "🎨", "Personalize", [
+                ("Background", "ms-settings:personalization-background", "Desktop wallpaper and slideshow"),
+                ("Colors", "ms-settings:colors", "Accent color and transparency effects"),
+                ("Lock Screen", "ms-settings:lockscreen", "Lock screen background and apps"),
+                ("Themes", "ms-settings:themes", "Desktop themes and icon settings"),
+                ("Fonts", "ms-settings:fonts", "Install and manage system fonts"),
+                ("Start Menu", "ms-settings:personalization-start", "Start menu layout and pinned apps"),
+                ("Taskbar", "ms-settings:taskbar", "Taskbar buttons, icons, and behaviors"),
+            ]),
+            ("apps", "📦", "Apps", [
+                ("Installed Apps", "ms-settings:appsfeatures", "Manage and uninstall applications"),
+                ("Default Apps", "ms-settings:defaultapps", "Choose default programs for file types"),
+                ("Startup Apps", "ms-settings:startupapps", "Apps that run when Windows starts"),
+                ("Optional Features", "ms-settings:optionalfeatures", "Add or remove Windows features"),
+            ]),
+            ("accounts", "👤", "Accounts", [
+                ("Your Info", "ms-settings:yourinfo", "Account picture and sign-in options"),
+                ("Email & Accounts", "ms-settings:emailandaccounts", "Email, calendar, and contacts accounts"),
+                ("Sign-in Options", "ms-settings:signinoptions", "Password, PIN, and Windows Hello"),
+                ("Family & Others", "ms-settings:otherusers", "Add family members or other users"),
+                ("Sync Settings", "ms-settings:sync", "Sync your settings across devices"),
+            ]),
+            ("time", "🕐", "Time & Language", [
+                ("Date & Time", "ms-settings:dateandtime", "Time zone, clock, and calendar settings"),
+                ("Language & Region", "ms-settings:regionlanguage", "Display language and regional format"),
+                ("Typing", "ms-settings:typing", "Keyboard, autocorrect, and suggestions"),
+                ("Speech", "ms-settings:speech", "Speech recognition and text-to-speech"),
+            ]),
+            ("gaming", "🎮", "Gaming", [
+                ("Game Bar", "ms-settings:gaming-gamebar", "Game Bar shortcuts and features"),
+                ("Captures", "ms-settings:gaming-gamedvr", "Screenshots and game recording settings"),
+                ("Game Mode", "ms-settings:gaming-gamemode", "Optimize your PC for gaming"),
+                ("Xbox Networking", "ms-settings:gaming-xboxnetworking", "Xbox Live connection status"),
+            ]),
+            ("access", "♿", "Accessibility", [
+                ("Text Size", "ms-settings:easeofaccess-display", "Make text and apps larger"),
+                ("Visual Effects", "ms-settings:easeofaccess-visualeffects", "Animations and transparency"),
+                ("Mouse Pointer", "ms-settings:easeofaccess-mousepointer", "Pointer size, color, and style"),
+                ("Magnifier", "ms-settings:easeofaccess-magnifier", "Zoom in on screen content"),
+                ("Color Filters", "ms-settings:easeofaccess-colorfilter", "Color blindness filters"),
+                ("Narrator", "ms-settings:easeofaccess-narrator", "Screen reader for blind users"),
+                ("Keyboard", "ms-settings:easeofaccess-keyboard", "On-screen keyboard and sticky keys"),
+                ("Captions", "ms-settings:easeofaccess-captions", "Subtitle appearance settings"),
+            ]),
+            ("privacy", "🔒", "Privacy & Security", [
+                ("Windows Security", "ms-settings:windowsdefender", "Virus protection and firewall status"),
+                ("Find My Device", "ms-settings:findmydevice", "Locate your lost device"),
+                ("General Privacy", "ms-settings:privacy", "Advertising ID and app permissions"),
+                ("Location", "ms-settings:privacy-location", "Location services and app access"),
+                ("Camera", "ms-settings:privacy-webcam", "Camera access for apps"),
+                ("Microphone", "ms-settings:privacy-microphone", "Microphone access for apps"),
+                ("Diagnostics", "ms-settings:privacy-feedback", "Diagnostic data and feedback"),
+            ]),
+            ("update", "🔄", "Windows Update", [
+                ("Check for Updates", "ms-settings:windowsupdate", "Download and install Windows updates"),
+                ("Update History", "ms-settings:windowsupdate-history", "View installed updates"),
+                ("Advanced Options", "ms-settings:windowsupdate-options", "Update schedule and delivery"),
+                ("Recovery", "ms-settings:recovery", "Reset PC or advanced startup"),
+            ]),
+            # System Tools section
+            ("_tools_header", None, "TOOLS", None),
+            ("core", "⚙️", "Core Tools", [
+                ("Control Panel", "control", "Classic Windows settings and configuration"),
+                ("Device Manager", "devmgmt.msc", "View and manage hardware devices"),
+                ("Disk Management", "diskmgmt.msc", "Partition, format, and manage disks"),
+                ("Computer Management", "compmgmt.msc", "Combined admin tools in one console"),
+                ("System Configuration", "msconfig", "Boot options and startup services"),
+                ("System Information", "msinfo32", "Detailed hardware and software info"),
+                ("System Properties", "sysdm.cpl", "Computer name, domain, and remote settings"),
+                ("Print Management", "printmanagement.msc", "Manage printers and print servers"),
+                ("Component Services", "dcomcnfg", "COM+ applications and DCOM config"),
+                ("Run Dialog", "shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}", "Quick command launcher"),
+            ]),
+            ("admin", "🛠️", "Admin Tools", [
+                ("Task Manager", "taskmgr", "Running processes and performance"),
+                ("Resource Monitor", "resmon", "CPU, memory, disk, and network usage"),
+                ("Performance Monitor", "perfmon", "System performance data and logs"),
+                ("Event Viewer", "eventvwr.msc", "System, security, and application logs"),
+                ("Services", "services.msc", "Start, stop, and configure services"),
+                ("Task Scheduler", "taskschd.msc", "Automate tasks and scripts"),
+                ("Group Policy Editor", "gpedit.msc", "Local computer policy settings"),
+                ("Registry Editor", "regedit", "Edit Windows registry database"),
+                ("Reliability Monitor", "perfmon /rel", "System stability and problem history"),
+                ("GPO Update", "cmd /c gpupdate /force", "Force Group Policy refresh"),
+                ("Steps Recorder", "psr", "Record steps to reproduce a problem"),
+                ("Windows Admin Center", "cmd /c start https://localhost:6516", "Web-based server management tool"),
+            ]),
+            ("enterprise", "🏢", "Enterprise Admin", [
+                ("Active Directory Users", "dsa.msc", "Manage AD users, groups, and computers"),
+                ("Active Directory Domains", "domain.msc", "Manage AD domains and trusts"),
+                ("Active Directory Sites", "dssite.msc", "Manage AD replication and sites"),
+                ("ADSI Edit", "adsiedit.msc", "Low-level Active Directory editor"),
+                ("Group Policy Management", "gpmc.msc", "Manage GPOs across the domain"),
+                ("DNS Manager", "dnsmgmt.msc", "Configure DNS zones and records"),
+                ("DHCP Manager", "dhcpmgmt.msc", "Manage DHCP scopes and leases"),
+                ("Hyper-V Manager", "virtmgmt.msc", "Manage virtual machines"),
+                ("Failover Cluster Manager", "cluadmin.msc", "Manage Windows failover clusters"),
+                ("Authorization Manager", "azman.msc", "Role-based access control (RBAC)"),
+                ("Server Manager", "ServerManager", "Windows Server management console"),
+                ("Routing and Remote Access", "rrasmgmt.msc", "VPN and routing configuration"),
+                ("Remote Desktop Services", "tsadmin.msc", "Terminal Services management"),
+                ("NFS Configuration", "nfsmgmt.msc", "Network File System settings"),
+                ("DFS Management", "dfsmgmt.msc", "Distributed File System namespaces"),
+                ("Share and Storage", "intmgmt.msc", "iSNS Server management"),
+                ("File Server Resource Mgr", "fsrm.msc", "Quotas, file screens, and reports"),
+                ("Windows Deployment Services", "wdsmgmt.msc", "Network-based OS deployment"),
+                ("WSUS Console", "wsus.msc", "Windows Server Update Services"),
+            ]),
+            ("security_tools", "🛡️", "Security Tools", [
+                ("Windows Security", "windowsdefender:", "Antivirus, firewall, and protection"),
+                ("Windows Firewall", "wf.msc", "Advanced firewall rules and settings"),
+                ("User Accounts", "netplwiz", "Manage user accounts and passwords"),
+                ("Credential Manager", "control /name Microsoft.CredentialManager", "Saved passwords and credentials"),
+                ("Local Security Policy", "secpol.msc", "Security settings and audit policies"),
+                ("Certificate Manager", "certmgr.msc", "Manage user security certificates"),
+                ("Computer Certificates", "certlm.msc", "Manage machine security certificates"),
+                ("TPM Management", "tpm.msc", "Trusted Platform Module settings"),
+                ("BitLocker Management", "control /name Microsoft.BitLockerDriveEncryption", "Drive encryption settings"),
+                ("Windows Defender Firewall", "firewall.cpl", "Basic firewall configuration"),
+                ("Local Users & Groups", "lusrmgr.msc", "Local user and group management"),
+                ("Shared Folders", "fsmgmt.msc", "View and manage shared folders"),
+                ("Encrypted File System", "cmd /c cipher", "EFS encryption management"),
+            ]),
+            ("network_tools", "📡", "Network Tools", [
+                ("Network Connections", "ncpa.cpl", "Network adapter settings and status"),
+                ("Network Sharing Center", "control /name Microsoft.NetworkAndSharingCenter", "Network status and sharing options"),
+                ("Windows Firewall", "firewall.cpl", "Basic firewall settings"),
+                ("Internet Options", "inetcpl.cpl", "Browser and internet settings"),
+                ("Remote Desktop", "mstsc", "Connect to remote computers"),
+                ("iSCSI Initiator", "iscsicpl", "Connect to iSCSI storage targets"),
+                ("Quick Assist", "quickassist", "Give or get remote assistance"),
+            ]),
+            ("disk", "💾", "Disk Tools", [
+                ("Disk Cleanup", "cleanmgr", "Delete temporary and junk files"),
+                ("Defragment & Optimize", "dfrgui", "Optimize drive performance"),
+                ("Disk Management", "diskmgmt.msc", "Partition and format drives"),
+                ("Storage Spaces", "control /name Microsoft.StorageSpaces", "Combine drives for redundancy"),
+                ("Backup Settings", "ms-settings:backup", "File backup configuration"),
+                ("Recovery Drive", "RecoveryDrive", "Create USB recovery media"),
+            ]),
+            ("display_tools", "🖼️", "Display Tools", [
+                ("Display Properties", "desk.cpl", "Screen resolution and orientation"),
+                ("Color Management", "colorcpl", "Color profiles for monitors"),
+                ("ClearType Tuner", "cttune", "Improve text readability"),
+                ("DirectX Diagnostics", "dxdiag", "Graphics and sound diagnostics"),
+                ("Advanced Graphics", "ms-settings:display-advancedgraphics", "GPU preferences for apps"),
+            ]),
+            ("devices", "🔊", "Device Tools", [
+                ("Sound Settings", "mmsys.cpl", "Playback and recording devices"),
+                ("Device Manager", "devmgmt.msc", "Hardware device management"),
+                ("Printers & Scanners", "control printers", "Add and manage printers"),
+                ("Bluetooth Devices", "ms-settings:bluetooth", "Pair Bluetooth devices"),
+                ("Mouse Properties", "main.cpl", "Mouse buttons, pointers, and speed"),
+                ("Keyboard Properties", "control keyboard", "Keyboard repeat rate and cursor"),
+                ("Windows Fax and Scan", "wfs", "Send faxes and scan documents"),
+            ]),
+            ("power", "🔋", "Power Tools", [
+                ("Power Options", "powercfg.cpl", "Power plans and advanced settings"),
+                ("Windows Mobility Center", "mblctr", "Laptop display, battery, and sync"),
+                ("Memory Diagnostics", "mdsched", "Check RAM for errors"),
+            ]),
+            ("dev", "💻", "Developer Tools", [
+                ("Command Prompt", "cmd", "Windows command line interface"),
+                ("PowerShell", "powershell", "Advanced command shell and scripting"),
+                ("PowerShell (x86)", "%SystemRoot%\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe", "32-bit PowerShell for compatibility"),
+                ("PowerShell ISE", "powershell_ise", "PowerShell script editor and debugger"),
+                ("PowerShell ISE (x86)", "%SystemRoot%\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell_ise.exe", "32-bit PowerShell ISE"),
+                ("Windows Terminal", "wt", "Modern terminal with tabs"),
+                ("Environment Variables", "rundll32 sysdm.cpl,EditEnvironmentVariables", "System and user path variables"),
+                ("ODBC Data Sources (64)", "odbcad32", "64-bit database connections"),
+                ("ODBC Data Sources (32)", "%SystemRoot%\\SysWOW64\\odbcad32.exe", "32-bit database connections"),
+                ("Windows Features", "optionalfeatures", "Enable or disable Windows features"),
+            ]),
+            ("recovery", "🔧", "Recovery Tools", [
+                ("Troubleshooters", "ms-settings:troubleshoot", "Fix common Windows problems"),
+                ("Recovery Options", "ms-settings:recovery", "Reset or reinstall Windows"),
+                ("System Restore", "rstrui", "Restore to a previous state"),
+                ("Backup & Restore", "control /name Microsoft.BackupAndRestore", "Windows 7 style backup"),
+                ("File History", "control /name Microsoft.FileHistory", "Automatic file backup"),
+            ]),
+            ("utilities", "🧰", "Utilities", [
+                ("Character Map", "charmap", "Insert special characters and symbols"),
+                ("WordPad", "wordpad", "Basic word processor"),
+                ("Notepad", "notepad", "Simple text editor"),
+                ("Paint", "mspaint", "Basic image editor"),
+                ("Snipping Tool", "snippingtool", "Capture screen screenshots"),
+                ("Windows Media Player", "wmplayer", "Play music and videos"),
+                ("Calculator", "calc", "Basic and scientific calculator"),
+                ("Magnifier", "magnify", "Zoom in on screen areas"),
+            ]),
+        ]
+        
+        # Left side: Category list menu
+        left_panel = QFrame()
+        left_panel.setFixedWidth(220)
+        left_panel.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_SIDEBAR};
+                border: none;
+            }}
+        """)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 16, 0, 16)
+        left_layout.setSpacing(0)
+        
+        # Title in menu
+        menu_title = QLabel("  Windows Tools")
+        menu_title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 16px;
+            font-weight: 600;
+            padding: 8px 16px 16px 16px;
+        """)
+        left_layout.addWidget(menu_title)
+        
+        # Scrollable menu list
+        menu_scroll = QScrollArea()
+        menu_scroll.setWidgetResizable(True)
+        menu_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        menu_scroll.setStyleSheet("""
+            QScrollArea { border: none; background: transparent; }
+            QScrollBar:vertical { width: 6px; }
+        """)
+        
+        menu_content = QWidget()
+        menu_content.setStyleSheet("background: transparent;")
+        self.menu_layout = QVBoxLayout(menu_content)
+        self.menu_layout.setContentsMargins(8, 0, 8, 0)
+        self.menu_layout.setSpacing(2)
+        
+        self.menu_items = {}
+        for cat_id, icon, name, tools in self.categories:
+            if cat_id.startswith("_"):
+                # Section header
+                header = QLabel(name)
+                header.setStyleSheet(f"""
+                    background: transparent;
+                    color: {Theme.TEXT_TERTIARY};
+                    font-size: 10px;
+                    font-weight: 600;
+                    letter-spacing: 1px;
+                    padding: 12px 8px 4px 8px;
+                """)
+                self.menu_layout.addWidget(header)
+            else:
+                # Menu item
+                item = self._create_menu_item(cat_id, icon, name, len(tools))
+                self.menu_items[cat_id] = item
+                self.menu_layout.addWidget(item)
+        
+        self.menu_layout.addStretch()
+        menu_scroll.setWidget(menu_content)
+        left_layout.addWidget(menu_scroll)
+        layout.addWidget(left_panel)
+        
+        # Right side: Tools display area
+        right_panel = QWidget()
+        right_panel.setStyleSheet(f"background: {Theme.BG_WINDOW};")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(24, 20, 24, 20)
+        right_layout.setSpacing(16)
+        
+        # Category header
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(12)
+        
+        self.cat_icon = QLabel("⚙️")
+        self.cat_icon.setStyleSheet(f"background: transparent; font-size: 24px;")
+        header_layout.addWidget(self.cat_icon)
+        
+        self.cat_title = QLabel("Select a Category")
+        self.cat_title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 20px;
+            font-weight: 600;
+        """)
+        header_layout.addWidget(self.cat_title)
+        header_layout.addStretch()
+        right_layout.addLayout(header_layout)
+        
+        # Tools grid in a scroll area
+        tools_scroll = QScrollArea()
+        tools_scroll.setWidgetResizable(True)
+        tools_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tools_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        self.tools_content = QWidget()
+        self.tools_content.setStyleSheet("background: transparent;")
+        self.tools_layout = QGridLayout(self.tools_content)
+        self.tools_layout.setSpacing(12)
+        self.tools_layout.setContentsMargins(0, 0, 0, 0)
+        self.tools_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
+        # Placeholder
+        placeholder = QLabel("← Select a category from the menu")
+        placeholder.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 14px;")
+        self.tools_layout.addWidget(placeholder, 0, 0)
+        
+        tools_scroll.setWidget(self.tools_content)
+        right_layout.addWidget(tools_scroll)
+        
+        layout.addWidget(right_panel, 1)
+        
+        # Select first real category by default
+        self._select_category("system")
+    
+    def _create_menu_item(self, cat_id: str, icon: str, name: str, count: int) -> QFrame:
+        """Create a menu list item"""
+        item = QFrame()
+        item.setProperty("cat_id", cat_id)
+        item.setCursor(Qt.CursorShape.PointingHandCursor)
+        item.setFixedHeight(34)
+        item.setStyleSheet(f"""
+            QFrame {{
+                background: transparent;
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(12, 0, 10, 0)
+        layout.setSpacing(10)
+        
+        # Icon - emoji for visual recognition
+        icon_label = QLabel(icon)
+        icon_label.setFixedWidth(20)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet("background: transparent; border: none; font-size: 14px;")
+        layout.addWidget(icon_label)
+        
+        # Name
+        name_label = QLabel(name)
+        name_label.setStyleSheet(f"background: transparent; border: none; color: {Theme.TEXT_PRIMARY}; font-size: 13px;")
+        layout.addWidget(name_label, 1)
+        
+        # Count badge
+        count_label = QLabel(str(count))
+        count_label.setFixedSize(22, 18)
+        count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        count_label.setStyleSheet(f"""
+            background: transparent;
+            border: none;
+            color: {Theme.TEXT_TERTIARY};
+            font-size: 11px;
+        """)
+        layout.addWidget(count_label)
+        
+        # Click handler
+        item.mousePressEvent = lambda e, cid=cat_id: self._select_category(cid)
+        
+        return item
+    
+    def _select_category(self, cat_id: str):
+        """Select a category and display its tools"""
+        self.current_category = cat_id
+        
+        # Update menu item styles
+        for cid, item in self.menu_items.items():
+            if cid == cat_id:
+                item.setStyleSheet(f"""
+                    QFrame {{
+                        background: rgba(0, 120, 212, 0.15);
+                        border: none;
+                        border-left: 3px solid {Theme.ACCENT};
+                        border-radius: 0px;
+                        margin-left: 0px;
+                    }}
+                """)
+            else:
+                item.setStyleSheet(f"""
+                    QFrame {{
+                        background: transparent;
+                        border: none;
+                        border-radius: {Theme.RADIUS_SM}px;
+                    }}
+                    QFrame:hover {{
+                        background: {Theme.BG_CARD_HOVER};
+                    }}
+                """)
+        
+        # Find category data
+        cat_data = None
+        for cid, icon, name, tools in self.categories:
+            if cid == cat_id:
+                cat_data = (icon, name, tools)
+                break
+        
+        if not cat_data:
+            return
+        
+        icon, name, tools = cat_data
+        
+        # Update header
+        self.cat_icon.setText(icon)
+        self.cat_title.setText(name)
+        
+        # Clear and rebuild tools grid
+        while self.tools_layout.count():
+            item = self.tools_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Add tools as cards in a grid (2 columns for wider cards with descriptions)
+        cols = 2
+        for i, tool_data in enumerate(tools):
+            tool_name, command, description = tool_data
+            row = i // cols
+            col = i % cols
+            card = self._create_tool_card(tool_name, command, description)
+            self.tools_layout.addWidget(card, row, col)
+    
+    def _create_tool_card(self, name: str, command: str, description: str) -> QFrame:
+        """Create a tool card with description"""
+        card = QFrame()
+        card.setCursor(Qt.CursorShape.PointingHandCursor)
+        card.setMinimumSize(320, 70)
+        card.setMaximumHeight(80)
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        Theme.apply_shadow(card, blur_radius=8, offset_y=2, opacity=40)
+        
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        
+        # Type indicator dot
+        if command.startswith("ms-settings:"):
+            dot_color = Theme.INFO
+        elif command.endswith(".msc"):
+            dot_color = Theme.WARNING
+        elif command.endswith(".cpl"):
+            dot_color = Theme.SECONDARY
+        else:
+            dot_color = Theme.SUCCESS
+        
+        dot = QLabel("●")
+        dot.setFixedWidth(14)
+        dot.setStyleSheet(f"background: transparent; border: none; color: {dot_color}; font-size: 10px;")
+        dot.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(dot)
+        
+        # Text content
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+        
+        # Tool name
+        name_label = QLabel(name)
+        name_label.setStyleSheet(f"""
+            background: transparent;
+            border: none;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 13px;
+            font-weight: 600;
+        """)
+        text_layout.addWidget(name_label)
+        
+        # Description
+        desc_label = QLabel(description)
+        desc_label.setStyleSheet(f"""
+            background: transparent;
+            border: none;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 11px;
+        """)
+        desc_label.setWordWrap(True)
+        text_layout.addWidget(desc_label)
+        
+        layout.addLayout(text_layout, 1)
+        
+        # Arrow indicator
+        arrow = QLabel("›")
+        arrow.setStyleSheet(f"background: transparent; border: none; color: {Theme.TEXT_TERTIARY}; font-size: 18px;")
+        layout.addWidget(arrow)
+        
+        # Click handler
+        card.mousePressEvent = lambda e, cmd=command: self._launch_tool(cmd)
+        
+        return card
+    
+    def _launch_tool(self, command: str):
+        """Launch a Windows tool or settings page"""
+        import subprocess
+        import os
+        
+        try:
+            if command.startswith("ms-settings:") or command.startswith("windowsdefender:"):
+                os.startfile(command)
+            elif command.endswith(".msc") or command.endswith(".cpl"):
+                subprocess.Popen(["mmc", command] if command.endswith(".msc") else [command], 
+                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+            elif command.startswith("control") or command.startswith("rundll32") or command.startswith("perfmon"):
+                subprocess.Popen(command, shell=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+            else:
+                subprocess.Popen([command],
+                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Error", f"Failed to launch {command}: {str(e)}")
+
+
+class WingetPage(QWidget):
+    """Winget package manager page with search, install, and favorites for fast deployment"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.favorites = self._load_favorites()
+        self.search_results = []
+        self.installed_apps = []
+        self.search_thread = None
+        self.install_thread = None
+        self.setup_ui()
+        self._check_winget_available()
+    
+    def _load_favorites(self) -> list:
+        """Load favorites from config file"""
+        import json
+        import os
+        config_path = os.path.join(os.path.expanduser("~"), ".health_checker_winget_favorites.json")
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    return json.load(f)
+        except:
+            pass
+        return []
+    
+    def _save_favorites(self):
+        """Save favorites to config file"""
+        import json
+        import os
+        config_path = os.path.join(os.path.expanduser("~"), ".health_checker_winget_favorites.json")
+        try:
+            with open(config_path, "w") as f:
+                json.dump(self.favorites, f, indent=2)
+        except:
+            pass
+    
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Left panel - Favorites
+        left_panel = QFrame()
+        left_panel.setFixedWidth(280)
+        left_panel.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_SIDEBAR};
+                border: none;
+            }}
+        """)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(16, 20, 16, 20)
+        left_layout.setSpacing(12)
+        
+        # Favorites header
+        fav_header = QHBoxLayout()
+        fav_title = QLabel("⭐ Favorites")
+        fav_title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 16px;
+            font-weight: 600;
+        """)
+        fav_header.addWidget(fav_title)
+        fav_header.addStretch()
+        
+        # Install All button
+        self.install_all_btn = QPushButton("Install All")
+        self.install_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.install_all_btn.clicked.connect(self._install_all_favorites)
+        self.install_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.SUCCESS};
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: #2ecc71;
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        fav_header.addWidget(self.install_all_btn)
+        left_layout.addLayout(fav_header)
+        
+        # Export/Import buttons
+        export_row = QHBoxLayout()
+        export_row.setSpacing(8)
+        
+        self.export_btn = QPushButton("Export")
+        self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.export_btn.clicked.connect(self._export_favorites)
+        self.export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 6px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        export_row.addWidget(self.export_btn)
+        
+        self.import_btn = QPushButton("Import")
+        self.import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.import_btn.clicked.connect(self._import_favorites)
+        self.import_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 6px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        export_row.addWidget(self.import_btn)
+        export_row.addStretch()
+        left_layout.addLayout(export_row)
+        
+        # Favorites list
+        fav_scroll = QScrollArea()
+        fav_scroll.setWidgetResizable(True)
+        fav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        fav_scroll.setStyleSheet("""
+            QScrollArea { border: none; background: transparent; }
+            QScrollBar:vertical { width: 6px; }
+        """)
+        
+        self.fav_content = QWidget()
+        self.fav_content.setStyleSheet("background: transparent;")
+        self.fav_layout = QVBoxLayout(self.fav_content)
+        self.fav_layout.setContentsMargins(0, 0, 0, 0)
+        self.fav_layout.setSpacing(6)
+        self.fav_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self._refresh_favorites_list()
+        
+        fav_scroll.setWidget(self.fav_content)
+        left_layout.addWidget(fav_scroll)
+        
+        layout.addWidget(left_panel)
+        
+        # Right panel - Search and results
+        right_panel = QWidget()
+        right_panel.setStyleSheet(f"background: {Theme.BG_WINDOW};")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(24, 20, 24, 20)
+        right_layout.setSpacing(16)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("📦 Winget Package Manager")
+        title.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 24px;
+            font-weight: 600;
+        """)
+        header.addWidget(title)
+        header.addStretch()
+        
+        # Winget status indicator
+        self.winget_status = QLabel("Checking winget...")
+        self.winget_status.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        header.addWidget(self.winget_status)
+        
+        right_layout.addLayout(header)
+        
+        # Search bar
+        search_frame = QFrame()
+        search_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        Theme.apply_shadow(search_frame, blur_radius=12, offset_y=3, opacity=60)
+        
+        search_layout = QHBoxLayout(search_frame)
+        search_layout.setContentsMargins(16, 12, 16, 12)
+        search_layout.setSpacing(12)
+        
+        search_icon = QLabel("🔍")
+        search_icon.setStyleSheet("background: transparent; font-size: 16px;")
+        search_layout.addWidget(search_icon)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search for apps (e.g., 'vscode', 'firefox', 'git')...")
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: transparent;
+                border: none;
+                color: {Theme.TEXT_PRIMARY};
+                font-size: 14px;
+                padding: 4px;
+            }}
+        """)
+        self.search_input.returnPressed.connect(self._search_apps)
+        search_layout.addWidget(self.search_input, 1)
+        
+        self.search_btn = QPushButton("Search")
+        self.search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.search_btn.clicked.connect(self._search_apps)
+        self.search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        search_layout.addWidget(self.search_btn)
+        
+        right_layout.addWidget(search_frame)
+        
+        # Results area
+        self.results_label = QLabel("Enter a search term to find apps")
+        self.results_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        right_layout.addWidget(self.results_label)
+        
+        # Results scroll area
+        results_scroll = QScrollArea()
+        results_scroll.setWidgetResizable(True)
+        results_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        results_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        self.results_content = QWidget()
+        self.results_content.setStyleSheet("background: transparent;")
+        self.results_layout = QVBoxLayout(self.results_content)
+        self.results_layout.setContentsMargins(0, 0, 0, 0)
+        self.results_layout.setSpacing(8)
+        self.results_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        results_scroll.setWidget(self.results_content)
+        right_layout.addWidget(results_scroll)
+        
+        layout.addWidget(right_panel, 1)
+    
+    def _check_winget_available(self):
+        """Check if winget is available on the system"""
+        def check():
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ["winget", "--version"],
+                    capture_output=True,
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
+                return result.returncode == 0, result.stdout.strip()
+            except:
+                return False, None
+        
+        class WingetCheckThread(QThread):
+            finished = pyqtSignal(bool, str)
+            
+            def run(self):
+                available, version = check()
+                self.finished.emit(available, version or "")
+        
+        self.check_thread = WingetCheckThread()
+        self.check_thread.finished.connect(self._on_winget_check_complete)
+        self.check_thread.start()
+    
+    def _on_winget_check_complete(self, available: bool, version: str):
+        """Handle winget availability check result"""
+        if available:
+            self.winget_status.setText(f"✓ winget {version}")
+            self.winget_status.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+        else:
+            self.winget_status.setText("✗ winget not found")
+            self.winget_status.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 12px;")
+            self.search_btn.setEnabled(False)
+            self.search_input.setEnabled(False)
+            self.results_label.setText("Winget is not installed. Please install it from the Microsoft Store (App Installer).")
+    
+    def _refresh_favorites_list(self):
+        """Refresh the favorites list display"""
+        # Clear existing items
+        while self.fav_layout.count():
+            item = self.fav_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        if not self.favorites:
+            empty_label = QLabel("No favorites yet.\nSearch and add apps to favorites\nfor quick deployment.")
+            empty_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setWordWrap(True)
+            self.fav_layout.addWidget(empty_label)
+            self.install_all_btn.setEnabled(False)
+        else:
+            self.install_all_btn.setEnabled(True)
+            for fav in self.favorites:
+                item = self._create_favorite_item(fav)
+                self.fav_layout.addWidget(item)
+    
+    def _create_favorite_item(self, fav: dict) -> QFrame:
+        """Create a favorite item widget"""
+        item = QFrame()
+        item.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
+        
+        # App info
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(2)
+        
+        name_label = QLabel(fav.get("name", fav.get("id", "Unknown")))
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px; font-weight: 500;")
+        info_layout.addWidget(name_label)
+        
+        id_label = QLabel(fav.get("id", ""))
+        id_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 10px;")
+        info_layout.addWidget(id_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Install button
+        install_btn = QPushButton("⬇")
+        install_btn.setFixedSize(28, 28)
+        install_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        install_btn.setToolTip("Install")
+        install_btn.clicked.connect(lambda: self._install_app(fav.get("id", "")))
+        install_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.SUCCESS}40;
+                color: {Theme.SUCCESS};
+                border: none;
+                border-radius: 4px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.SUCCESS};
+                color: white;
+            }}
+        """)
+        layout.addWidget(install_btn)
+        
+        # Remove button
+        remove_btn = QPushButton("✕")
+        remove_btn.setFixedSize(28, 28)
+        remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        remove_btn.setToolTip("Remove from favorites")
+        remove_btn.clicked.connect(lambda: self._remove_favorite(fav.get("id", "")))
+        remove_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ERROR}40;
+                color: {Theme.ERROR};
+                border: none;
+                border-radius: 4px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ERROR};
+                color: white;
+            }}
+        """)
+        layout.addWidget(remove_btn)
+        
+        return item
+    
+    def _add_favorite(self, app_id: str, app_name: str):
+        """Add an app to favorites"""
+        # Check if already exists
+        for fav in self.favorites:
+            if fav.get("id") == app_id:
+                return
+        
+        self.favorites.append({"id": app_id, "name": app_name})
+        self._save_favorites()
+        self._refresh_favorites_list()
+    
+    def _remove_favorite(self, app_id: str):
+        """Remove an app from favorites"""
+        self.favorites = [f for f in self.favorites if f.get("id") != app_id]
+        self._save_favorites()
+        self._refresh_favorites_list()
+        # Also update search results to reflect the change
+        self._update_results_favorite_states()
+    
+    def _update_results_favorite_states(self):
+        """Update the favorite button states in search results"""
+        fav_ids = {f.get("id") for f in self.favorites}
+        for i in range(self.results_layout.count()):
+            widget = self.results_layout.itemAt(i).widget()
+            if widget:
+                app_id = widget.property("app_id")
+                fav_btn = widget.findChild(QPushButton, "fav_btn")
+                if fav_btn and app_id:
+                    is_fav = app_id in fav_ids
+                    fav_btn.setText("★" if is_fav else "☆")
+                    fav_btn.setToolTip("Remove from favorites" if is_fav else "Add to favorites")
+    
+    def _search_apps(self):
+        """Search for apps using winget"""
+        query = self.search_input.text().strip()
+        if not query:
+            return
+        
+        self.search_btn.setEnabled(False)
+        self.search_btn.setText("Searching...")
+        self.results_label.setText(f"Searching for '{query}'...")
+        
+        # Clear previous results
+        while self.results_layout.count():
+            item = self.results_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        class SearchThread(QThread):
+            finished = pyqtSignal(list)
+            error = pyqtSignal(str)
+            
+            def __init__(self, query):
+                super().__init__()
+                self.query = query
+            
+            def run(self):
+                import subprocess
+                import re
+                try:
+                    result = subprocess.run(
+                        ["winget", "search", self.query, "--accept-source-agreements"],
+                        capture_output=True,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                        timeout=30,
+                        encoding='utf-8',
+                        errors='replace'
+                    )
+                    
+                    # Parse results
+                    apps = []
+                    output = result.stdout
+                    
+                    # Handle both \r\n and \n line endings
+                    lines = output.replace('\r\n', '\n').split('\n')
+                    
+                    # Find the header line - look for line with Name, Id, Version columns
+                    # Be flexible - winget sometimes outputs junk lines before the header
+                    header_idx = -1
+                    for i, line in enumerate(lines):
+                        # Must have Name, Id, Version and Name should be near the start
+                        if 'Id' in line and 'Version' in line:
+                            # Check if "Name" appears near the beginning (within first 10 chars)
+                            name_pos = line.find('Name')
+                            if name_pos >= 0 and name_pos < 10:
+                                header_idx = i
+                                break
+                    
+                    if header_idx >= 0:
+                        header_line = lines[header_idx]
+                        
+                        # Find column positions from the header text
+                        name_col = header_line.find('Name')
+                        if name_col < 0:
+                            name_col = 0
+                        
+                        id_match = re.search(r'\bId\b', header_line)
+                        version_match = re.search(r'\bVersion\b', header_line)
+                        
+                        id_col = id_match.start() if id_match else 30
+                        version_col = version_match.start() if version_match else 60
+                        
+                        # Skip header and separator line (usually next line after header)
+                        data_start = header_idx + 1
+                        # Skip separator line if it exists
+                        if data_start < len(lines) and lines[data_start].strip().startswith('-'):
+                            data_start += 1
+                        
+                        # Parse data lines
+                        for line in lines[data_start:]:
+                            if not line.strip():
+                                continue
+                            
+                            # Extract columns by position
+                            if len(line) > id_col:
+                                name = line[name_col:id_col].strip()
+                                app_id = line[id_col:version_col].strip() if version_col > id_col else line[id_col:].strip().split()[0]
+                                
+                                # Get version
+                                if version_col < len(line):
+                                    version_part = line[version_col:].strip()
+                                    version = version_part.split()[0] if version_part else ""
+                                else:
+                                    version = ""
+                                
+                                if name and app_id:
+                                    apps.append({
+                                        "name": name,
+                                        "id": app_id,
+                                        "version": version
+                                    })
+                    
+                    self.finished.emit(apps[:50])  # Limit to 50 results
+                except subprocess.TimeoutExpired:
+                    self.error.emit("Search timed out. Please try a more specific query.")
+                except Exception as e:
+                    self.error.emit(str(e))
+        
+        self.search_thread = SearchThread(query)
+        self.search_thread.finished.connect(self._on_search_complete)
+        self.search_thread.error.connect(self._on_search_error)
+        self.search_thread.start()
+    
+    def _on_search_complete(self, apps: list):
+        """Handle search results"""
+        self.search_btn.setEnabled(True)
+        self.search_btn.setText("Search")
+        
+        if not apps:
+            self.results_label.setText("No apps found. Try a different search term.")
+            return
+        
+        self.results_label.setText(f"Found {len(apps)} apps:")
+        self.search_results = apps
+        
+        fav_ids = {f.get("id") for f in self.favorites}
+        
+        for app in apps:
+            item = self._create_result_item(app, app["id"] in fav_ids)
+            self.results_layout.addWidget(item)
+    
+    def _on_search_error(self, error: str):
+        """Handle search error"""
+        self.search_btn.setEnabled(True)
+        self.search_btn.setText("Search")
+        self.results_label.setText(f"Error: {error}")
+    
+    def _create_result_item(self, app: dict, is_favorite: bool) -> QFrame:
+        """Create a search result item widget"""
+        item = QFrame()
+        item.setProperty("app_id", app["id"])
+        item.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        
+        # App icon placeholder
+        icon_label = QLabel("📦")
+        icon_label.setStyleSheet("background: transparent; font-size: 24px;")
+        layout.addWidget(icon_label)
+        
+        # App info
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(2)
+        
+        name_label = QLabel(app["name"])
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
+        info_layout.addWidget(name_label)
+        
+        details_layout = QHBoxLayout()
+        details_layout.setSpacing(8)
+        
+        id_label = QLabel(app["id"])
+        id_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        details_layout.addWidget(id_label)
+        
+        # Only show version if it's a real version (not "Unknown" or empty)
+        version = app.get("version", "")
+        if version and version.lower() != "unknown":
+            version_label = QLabel(f"v{version}")
+            version_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT}; font-size: 11px;")
+            details_layout.addWidget(version_label)
+        
+        details_layout.addStretch()
+        info_layout.addLayout(details_layout)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Info/Details button
+        info_btn = QPushButton("ℹ")
+        info_btn.setFixedSize(32, 32)
+        info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        info_btn.setToolTip("Show package details & verification")
+        info_btn.clicked.connect(lambda: self._show_package_details(app["id"]))
+        info_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                border-radius: 4px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.INFO}40;
+                color: {Theme.INFO};
+            }}
+        """)
+        layout.addWidget(info_btn)
+        
+        # Favorite button
+        fav_btn = QPushButton("★" if is_favorite else "☆")
+        fav_btn.setObjectName("fav_btn")
+        fav_btn.setFixedSize(32, 32)
+        fav_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        fav_btn.setToolTip("Remove from favorites" if is_favorite else "Add to favorites")
+        fav_btn.clicked.connect(lambda: self._toggle_favorite(app["id"], app["name"]))
+        fav_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Theme.WARNING if is_favorite else Theme.TEXT_TERTIARY};
+                border: none;
+                font-size: 18px;
+            }}
+            QPushButton:hover {{
+                color: {Theme.WARNING};
+            }}
+        """)
+        layout.addWidget(fav_btn)
+        
+        # Install button
+        install_btn = QPushButton("Install")
+        install_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        install_btn.clicked.connect(lambda: self._install_app(app["id"]))
+        install_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
+        layout.addWidget(install_btn)
+        
+        return item
+    
+    def _toggle_favorite(self, app_id: str, app_name: str):
+        """Toggle favorite status for an app"""
+        fav_ids = {f.get("id") for f in self.favorites}
+        if app_id in fav_ids:
+            self._remove_favorite(app_id)
+        else:
+            self._add_favorite(app_id, app_name)
+        self._update_results_favorite_states()
+    
+    def _install_app(self, app_id: str):
+        """Install an app using winget"""
+        if not app_id:
+            return
+        
+        # Show installation dialog
+        dialog = WingetInstallDialog(app_id, self)
+        dialog.exec()
+    
+    def _show_package_details(self, app_id: str):
+        """Show detailed package information for verification"""
+        dialog = WingetPackageDetailsDialog(app_id, self)
+        dialog.exec()
+    
+    def _install_all_favorites(self):
+        """Install all favorite apps"""
+        if not self.favorites:
+            return
+        
+        # Create batch install dialog
+        app_ids = [f.get("id") for f in self.favorites if f.get("id")]
+        dialog = WingetBatchInstallDialog(app_ids, self)
+        dialog.exec()
+    
+    def _export_favorites(self):
+        """Export favorites to a JSON file"""
+        from PyQt6.QtWidgets import QFileDialog
+        import json
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Favorites",
+            "winget_favorites.json",
+            "JSON Files (*.json)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, "w") as f:
+                    json.dump({"favorites": self.favorites}, f, indent=2)
+            except Exception as e:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Export Error", f"Failed to export: {str(e)}")
+    
+    def _import_favorites(self):
+        """Import favorites from a JSON file"""
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import json
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Favorites",
+            "",
+            "JSON Files (*.json)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+                
+                imported = data.get("favorites", [])
+                if imported:
+                    # Merge with existing, avoiding duplicates
+                    existing_ids = {f.get("id") for f in self.favorites}
+                    for fav in imported:
+                        if fav.get("id") and fav.get("id") not in existing_ids:
+                            self.favorites.append(fav)
+                    
+                    self._save_favorites()
+                    self._refresh_favorites_list()
+                    QMessageBox.information(self, "Import Complete", f"Imported {len(imported)} favorites.")
+            except Exception as e:
+                QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
+
+
+class WingetPackageDetailsDialog(QDialog):
+    """Dialog showing detailed package information for verification"""
+    
+    def __init__(self, app_id: str, parent=None):
+        super().__init__(parent)
+        self.app_id = app_id
+        self.setWindowTitle(f"Package Details: {app_id}")
+        self.setFixedSize(600, 500)
+        self.setup_ui()
+        self._load_details()
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {Theme.BG_CARD};
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        # Title
+        title = QLabel(f"🔍 Package Verification")
+        title.setStyleSheet(f"color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        # Subtitle
+        subtitle = QLabel(f"Details for: {self.app_id}")
+        subtitle.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        layout.addWidget(subtitle)
+        
+        # Loading label
+        self.loading_label = QLabel("Loading package details...")
+        self.loading_label.setStyleSheet(f"color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.loading_label)
+        
+        # Details scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        self.details_widget = QWidget()
+        self.details_widget.setStyleSheet("background: transparent;")
+        self.details_layout = QVBoxLayout(self.details_widget)
+        self.details_layout.setContentsMargins(0, 0, 0, 0)
+        self.details_layout.setSpacing(8)
+        
+        scroll.setWidget(self.details_widget)
+        scroll.setVisible(False)
+        self.scroll = scroll
+        layout.addWidget(scroll)
+        
+        # Verification summary
+        self.verification_frame = QFrame()
+        self.verification_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_ELEVATED};
+                border-radius: {Theme.RADIUS_SM}px;
+                padding: 12px;
+            }}
+        """)
+        self.verification_frame.setVisible(False)
+        verif_layout = QVBoxLayout(self.verification_frame)
+        verif_layout.setContentsMargins(12, 12, 12, 12)
+        verif_layout.setSpacing(8)
+        
+        self.verification_label = QLabel("")
+        self.verification_label.setWordWrap(True)
+        self.verification_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        verif_layout.addWidget(self.verification_label)
+        
+        layout.addWidget(self.verification_frame)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        close_btn = QPushButton("Close")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.clicked.connect(self.close)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 10px 24px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        btn_layout.addWidget(close_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def _load_details(self):
+        """Load package details using winget show"""
+        class DetailsThread(QThread):
+            finished = pyqtSignal(dict)
+            error = pyqtSignal(str)
+            
+            def __init__(self, app_id):
+                super().__init__()
+                self.app_id = app_id
+            
+            def run(self):
+                import subprocess
+                try:
+                    result = subprocess.run(
+                        ["winget", "show", self.app_id, "--accept-source-agreements"],
+                        capture_output=True,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                        timeout=30,
+                        encoding='utf-8',
+                        errors='replace'
+                    )
+                    
+                    # Parse the output
+                    details = {}
+                    current_key = None
+                    current_value = []
+                    
+                    for line in result.stdout.split('\n'):
+                        if ':' in line and not line.startswith(' '):
+                            # Save previous key-value
+                            if current_key:
+                                details[current_key] = '\n'.join(current_value).strip()
+                            
+                            # Parse new key-value
+                            parts = line.split(':', 1)
+                            current_key = parts[0].strip()
+                            current_value = [parts[1].strip()] if len(parts) > 1 else []
+                        elif line.startswith('  ') and current_key:
+                            current_value.append(line.strip())
+                    
+                    # Save last key-value
+                    if current_key:
+                        details[current_key] = '\n'.join(current_value).strip()
+                    
+                    self.finished.emit(details)
+                except subprocess.TimeoutExpired:
+                    self.error.emit("Request timed out")
+                except Exception as e:
+                    self.error.emit(str(e))
+        
+        self.details_thread = DetailsThread(self.app_id)
+        self.details_thread.finished.connect(self._on_details_loaded)
+        self.details_thread.error.connect(self._on_details_error)
+        self.details_thread.start()
+    
+    def _on_details_loaded(self, details: dict):
+        """Display the loaded details"""
+        self.loading_label.setVisible(False)
+        self.scroll.setVisible(True)
+        self.verification_frame.setVisible(True)
+        
+        # Important fields for verification
+        important_fields = [
+            ("Name", "📦"),
+            ("Publisher", "🏢"),
+            ("Author", "👤"),
+            ("Version", "🔢"),
+            ("Publisher Url", "🌐"),
+            ("Publisher Support Url", "🆘"),
+            ("Homepage", "🏠"),
+            ("License", "📄"),
+            ("License Url", "📄"),
+            ("Installer Type", "💿"),
+            ("Installer Url", "⬇️"),
+            ("Installer SHA256", "🔐"),
+            ("Source", "📂"),
+        ]
+        
+        # Add detail rows
+        for field, icon in important_fields:
+            value = details.get(field, "")
+            if value:
+                self._add_detail_row(icon, field, value)
+        
+        # Add any other fields not in the important list
+        shown_fields = {f[0] for f in important_fields}
+        for key, value in details.items():
+            if key not in shown_fields and value:
+                self._add_detail_row("📋", key, value)
+        
+        # Build verification summary
+        publisher = details.get("Publisher", "Unknown")
+        source = details.get("Source", "Unknown")
+        has_hash = bool(details.get("Installer SHA256"))
+        installer_url = details.get("Installer Url", "")
+        
+        # Determine trust level
+        trust_indicators = []
+        
+        if source.lower() == "winget":
+            trust_indicators.append("✅ From official winget repository (Microsoft reviewed)")
+        elif source.lower() == "msstore":
+            trust_indicators.append("✅ From Microsoft Store (Microsoft certified)")
+        else:
+            trust_indicators.append(f"⚠️ From source: {source}")
+        
+        if publisher and publisher.lower() != "unknown":
+            trust_indicators.append(f"✅ Publisher identified: {publisher}")
+        else:
+            trust_indicators.append("⚠️ Publisher not specified")
+        
+        if has_hash:
+            trust_indicators.append("✅ SHA256 hash verification available")
+        else:
+            trust_indicators.append("⚠️ No hash verification available")
+        
+        # Check if installer URL is from a known trusted domain
+        trusted_domains = ["github.com", "githubusercontent.com", "microsoft.com", "mozilla.org", 
+                          "google.com", "adobe.com", "oracle.com", "python.org", "nodejs.org"]
+        if installer_url:
+            is_trusted = any(domain in installer_url.lower() for domain in trusted_domains)
+            if is_trusted:
+                trust_indicators.append("✅ Installer from recognized publisher domain")
+            else:
+                trust_indicators.append(f"ℹ️ Installer URL: {installer_url[:60]}...")
+        
+        self.verification_label.setText("\n".join(trust_indicators))
+    
+    def _on_details_error(self, error: str):
+        """Handle error loading details"""
+        self.loading_label.setText(f"Error loading details: {error}")
+        self.loading_label.setStyleSheet(f"color: {Theme.ERROR}; font-size: 13px;")
+    
+    def _add_detail_row(self, icon: str, label: str, value: str):
+        """Add a detail row to the display"""
+        row = QFrame()
+        row.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_ELEVATED};
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+        """)
+        
+        row_layout = QVBoxLayout(row)
+        row_layout.setContentsMargins(12, 8, 12, 8)
+        row_layout.setSpacing(4)
+        
+        # Label
+        label_widget = QLabel(f"{icon} {label}")
+        label_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        row_layout.addWidget(label_widget)
+        
+        # Value
+        value_widget = QLabel(value)
+        value_widget.setWordWrap(True)
+        value_widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        
+        # Highlight important security fields
+        if label in ["Installer SHA256", "Publisher"]:
+            value_widget.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px; font-weight: 500;")
+        elif label in ["Installer Url", "Homepage", "Publisher Url"]:
+            value_widget.setStyleSheet(f"background: transparent; color: {Theme.ACCENT}; font-size: 12px;")
+        else:
+            value_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
+        
+        row_layout.addWidget(value_widget)
+        
+        self.details_layout.addWidget(row)
+
+
+class WingetInstallDialog(QDialog):
+    """Dialog for installing a single app via winget"""
+    
+    def __init__(self, app_id: str, parent=None):
+        super().__init__(parent)
+        self.app_id = app_id
+        self.process = None
+        self.setWindowTitle(f"Installing {app_id}")
+        self.setFixedSize(500, 300)
+        self.setup_ui()
+        self._start_install()
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {Theme.BG_CARD};
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        # Title
+        title = QLabel(f"Installing: {self.app_id}")
+        title.setStyleSheet(f"color: {Theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        # Progress indicator
+        self.progress_label = QLabel("Starting installation...")
+        self.progress_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        layout.addWidget(self.progress_label)
+        
+        # Output area
+        self.output_text = QTextEdit()
+        self.output_text.setReadOnly(True)
+        self.output_text.setStyleSheet(f"""
+            QTextEdit {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-family: 'Consolas', monospace;
+                font-size: 11px;
+                padding: 12px;
+            }}
+        """)
+        layout.addWidget(self.output_text)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.close_btn = QPushButton("Close")
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.clicked.connect(self.close)
+        self.close_btn.setEnabled(False)
+        self.close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 10px 24px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+            QPushButton:disabled {{
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        btn_layout.addWidget(self.close_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def _start_install(self):
+        """Start the winget install process"""
+        import subprocess
+        
+        class InstallThread(QThread):
+            output = pyqtSignal(str)
+            finished = pyqtSignal(bool, str)
+            
+            def __init__(self, app_id):
+                super().__init__()
+                self.app_id = app_id
+            
+            def run(self):
+                import subprocess
+                try:
+                    process = subprocess.Popen(
+                        ["winget", "install", self.app_id, "--accept-source-agreements", "--accept-package-agreements"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    
+                    for line in process.stdout:
+                        self.output.emit(line)
+                    
+                    process.wait()
+                    
+                    if process.returncode == 0:
+                        self.finished.emit(True, "Installation completed successfully!")
+                    else:
+                        self.finished.emit(False, f"Installation failed with code {process.returncode}")
+                except Exception as e:
+                    self.finished.emit(False, str(e))
+        
+        self.install_thread = InstallThread(self.app_id)
+        self.install_thread.output.connect(self._on_output)
+        self.install_thread.finished.connect(self._on_finished)
+        self.install_thread.start()
+    
+    def _on_output(self, text: str):
+        """Handle installation output"""
+        self.output_text.append(text.strip())
+        # Scroll to bottom
+        scrollbar = self.output_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
+    def _on_finished(self, success: bool, message: str):
+        """Handle installation completion"""
+        self.progress_label.setText(message)
+        if success:
+            self.progress_label.setStyleSheet(f"color: {Theme.SUCCESS}; font-size: 13px;")
+        else:
+            self.progress_label.setStyleSheet(f"color: {Theme.ERROR}; font-size: 13px;")
+        self.close_btn.setEnabled(True)
+
+
+class WingetBatchInstallDialog(QDialog):
+    """Dialog for installing multiple apps via winget"""
+    
+    def __init__(self, app_ids: list, parent=None):
+        super().__init__(parent)
+        self.app_ids = app_ids
+        self.current_index = 0
+        self.setWindowTitle("Batch Install")
+        self.setFixedSize(550, 400)
+        self.setup_ui()
+        self._start_batch_install()
+    
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {Theme.BG_CARD};
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        # Title
+        title = QLabel(f"Installing {len(self.app_ids)} apps")
+        title.setStyleSheet(f"color: {Theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        # Progress
+        self.progress_label = QLabel(f"Installing 1 of {len(self.app_ids)}...")
+        self.progress_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        layout.addWidget(self.progress_label)
+        
+        # Current app label
+        self.current_app_label = QLabel("")
+        self.current_app_label.setStyleSheet(f"color: {Theme.ACCENT}; font-size: 12px;")
+        layout.addWidget(self.current_app_label)
+        
+        # Output area
+        self.output_text = QTextEdit()
+        self.output_text.setReadOnly(True)
+        self.output_text.setStyleSheet(f"""
+            QTextEdit {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-family: 'Consolas', monospace;
+                font-size: 11px;
+                padding: 12px;
+            }}
+        """)
+        layout.addWidget(self.output_text)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_btn.clicked.connect(self._cancel_install)
+        self.cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 10px 24px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ERROR}40;
+                color: {Theme.ERROR};
+            }}
+        """)
+        btn_layout.addWidget(self.cancel_btn)
+        
+        self.close_btn = QPushButton("Close")
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.clicked.connect(self.close)
+        self.close_btn.setEnabled(False)
+        self.close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 24px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        btn_layout.addWidget(self.close_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def _start_batch_install(self):
+        """Start installing apps one by one"""
+        self.cancelled = False
+        self._install_next()
+    
+    def _install_next(self):
+        """Install the next app in the queue"""
+        if self.cancelled or self.current_index >= len(self.app_ids):
+            self._on_batch_complete()
+            return
+        
+        app_id = self.app_ids[self.current_index]
+        self.progress_label.setText(f"Installing {self.current_index + 1} of {len(self.app_ids)}...")
+        self.current_app_label.setText(f"Current: {app_id}")
+        self.output_text.append(f"\n{'='*50}\nInstalling: {app_id}\n{'='*50}\n")
+        
+        class InstallThread(QThread):
+            output = pyqtSignal(str)
+            finished = pyqtSignal(bool)
+            
+            def __init__(self, app_id):
+                super().__init__()
+                self.app_id = app_id
+            
+            def run(self):
+                import subprocess
+                try:
+                    process = subprocess.Popen(
+                        ["winget", "install", self.app_id, "--accept-source-agreements", "--accept-package-agreements"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    
+                    for line in process.stdout:
+                        self.output.emit(line)
+                    
+                    process.wait()
+                    self.finished.emit(process.returncode == 0)
+                except:
+                    self.finished.emit(False)
+        
+        self.install_thread = InstallThread(app_id)
+        self.install_thread.output.connect(self._on_output)
+        self.install_thread.finished.connect(self._on_single_finished)
+        self.install_thread.start()
+    
+    def _on_output(self, text: str):
+        """Handle installation output"""
+        self.output_text.append(text.strip())
+        scrollbar = self.output_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
+    def _on_single_finished(self, success: bool):
+        """Handle single app installation completion"""
+        status = "✓ Success" if success else "✗ Failed"
+        self.output_text.append(f"\n{status}\n")
+        
+        self.current_index += 1
+        self._install_next()
+    
+    def _on_batch_complete(self):
+        """Handle batch installation completion"""
+        if self.cancelled:
+            self.progress_label.setText("Installation cancelled")
+            self.progress_label.setStyleSheet(f"color: {Theme.WARNING}; font-size: 13px;")
+        else:
+            self.progress_label.setText(f"Completed installing {len(self.app_ids)} apps")
+            self.progress_label.setStyleSheet(f"color: {Theme.SUCCESS}; font-size: 13px;")
+        
+        self.current_app_label.setText("")
+        self.cancel_btn.setEnabled(False)
+        self.close_btn.setEnabled(True)
+    
+    def _cancel_install(self):
+        """Cancel the batch installation"""
+        self.cancelled = True
+        self.cancel_btn.setEnabled(False)
+
+
 class SettingsPage(QWidget):
     """Settings page with app configuration options"""
     
@@ -11221,7 +14098,7 @@ class SettingsPage(QWidget):
         card.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_CARD};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_MD}px;
             }}
         """)
@@ -11284,25 +14161,59 @@ class SettingsPage(QWidget):
             QComboBox {{
                 background: {Theme.BG_CARD_HOVER};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: {Theme.RADIUS_SM}px;
                 padding: 6px 12px;
                 font-size: 13px;
             }}
             QComboBox:hover {{
-                border-color: {Theme.ACCENT};
+                background: {Theme.BG_ELEVATED};
             }}
             QComboBox::drop-down {{
                 border: none;
                 width: 20px;
             }}
+            QComboBox::down-arrow {{
+                image: none;
+                border: none;
+            }}
             QComboBox QAbstractItemView {{
                 background: {Theme.BG_CARD};
                 color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.BORDER};
+                border: none;
+                outline: none;
                 selection-background-color: {Theme.ACCENT};
+                selection-color: white;
+                padding: 4px;
+            }}
+            QComboBox QAbstractItemView::item {{
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border: none;
+                padding: 8px 12px;
+                min-height: 24px;
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+            QComboBox QAbstractItemView::item:selected {{
+                background: {Theme.ACCENT};
+                color: white;
             }}
         """)
+        
+        # Set the view to remove frame
+        combo.view().setStyleSheet(f"""
+            QListView {{
+                background: {Theme.BG_CARD};
+                border: none;
+                outline: none;
+            }}
+        """)
+        combo.view().window().setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint
+        )
+        combo.view().window().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         
         # Connect to save on change
         if setting_key:
@@ -11675,6 +14586,16 @@ class MainWindow(QMainWindow):
         self.pages["audio"] = self.audio_page
         self.content_stack.addWidget(self.audio_page)
         
+        # Add Windows Tools page (all settings and system tools)
+        self.tools_page = WindowsToolsPage()
+        self.pages["tools"] = self.tools_page
+        self.content_stack.addWidget(self.tools_page)
+        
+        # Add Winget page (package manager with favorites)
+        self.winget_page = WingetPage()
+        self.pages["winget"] = self.winget_page
+        self.content_stack.addWidget(self.winget_page)
+        
         # Add Settings page
         self.settings_page = SettingsPage()
         self.pages["settings"] = self.settings_page
@@ -11826,6 +14747,8 @@ class MainWindow(QMainWindow):
             ("system", "file", "System"),
             ("events", "alert", "Events"),
             ("audio", "speaker", "Audio"),
+            ("winget", "package", "Winget"),
+            ("tools", "wrench", "Tools"),
         ]
         
         for nav_id, icon, label in nav_data:
@@ -11965,6 +14888,10 @@ class MainWindow(QMainWindow):
                         background: {Theme.ACCENT_SUBTLE};
                     }}
                 """)
+        
+        # Force repaint of all widgets to pick up theme changes
+        self.update()
+        self.repaint()
     
     def run_scan(self):
         """Run full system scan - all checks run in parallel for speed"""
@@ -12925,7 +15852,7 @@ def run_splash_process(pipe_conn):
                 #splashContainer {{
                     background: {THEME['bg_window']};
                     border-radius: 16px;
-                    border: 1px solid {THEME['border']};
+                    border: none;
                 }}
             """)
             
@@ -12979,7 +15906,7 @@ def run_splash_process(pipe_conn):
                 #taskFrame {{
                     background: {THEME['bg_card']};
                     border-radius: 10px;
-                    border: 1px solid {THEME['border']};
+                    border: none;
                 }}
             """)
             task_layout = QVBoxLayout(task_frame)

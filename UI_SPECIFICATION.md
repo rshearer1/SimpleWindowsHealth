@@ -648,6 +648,39 @@ ICON STYLE
 | Services             | AppsListRegular                | ⚙️             |
 | Network              | WifiRegular                    | 🌐             |
 
+### Emoji Exception: Windows Tools Page
+
+**The Windows Tools page is permitted to use emojis** for category icons in the navigation menu.
+This exception exists because:
+- The Tools page contains 20+ categories of Windows settings and system tools
+- Emojis provide instant visual recognition for each category type
+- The colorful emojis help differentiate between Settings vs System Tools sections
+- Users can quickly scan and find the category they need
+
+Approved emojis for Windows Tools categories:
+| Category         | Emoji | Description           |
+|------------------|-------|-----------------------|
+| System           | 🖥️    | Display, sound, power |
+| Network          | 🌐    | Wi-Fi, ethernet, VPN  |
+| Personalize      | 🎨    | Themes, colors        |
+| Apps             | 📦    | Installed apps        |
+| Accounts         | 👤    | Users, sign-in        |
+| Time & Language  | 🕐    | Date, region          |
+| Gaming           | 🎮    | Game bar, captures    |
+| Accessibility    | ♿    | Vision, hearing       |
+| Privacy          | 🔒    | Security, permissions |
+| Windows Update   | 🔄    | Updates, recovery     |
+| Core Tools       | ⚙️    | Control Panel, etc    |
+| Admin Tools      | 🛠️    | Task Manager, etc     |
+| Security Tools   | 🛡️    | Firewall, credentials |
+| Network Tools    | 📡    | Network adapters      |
+| Disk Tools       | 💾    | Cleanup, defrag       |
+| Display Tools    | 🖼️    | Resolution, DirectX   |
+| Device Tools     | 🔊    | Sound, printers       |
+| Power Tools      | 🔋    | Power options         |
+| Developer Tools  | 💻    | Terminal, env vars    |
+| Recovery Tools   | 🔧    | Troubleshoot, restore |
+
 ---
 
 ## 10. Accessibility
