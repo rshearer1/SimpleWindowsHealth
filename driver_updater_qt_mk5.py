@@ -59,6 +59,17 @@ except ImportError:
 
 
 # =============================================================================
+# APPLICATION CONFIGURATION
+# =============================================================================
+
+APP_VERSION = "3.0.2"
+APP_BUILD = "2025.12.09"
+
+# Production mode - disable settings persistence for release builds
+PRODUCTION_MODE = True
+
+
+# =============================================================================
 # ANIMATED STACKED WIDGET - Smooth Page Transitions
 # =============================================================================
 
@@ -2435,8 +2446,8 @@ class GlowingCardGrid(QWidget):
             card_rect = card.geometry()
             status = card.get_status()
             
-            # Card background - solid dark
-            bg_color = QColor(32, 32, 36)
+            # Card background - uses theme color
+            bg_color = QColor(Theme.BG_CARD)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(bg_color))
             
@@ -2483,8 +2494,8 @@ class HealthSummaryCard(QWidget):
         rect = self.rect()
         radius = Theme.RADIUS_LG
         
-        # Simple solid card background
-        bg_color = QColor(32, 32, 36)
+        # Simple solid card background - uses theme color
+        bg_color = QColor(Theme.BG_CARD)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(bg_color))
         
@@ -2582,6 +2593,18 @@ class HealthSummaryCard(QWidget):
         self.status_label.setText(status)
         self.details_label.setText(f"{passed} checks passed  •  {warnings} warnings  •  {errors} errors")
         self.timestamp_label.setText(f"Last scan: {datetime.now().strftime('%I:%M %p')}")
+    
+    def refresh_theme(self):
+        """Refresh colors for theme change"""
+        self.status_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 18px;
+            font-weight: 600;
+        """)
+        self.details_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        self.timestamp_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        self.update()  # Force repaint of paintEvent
 
 
 class TipsCarousel(QFrame):
@@ -2791,6 +2814,29 @@ class TipsCarousel(QFrame):
         """Reset the auto-rotation timer"""
         self._rotation_timer.stop()
         self._rotation_timer.start(8000)
+    
+    def refresh_theme(self):
+        """Refresh colors for theme change"""
+        self.setStyleSheet(f"""
+            TipsCarousel {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+                    stop:0 {Theme.BG_CARD}, stop:1 {Theme.BG_ELEVATED});
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        self.title_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 14px;
+            font-weight: 600;
+        """)
+        self.description_label.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 12px;
+        """)
+        self._update_display()  # Refresh dot colors
 
 
 class ActivityItem(QFrame):
@@ -3063,6 +3109,16 @@ class StartupProgramsCard(QFrame):
     def on_manage_clicked(self):
         """Handle manage button click - emit signal to navigate"""
         self.manage_clicked.emit()
+    
+    def refresh_theme(self):
+        """Refresh colors for theme change"""
+        self.setStyleSheet(f"""
+            StartupProgramsCard {{
+                background: {Theme.GLASS_BG};
+                border: none;
+                border-radius: {Theme.RADIUS_LG}px;
+            }}
+        """)
 
 
 class BootSecurityCard(QFrame):
@@ -3212,6 +3268,16 @@ class BootSecurityCard(QFrame):
         """Update with new data (for future backend integration)"""
         # Store and reload
         pass  # Placeholder for future backend hook
+    
+    def refresh_theme(self):
+        """Refresh colors for theme change"""
+        self.setStyleSheet(f"""
+            BootSecurityCard {{
+                background: {Theme.GLASS_BG};
+                border: none;
+                border-radius: {Theme.RADIUS_LG}px;
+            }}
+        """)
 
 
 class SystemInfoCard(QFrame):
@@ -3395,6 +3461,16 @@ class SystemInfoCard(QFrame):
             self.uptime_status.setText(uptime_str)
         except:
             self.uptime_status.setText("Unknown")
+    
+    def refresh_theme(self):
+        """Refresh colors for theme change"""
+        self.setStyleSheet(f"""
+            SystemInfoCard {{
+                background: {Theme.GLASS_BG};
+                border: none;
+                border-radius: {Theme.RADIUS_LG}px;
+            }}
+        """)
 
 
 class ScanProgressDialog(QDialog):
@@ -3862,6 +3938,50 @@ class OverviewPage(QWidget):
                 widget = old.widget()
                 if widget:
                     widget.deleteLater()
+    
+    def refresh_accent_colors(self):
+        """Refresh colors for theme/accent changes"""
+        # Refresh health summary card
+        if hasattr(self, 'health_card'):
+            self.health_card.refresh_theme()
+        
+        # Refresh tips carousel
+        if hasattr(self, 'tips_carousel'):
+            self.tips_carousel.refresh_theme()
+        
+        # Refresh startup programs card
+        if hasattr(self, 'startup_card'):
+            self.startup_card.refresh_theme()
+        
+        # Refresh boot security card
+        if hasattr(self, 'boot_security_card'):
+            self.boot_security_card.refresh_theme()
+        
+        # Refresh system info card
+        if hasattr(self, 'system_info_card'):
+            self.system_info_card.refresh_theme()
+        
+        # Refresh the activity container background
+        if hasattr(self, 'activity_container'):
+            self.activity_container.setStyleSheet(f"""
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            """)
+        
+        # Refresh tools container
+        if hasattr(self, 'tools_container'):
+            self.tools_container.setStyleSheet(f"""
+                QFrame {{
+                    background: {Theme.BG_CARD};
+                    border: none;
+                    border-radius: {Theme.RADIUS_MD}px;
+                }}
+            """)
+        
+        # Force update of the glowing card grid
+        if hasattr(self, 'card_grid'):
+            self.card_grid.update()
 
 
 class ModulePage(QWidget):
@@ -4762,6 +4882,8 @@ class DriversPage(QWidget):
             'realtek_network': False,
             'intel_network': False,
             'manufacturer': None,  # Dell, HP, Lenovo, etc.
+            'hp_dock': False,  # HP docking station detected
+            'hp_dock_info': None,  # HP dock details if detected
         }
         
         # Try to get cached hardware data from main window first
@@ -4828,6 +4950,21 @@ class DriversPage(QWidget):
                         if 'intel' in name:
                             if 'net' in dev_class or 'wifi' in name or 'wireless' in name or 'ethernet' in name:
                                 vendors['intel_network'] = True
+                
+                # Check for HP docks from cached hardware data
+                hp_docks = cached_hw.get('hp_docks', [])
+                if hp_docks and len(hp_docks) > 0:
+                    vendors['hp_dock'] = True
+                    # Store dock info for UI display
+                    if isinstance(hp_docks[0], dict):
+                        vendors['hp_dock_info'] = hp_docks[0]
+                    else:
+                        # It might be an HPDockInfo object
+                        vendors['hp_dock_info'] = {
+                            'name': getattr(hp_docks[0], 'name', 'HP Dock'),
+                            'model': getattr(hp_docks[0], 'model', ''),
+                            'dock_type': getattr(hp_docks[0], 'dock_type', ''),
+                        }
                 
                 # Cache and return
                 self._cached_vendors = vendors
@@ -4924,6 +5061,23 @@ class DriversPage(QWidget):
         except Exception:
             pass
         
+        # Direct HP dock detection (runs regardless of cached data)
+        if not vendors['hp_dock']:
+            try:
+                if HARDWARE_SCANNER_AVAILABLE:
+                    from hardware_scanner import detect_hp_docks
+                    hp_docks = detect_hp_docks()
+                    if hp_docks:
+                        vendors['hp_dock'] = True
+                        dock = hp_docks[0]
+                        vendors['hp_dock_info'] = {
+                            'name': dock.name,
+                            'model': dock.model,
+                            'dock_type': dock.dock_type,
+                        }
+            except Exception:
+                pass
+        
         # Cache the result
         self._cached_vendors = vendors
         return vendors
@@ -4938,7 +5092,8 @@ class DriversPage(QWidget):
         # Check if any hardware was detected
         has_detected = (vendors['nvidia_gpu'] or vendors['amd_gpu'] or vendors['intel_gpu'] or 
                        vendors['intel_cpu'] or vendors['amd_cpu'] or vendors['realtek_audio'] or 
-                       vendors['realtek_network'] or vendors['intel_network'] or vendors.get('manufacturer'))
+                       vendors['realtek_network'] or vendors['intel_network'] or vendors.get('manufacturer') or
+                       vendors.get('hp_dock'))
         
         # Driver Resources section header
         resources_header = QLabel("Driver Download Resources")
@@ -5060,6 +5215,29 @@ class DriversPage(QWidget):
                     status_text="Detected"
                 )
                 realtek_net_row.add_action_button("Download", lambda: self._open_url("https://www.realtek.com/en/component/zoo/category/network-interface-controllers-10-100-1000m-gigabit-ethernet-pci-express-software"), primary=True)
+            
+            # HP Dock detected
+            if vendors.get('hp_dock'):
+                dock_info = vendors.get('hp_dock_info', {})
+                dock_name = dock_info.get('name', 'HP Dock')
+                dock_model = dock_info.get('model', '')
+                dock_type = dock_info.get('dock_type', '')
+                
+                subtitle_parts = ["✓ HP docking station detected"]
+                if dock_model:
+                    subtitle_parts.append(f"• {dock_model}")
+                elif dock_type:
+                    subtitle_parts.append(f"• {dock_type}")
+                subtitle_parts.append("• Check for firmware updates")
+                
+                hp_dock_row = detected_container.add_row(
+                    title="HP Dock Firmware",
+                    subtitle=" ".join(subtitle_parts),
+                    status="warning",
+                    status_text="Check Updates"
+                )
+                hp_dock_row.add_action_button("HP Dock Firmware", lambda: self._open_url("https://support.hp.com/us-en/drivers/docking-stations"), primary=True)
+                hp_dock_row.add_action_button("HP Support Assistant", lambda: self._open_url("https://support.hp.com/us-en/help/hp-support-assistant"))
             
             # OEM/Manufacturer support page
             mfr = vendors.get('manufacturer')
@@ -5486,6 +5664,9 @@ class AppSettings:
     
     def load(self) -> dict:
         """Load settings from file or return defaults"""
+        # In production mode, always use defaults (no persistence)
+        if PRODUCTION_MODE:
+            return self.DEFAULT_SETTINGS.copy()
         try:
             if self.config_file.exists():
                 with open(self.config_file, 'r') as f:
@@ -5498,6 +5679,9 @@ class AppSettings:
     
     def save(self):
         """Save settings to file"""
+        # In production mode, don't persist settings
+        if PRODUCTION_MODE:
+            return
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
             with open(self.config_file, 'w') as f:
@@ -5514,17 +5698,128 @@ class AppSettings:
         # Notify listeners of change
         if key == "accent_color":
             apply_accent_color_from_settings()
-            # Trigger UI refresh if main window exists
-            from PyQt6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app:
-                for widget in app.topLevelWidgets():
-                    if hasattr(widget, 'refresh_accent_colors'):
-                        widget.refresh_accent_colors()
+            _trigger_theme_refresh()
+        elif key == "theme":
+            apply_theme_from_settings()
+            _trigger_theme_refresh()
+
+
+def _trigger_theme_refresh():
+    """Trigger UI refresh on all top-level widgets"""
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app:
+        for widget in app.topLevelWidgets():
+            if hasattr(widget, 'apply_full_theme_refresh'):
+                widget.apply_full_theme_refresh()
 
 
 # Global settings instance
 app_settings = AppSettings()
+
+
+# =============================================================================
+# THEME DEFINITIONS - Dark and Light modes
+# =============================================================================
+
+DARK_THEME = {
+    # Surface colors
+    "SURFACE_BASE": "#1a1a1e",
+    "SURFACE_00DP": "#1a1a1e",
+    "SURFACE_01DP": "#212125",
+    "SURFACE_02DP": "#28282d",
+    "SURFACE_03DP": "#2e2e33",
+    "SURFACE_04DP": "#333338",
+    "SURFACE_06DP": "#3a3a40",
+    "SURFACE_08DP": "#404046",
+    "SURFACE_12DP": "#48484f",
+    "SURFACE_16DP": "#505058",
+    "SURFACE_24DP": "#5a5a62",
+    # Semantic surfaces
+    "BG_WINDOW": "#1a1a1e",
+    "BG_SIDEBAR": "#212125",
+    "BG_CARD": "#28282d",
+    "BG_CARD_HOVER": "#333338",
+    "BG_ELEVATED": "#3a3a40",
+    "BG_DIALOG": "#5a5a62",
+    # Borders
+    "BORDER": "#404048",
+    "BORDER_LIGHT": "#505058",
+    # Text
+    "TEXT_PRIMARY": "#ffffff",
+    "TEXT_SECONDARY": "#c0c0c8",
+    "TEXT_TERTIARY": "#808088",
+    "TEXT_DISABLED": "#606068",
+    "TEXT_PRIMARY_HEX": "#ffffff",
+    "TEXT_SECONDARY_HEX": "#c0c0c8",
+    "TEXT_TERTIARY_HEX": "#808088",
+    # On primary (text on accent buttons)
+    "ON_PRIMARY": "#ffffff",
+    # Shadow
+    "SHADOW_COLOR": "#000000",
+    "SHADOW_OPACITY": 80,
+    # Glass
+    "GLASS_BG": "rgba(40, 40, 45, 0.75)",
+    "GLASS_BG_LIGHT": "rgba(60, 60, 68, 0.6)",
+    "GLASS_BORDER": "rgba(255, 255, 255, 0.1)",
+    "GLASS_BORDER_HOVER": "rgba(255, 255, 255, 0.2)",
+}
+
+LIGHT_THEME = {
+    # Surface colors - Light mode uses white/grey
+    "SURFACE_BASE": "#f5f5f5",
+    "SURFACE_00DP": "#f5f5f5",
+    "SURFACE_01DP": "#ffffff",
+    "SURFACE_02DP": "#ffffff",
+    "SURFACE_03DP": "#f0f0f0",
+    "SURFACE_04DP": "#e8e8e8",
+    "SURFACE_06DP": "#e0e0e0",
+    "SURFACE_08DP": "#d8d8d8",
+    "SURFACE_12DP": "#d0d0d0",
+    "SURFACE_16DP": "#c8c8c8",
+    "SURFACE_24DP": "#c0c0c0",
+    # Semantic surfaces
+    "BG_WINDOW": "#f5f5f5",
+    "BG_SIDEBAR": "#ffffff",
+    "BG_CARD": "#ffffff",
+    "BG_CARD_HOVER": "#f0f0f0",
+    "BG_ELEVATED": "#ffffff",
+    "BG_DIALOG": "#ffffff",
+    # Borders
+    "BORDER": "#d0d0d0",
+    "BORDER_LIGHT": "#e0e0e0",
+    # Text - Dark text on light background
+    "TEXT_PRIMARY": "#1a1a1a",
+    "TEXT_SECONDARY": "#505050",
+    "TEXT_TERTIARY": "#808080",
+    "TEXT_DISABLED": "#a0a0a0",
+    "TEXT_PRIMARY_HEX": "#1a1a1a",
+    "TEXT_SECONDARY_HEX": "#505050",
+    "TEXT_TERTIARY_HEX": "#808080",
+    # On primary (text on accent buttons)
+    "ON_PRIMARY": "#ffffff",
+    # Shadow
+    "SHADOW_COLOR": "#000000",
+    "SHADOW_OPACITY": 40,
+    # Glass
+    "GLASS_BG": "rgba(255, 255, 255, 0.85)",
+    "GLASS_BG_LIGHT": "rgba(255, 255, 255, 0.7)",
+    "GLASS_BORDER": "rgba(0, 0, 0, 0.1)",
+    "GLASS_BORDER_HOVER": "rgba(0, 0, 0, 0.2)",
+}
+
+
+def apply_theme_from_settings():
+    """Apply the saved theme (Dark/Light) to the Theme class"""
+    theme_name = app_settings.get("theme", "Dark")
+    theme_colors = DARK_THEME if theme_name == "Dark" else LIGHT_THEME
+    
+    # Apply all theme colors to Theme class
+    for key, value in theme_colors.items():
+        setattr(Theme, key, value)
+    
+    # Update gradient with current surface colors
+    Theme.GRADIENT_SURFACE = f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {Theme.SURFACE_04DP}, stop:1 {Theme.SURFACE_02DP})"
 
 
 def apply_accent_color_from_settings():
@@ -5544,7 +5839,8 @@ def apply_accent_color_from_settings():
         Theme.GRADIENT_ACCENT = f"qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {colors['primary']}, stop:1 {colors['light']})"
 
 
-# Apply accent color on startup
+# Apply theme and accent color on startup
+apply_theme_from_settings()
 apply_accent_color_from_settings()
 
 
@@ -6010,6 +6306,23 @@ class StartupPage(QWidget):
             subprocess.Popen(["taskmgr.exe"])
         except Exception as e:
             print(f"Failed to open Task Manager: {e}")
+    
+    def refresh_accent_colors(self):
+        """Update accent-colored elements when theme changes"""
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 12px 28px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+        """)
 
 
 # =============================================================================
@@ -8102,6 +8415,27 @@ class WindowsUpdatePage(QWidget):
                            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
         except Exception as e:
             print(f"Error opening Windows Update: {e}")
+    
+    def refresh_accent_colors(self):
+        """Update accent-colored elements when theme changes"""
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
 
 
 class WindowsUpdateDetailWorker(QObject):
@@ -8780,6 +9114,27 @@ class StoragePage(QWidget):
             subprocess.Popen(["explorer", downloads_path])
         except Exception as e:
             print(f"Error opening Downloads: {e}")
+    
+    def refresh_accent_colors(self):
+        """Update accent-colored elements when theme changes"""
+        self.refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
 
 
 class StorageDetailWorker(QObject):
@@ -12753,7 +13108,7 @@ class WingetPage(QWidget):
         
         # Header
         header = QHBoxLayout()
-        title = QLabel("📦 Winget Package Manager")
+        title = QLabel("📦 Software Manager")
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
@@ -12763,12 +13118,81 @@ class WingetPage(QWidget):
         header.addWidget(title)
         header.addStretch()
         
-        # Winget status indicator
-        self.winget_status = QLabel("Checking winget...")
+        # Package sources status indicator
+        self.winget_status = QLabel("Checking sources...")
         self.winget_status.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
         header.addWidget(self.winget_status)
         
         right_layout.addLayout(header)
+        
+        # Tab bar for switching between views
+        tab_bar = QHBoxLayout()
+        tab_bar.setSpacing(0)
+        
+        self.tab_find = QPushButton("Find & Install")
+        self.tab_find.setCheckable(True)
+        self.tab_find.setChecked(True)
+        self.tab_find.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tab_find.clicked.connect(lambda: self._switch_tab(0))
+        self.tab_find.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px 0 0 {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:checked {{
+                background: {Theme.ACCENT};
+            }}
+            QPushButton:!checked {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+            }}
+            QPushButton:!checked:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        tab_bar.addWidget(self.tab_find)
+        
+        self.tab_installed = QPushButton("Installed Software")
+        self.tab_installed.setCheckable(True)
+        self.tab_installed.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tab_installed.clicked.connect(lambda: self._switch_tab(1))
+        self.tab_installed.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 10px 20px;
+                border-radius: 0 {Theme.RADIUS_SM}px {Theme.RADIUS_SM}px 0;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:checked {{
+                background: {Theme.ACCENT};
+                color: white;
+            }}
+            QPushButton:!checked:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        tab_bar.addWidget(self.tab_installed)
+        tab_bar.addStretch()
+        
+        right_layout.addLayout(tab_bar)
+        
+        # Stacked widget for tab content
+        self.tab_stack = QStackedWidget()
+        
+        # === Tab 0: Find & Install ===
+        find_widget = QWidget()
+        find_widget.setStyleSheet("background: transparent;")
+        find_layout = QVBoxLayout(find_widget)
+        find_layout.setContentsMargins(0, 0, 0, 0)
+        find_layout.setSpacing(16)
         
         # Search bar
         search_frame = QFrame()
@@ -12826,12 +13250,12 @@ class WingetPage(QWidget):
         """)
         search_layout.addWidget(self.search_btn)
         
-        right_layout.addWidget(search_frame)
+        find_layout.addWidget(search_frame)
         
         # Results area
         self.results_label = QLabel("Enter a search term to find apps")
         self.results_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
-        right_layout.addWidget(self.results_label)
+        find_layout.addWidget(self.results_label)
         
         # Results scroll area
         results_scroll = QScrollArea()
@@ -12847,9 +13271,1325 @@ class WingetPage(QWidget):
         self.results_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         results_scroll.setWidget(self.results_content)
-        right_layout.addWidget(results_scroll)
+        find_layout.addWidget(results_scroll)
+        
+        self.tab_stack.addWidget(find_widget)
+        
+        # === Tab 1: Installed Software ===
+        installed_widget = QWidget()
+        installed_widget.setStyleSheet("background: transparent;")
+        installed_layout = QVBoxLayout(installed_widget)
+        installed_layout.setContentsMargins(0, 0, 0, 0)
+        installed_layout.setSpacing(16)
+        
+        # Search/filter bar for installed software
+        filter_frame = QFrame()
+        filter_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        Theme.apply_shadow(filter_frame, blur_radius=12, offset_y=3, opacity=60)
+        
+        filter_layout = QHBoxLayout(filter_frame)
+        filter_layout.setContentsMargins(16, 12, 16, 12)
+        filter_layout.setSpacing(12)
+        
+        filter_icon = QLabel("🔍")
+        filter_icon.setStyleSheet("background: transparent; font-size: 16px;")
+        filter_layout.addWidget(filter_icon)
+        
+        self.installed_filter = QLineEdit()
+        self.installed_filter.setPlaceholderText("Filter installed software...")
+        self.installed_filter.setStyleSheet(f"""
+            QLineEdit {{
+                background: transparent;
+                border: none;
+                color: {Theme.TEXT_PRIMARY};
+                font-size: 14px;
+                padding: 4px;
+            }}
+        """)
+        self.installed_filter.textChanged.connect(self._filter_installed_apps)
+        filter_layout.addWidget(self.installed_filter, 1)
+        
+        # Check for Updates button
+        self.check_updates_btn = QPushButton("Check Updates")
+        self.check_updates_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.check_updates_btn.clicked.connect(self._check_for_updates)
+        self.check_updates_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        filter_layout.addWidget(self.check_updates_btn)
+        
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.clicked.connect(self._load_installed_apps)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 8px 16px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        filter_layout.addWidget(refresh_btn)
+        
+        installed_layout.addWidget(filter_frame)
+        
+        # Package Managers Status Panel
+        pm_frame = QFrame()
+        pm_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+        """)
+        pm_layout = QHBoxLayout(pm_frame)
+        pm_layout.setContentsMargins(16, 10, 16, 10)
+        pm_layout.setSpacing(16)
+        
+        pm_title = QLabel("Package Managers:")
+        pm_title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        pm_layout.addWidget(pm_title)
+        
+        # Winget status
+        self.pm_winget_label = QLabel("Winget: checking...")
+        self.pm_winget_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        pm_layout.addWidget(self.pm_winget_label)
+        
+        # Chocolatey status
+        self.pm_choco_label = QLabel("Chocolatey: checking...")
+        self.pm_choco_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        pm_layout.addWidget(self.pm_choco_label)
+        
+        # Scoop status
+        self.pm_scoop_label = QLabel("Scoop: checking...")
+        self.pm_scoop_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        pm_layout.addWidget(self.pm_scoop_label)
+        
+        pm_layout.addStretch()
+        
+        # Install Package Manager button
+        self.install_pm_btn = QPushButton("Install Manager")
+        self.install_pm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.install_pm_btn.clicked.connect(self._show_install_pm_dialog)
+        self.install_pm_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT};
+                color: white;
+            }}
+        """)
+        pm_layout.addWidget(self.install_pm_btn)
+        
+        installed_layout.addWidget(pm_frame)
+        
+        # Check package managers on load
+        QTimer.singleShot(100, self._check_package_managers)
+        
+        # Update status label
+        self.update_status_label = QLabel("")
+        self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        self.update_status_label.setVisible(False)
+        installed_layout.addWidget(self.update_status_label)
+        
+        # Installed apps count label
+        self.installed_count_label = QLabel("Loading installed software...")
+        self.installed_count_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 13px;")
+        installed_layout.addWidget(self.installed_count_label)
+        
+        # Installed apps scroll area
+        installed_scroll = QScrollArea()
+        installed_scroll.setWidgetResizable(True)
+        installed_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        installed_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        self.installed_content = QWidget()
+        self.installed_content.setStyleSheet("background: transparent;")
+        self.installed_list_layout = QVBoxLayout(self.installed_content)
+        self.installed_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.installed_list_layout.setSpacing(8)
+        self.installed_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        installed_scroll.setWidget(self.installed_content)
+        installed_layout.addWidget(installed_scroll)
+        
+        self.tab_stack.addWidget(installed_widget)
+        
+        right_layout.addWidget(self.tab_stack)
         
         layout.addWidget(right_panel, 1)
+        
+        # Load installed apps in background
+        QTimer.singleShot(500, self._load_installed_apps)
+    
+    def _switch_tab(self, index: int):
+        """Switch between tabs"""
+        self.tab_stack.setCurrentIndex(index)
+        self.tab_find.setChecked(index == 0)
+        self.tab_installed.setChecked(index == 1)
+        
+        # Update button styles
+        if index == 0:
+            self.tab_find.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: {Theme.RADIUS_SM}px 0 0 {Theme.RADIUS_SM}px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+            """)
+            self.tab_installed.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.BG_ELEVATED};
+                    color: {Theme.TEXT_SECONDARY};
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 0 {Theme.RADIUS_SM}px {Theme.RADIUS_SM}px 0;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.BG_CARD_HOVER};
+                }}
+            """)
+        else:
+            self.tab_find.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.BG_ELEVATED};
+                    color: {Theme.TEXT_SECONDARY};
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: {Theme.RADIUS_SM}px 0 0 {Theme.RADIUS_SM}px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.BG_CARD_HOVER};
+                }}
+            """)
+            self.tab_installed.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 0 {Theme.RADIUS_SM}px {Theme.RADIUS_SM}px 0;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+            """)
+    
+    def _load_installed_apps(self):
+        """Load installed applications from Windows registry"""
+        import winreg
+        
+        class InstalledAppsThread(QThread):
+            finished = pyqtSignal(list)
+            
+            def run(self):
+                apps = []
+                reg_paths = [
+                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+                    (winreg.HKEY_CURRENT_USER, r"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+                ]
+                
+                seen = set()
+                for hkey, path in reg_paths:
+                    try:
+                        with winreg.OpenKey(hkey, path) as key:
+                            i = 0
+                            while True:
+                                try:
+                                    subkey_name = winreg.EnumKey(key, i)
+                                    with winreg.OpenKey(key, subkey_name) as subkey:
+                                        try:
+                                            name, _ = winreg.QueryValueEx(subkey, "DisplayName")
+                                            if name and name not in seen:
+                                                seen.add(name)
+                                                app = {"name": name}
+                                                try:
+                                                    app["version"], _ = winreg.QueryValueEx(subkey, "DisplayVersion")
+                                                except:
+                                                    app["version"] = ""
+                                                try:
+                                                    app["publisher"], _ = winreg.QueryValueEx(subkey, "Publisher")
+                                                except:
+                                                    app["publisher"] = ""
+                                                try:
+                                                    app["install_date"], _ = winreg.QueryValueEx(subkey, "InstallDate")
+                                                except:
+                                                    app["install_date"] = ""
+                                                try:
+                                                    app["size"], _ = winreg.QueryValueEx(subkey, "EstimatedSize")
+                                                    # Convert KB to readable format
+                                                    size_kb = int(app["size"])
+                                                    if size_kb > 1024 * 1024:
+                                                        app["size_str"] = f"{size_kb / (1024*1024):.1f} GB"
+                                                    elif size_kb > 1024:
+                                                        app["size_str"] = f"{size_kb / 1024:.1f} MB"
+                                                    else:
+                                                        app["size_str"] = f"{size_kb} KB"
+                                                except:
+                                                    app["size"] = 0
+                                                    app["size_str"] = ""
+                                                apps.append(app)
+                                        except:
+                                            pass
+                                    i += 1
+                                except OSError:
+                                    break
+                    except:
+                        pass
+                
+                # Sort by name
+                apps.sort(key=lambda x: x["name"].lower())
+                self.finished.emit(apps)
+        
+        self.installed_apps_thread = InstalledAppsThread()
+        self.installed_apps_thread.finished.connect(self._on_installed_apps_loaded)
+        self.installed_apps_thread.start()
+    
+    def _on_installed_apps_loaded(self, apps: list):
+        """Handle loaded installed apps"""
+        self.installed_apps_list = apps
+        self.installed_count_label.setText(f"Found {len(apps)} installed applications")
+        self._display_installed_apps(apps)
+    
+    def _display_installed_apps(self, apps: list):
+        """Display installed apps in the list"""
+        # Clear existing
+        while self.installed_list_layout.count():
+            item = self.installed_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # First, show apps with updates available (from package managers)
+        if hasattr(self, 'app_updates') and self.app_updates:
+            # Add updates section header
+            updates_header = QLabel(f"📥 Updates Available ({len(self.app_updates)})")
+            updates_header.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 14px; font-weight: 600; padding: 8px 0;")
+            self.installed_list_layout.addWidget(updates_header)
+            
+            for update_key, update_info in self.app_updates.items():
+                # Get display name from update_info
+                display_name = update_info.get('name', update_key.split(':')[-1] if ':' in update_key else update_key)
+                item = self._create_update_item(display_name, update_info)
+                self.installed_list_layout.addWidget(item)
+            
+            # Separator
+            sep = QFrame()
+            sep.setFixedHeight(1)
+            sep.setStyleSheet(f"background: {Theme.BG_ELEVATED}; margin: 8px 0;")
+            self.installed_list_layout.addWidget(sep)
+            
+            # Installed apps header
+            installed_header = QLabel(f"📦 All Installed Software")
+            installed_header.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 14px; font-weight: 600; padding: 8px 0;")
+            self.installed_list_layout.addWidget(installed_header)
+        
+        for app in apps[:100]:  # Limit to 100 for performance
+            item = self._create_installed_app_item(app)
+            self.installed_list_layout.addWidget(item)
+        
+        if len(apps) > 100:
+            more_label = QLabel(f"... and {len(apps) - 100} more apps")
+            more_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px; padding: 12px;")
+            more_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.installed_list_layout.addWidget(more_label)
+    
+    def _create_update_item(self, name: str, update_info: dict) -> QFrame:
+        """Create a widget for an available update (from winget upgrade)"""
+        item = QFrame()
+        item.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: 1px solid {Theme.SUCCESS};
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        
+        # Update icon
+        icon_label = QLabel("⬆️")
+        icon_label.setStyleSheet("background: transparent; font-size: 20px;")
+        layout.addWidget(icon_label)
+        
+        # App info
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(2)
+        
+        # Name row with update badge
+        name_row = QHBoxLayout()
+        name_row.setContentsMargins(0, 0, 0, 0)
+        name_row.setSpacing(8)
+        
+        name_label = QLabel(name)
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
+        name_row.addWidget(name_label)
+        
+        update_badge = QLabel("UPDATE")
+        update_badge.setStyleSheet(f"""
+            background: {Theme.SUCCESS};
+            color: white;
+            font-size: 9px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 3px;
+        """)
+        name_row.addWidget(update_badge)
+        name_row.addStretch()
+        info_layout.addLayout(name_row)
+        
+        # Version info
+        installed_ver = update_info.get('installed_version', '?')
+        latest_ver = update_info.get('latest_version', '?')
+        version_text = f"v{installed_ver} → v{latest_ver}"
+        version_label = QLabel(version_text)
+        version_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px; font-weight: 500;")
+        info_layout.addWidget(version_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Update button
+        update_btn = QPushButton("Update")
+        update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        update_btn.setToolTip(f"Update to v{latest_ver}")
+        pkg_id = update_info.get('pkg_id', name)
+        source = update_info.get('source', 'winget')
+        update_btn.clicked.connect(lambda checked, n=name, p=pkg_id, s=source: self._update_app(n, p, s))
+        update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.SUCCESS};
+                color: white;
+                border: none;
+                padding: 6px 14px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: #1a9e4d;
+            }}
+        """)
+        layout.addWidget(update_btn)
+        
+        return item
+    
+    def _create_installed_app_item(self, app: dict) -> QFrame:
+        """Create a widget for an installed app (from registry)"""
+        app_name = app["name"]
+        
+        item = QFrame()
+        item.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_SM}px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        
+        # App icon placeholder
+        icon_label = QLabel("📦")
+        icon_label.setStyleSheet("background: transparent; font-size: 20px;")
+        layout.addWidget(icon_label)
+        
+        # App info
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(2)
+        
+        name_label = QLabel(app_name)
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
+        info_layout.addWidget(name_label)
+        
+        # Details row
+        details = []
+        if app.get("publisher"):
+            details.append(app["publisher"])
+        if app.get("version"):
+            details.append(f"v{app['version']}")
+        if app.get("size_str"):
+            details.append(app["size_str"])
+        
+        if details:
+            details_label = QLabel(" • ".join(details))
+            details_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+            info_layout.addWidget(details_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Manage button
+        settings_btn = QPushButton("Manage")
+        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings_btn.setToolTip("Open Windows Apps & Features")
+        settings_btn.clicked.connect(lambda: self._open_apps_settings())
+        settings_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        layout.addWidget(settings_btn)
+        
+        return item
+    
+    def _filter_installed_apps(self, text: str):
+        """Filter installed apps list"""
+        if not hasattr(self, 'installed_apps_list'):
+            return
+        
+        if not text:
+            self._display_installed_apps(self.installed_apps_list)
+        else:
+            filtered = [app for app in self.installed_apps_list 
+                       if text.lower() in app["name"].lower() 
+                       or text.lower() in (app.get("publisher") or "").lower()]
+            self._display_installed_apps(filtered)
+    
+    def _open_apps_settings(self):
+        """Open Windows Apps & Features settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["explorer", "ms-settings:appsfeatures"])
+        except:
+            pass
+    
+    def _check_for_updates(self):
+        """Check installed apps for available updates using winget upgrade command"""
+        # Check if winget is available
+        if not hasattr(self, 'package_managers') or not self.package_managers.get('winget', {}).get('installed', False):
+            self.update_status_label.setText("Winget not installed. Click 'Install Manager' to install it first.")
+            self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 12px;")
+            self.update_status_label.setVisible(True)
+            return
+        
+        self.check_updates_btn.setEnabled(False)
+        self.check_updates_btn.setText("Checking...")
+        self.update_status_label.setText("Running winget upgrade check... This may take a moment.")
+        self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        self.update_status_label.setVisible(True)
+        
+        # Initialize update info storage
+        self.app_updates = {}
+        
+        class MultiPMUpdateCheckThread(QThread):
+            progress = pyqtSignal(str)
+            finished = pyqtSignal(dict)
+            
+            def run(self):
+                import subprocess
+                import os
+                import re
+                
+                all_updates = {}
+                
+                # Helper to run commands cleanly
+                def run_cmd(cmd, timeout=60):
+                    try:
+                        result = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=timeout,
+                            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                        )
+                        return result.stdout, result.stderr, result.returncode
+                    except:
+                        return '', '', -1
+                
+                # Check which package managers are available
+                managers = {}
+                
+                # Check winget
+                stdout, _, rc = run_cmd(['winget', '--version'], 10)
+                managers['winget'] = rc == 0
+                
+                # Check chocolatey
+                stdout, _, rc = run_cmd(['choco', '--version'], 10)
+                managers['choco'] = rc == 0
+                
+                # Check scoop
+                stdout, _, rc = run_cmd(['scoop', '--version'], 10)
+                managers['scoop'] = rc == 0 and 'scoop' in stdout.lower()
+                
+                # ===== WINGET UPDATES =====
+                if managers['winget']:
+                    self.progress.emit("Checking Winget for updates...")
+                    
+                    # When running elevated (UAC), winget uses the admin's package database.
+                    # We use a PowerShell script to set the environment to a regular user's profile.
+                    stdout = ''
+                    rc = -1
+                    
+                    try:
+                        import glob
+                        import tempfile
+                        
+                        # Find user profiles (excluding system/admin accounts)
+                        user_profiles = []
+                        for profile in glob.glob(r'C:\Users\*'):
+                            profile_name = os.path.basename(profile).lower()
+                            # Skip system and admin accounts
+                            if any(x in profile_name for x in ['admin', 'default', 'public', 'all users']):
+                                continue
+                            # Check if winget exists for this user
+                            winget_path = os.path.join(profile, r'AppData\Local\Microsoft\WindowsApps\winget.exe')
+                            if os.path.exists(winget_path):
+                                user_profiles.append(profile)
+                        
+                        for user_profile in user_profiles:
+                            # Create PowerShell script that sets environment and runs winget
+                            # Use forward slashes to avoid escape issues
+                            profile_fwd = user_profile.replace('\\', '/')
+                            ps_script = f'''$env:USERPROFILE = '{profile_fwd}'
+$env:LOCALAPPDATA = '{profile_fwd}/AppData/Local'
+$env:APPDATA = '{profile_fwd}/AppData/Roaming'
+winget upgrade --include-unknown
+'''
+                            ps_path = os.path.join(tempfile.gettempdir(), 'winget_check.ps1')
+                            with open(ps_path, 'w') as f:
+                                f.write(ps_script)
+                            
+                            result = subprocess.run(
+                                ['powershell', '-ExecutionPolicy', 'Bypass', '-File', ps_path],
+                                capture_output=True,
+                                text=True,
+                                timeout=120,
+                                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                            )
+                            
+                            # Check if we got valid data (has separator line and 'winget' source)
+                            if result.returncode == 0 and '---' in result.stdout and 'winget' in result.stdout.lower():
+                                stdout = result.stdout
+                                rc = result.returncode
+                                break
+                        
+                        # Fallback to default if no user profile worked
+                        if not stdout:
+                            result = subprocess.run(
+                                'winget upgrade --include-unknown',
+                                capture_output=True,
+                                text=True,
+                                shell=True,
+                                timeout=120
+                            )
+                            stdout = result.stdout
+                            rc = result.returncode
+                            
+                    except Exception:
+                        stdout = ''
+                        rc = -1
+                    
+                    # Clean up output - remove any remaining ANSI/unicode chars
+                    output = stdout
+                    output = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', output)
+                    output = re.sub(r'[▒█░▓]', '', output)  # Progress bar chars
+                    output = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', output)
+                    
+                    lines = output.split('\n')
+                    
+                    # Find separator and data lines
+                    found_sep = False
+                    for i, line in enumerate(lines):
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        
+                        # Look for the dashed separator line
+                        is_sep = bool(re.match(r'^-{10,}$', stripped.replace(' ', '')))
+                        if is_sep and not found_sep:
+                            found_sep = True
+                            continue
+                        
+                        if not found_sep:
+                            continue
+                        
+                        # Skip summary lines
+                        if 'upgrades available' in stripped.lower() or 'upgrade' in stripped.lower() and 'available' in stripped.lower():
+                            continue
+                        if 'no installed package' in stripped.lower():
+                            continue
+                        if 'failed' in stripped.lower():
+                            continue
+                        
+                        # Parse: Name   Id   Version   Available   Source
+                        parts = stripped.split()
+                        if len(parts) >= 4 and parts[-1].lower() == 'winget':
+                            pkg_id = parts[-4] if len(parts) >= 5 else parts[-3]
+                            available = parts[-2]
+                            current = parts[-3] if len(parts) >= 5 else 'Unknown'
+                            
+                            # Get name from before pkg_id
+                            idx = line.find(pkg_id)
+                            name = line[:idx].strip() if idx > 0 else pkg_id
+                            
+                            if name and available and available != current:
+                                all_updates[f"winget:{pkg_id}"] = {
+                                    'name': name,
+                                    'installed_version': current,
+                                    'latest_version': available,
+                                    'source': 'winget',
+                                    'pkg_id': pkg_id
+                                }
+                
+                # ===== CHOCOLATEY UPDATES =====
+                if managers['choco']:
+                    self.progress.emit("Checking Chocolatey for updates...")
+                    
+                    stdout, stderr, rc = run_cmd(['choco', 'outdated', '-r'], 120)
+                    
+                    # Format: packagename|currentversion|availableversion|pinned
+                    for line in stdout.split('\n'):
+                        line = line.strip()
+                        if not line or '|' not in line:
+                            continue
+                        
+                        parts = line.split('|')
+                        if len(parts) >= 3:
+                            pkg_name = parts[0]
+                            current = parts[1]
+                            available = parts[2]
+                            
+                            if pkg_name and available and current != available:
+                                all_updates[f"choco:{pkg_name}"] = {
+                                    'name': pkg_name,
+                                    'installed_version': current,
+                                    'latest_version': available,
+                                    'source': 'chocolatey',
+                                    'pkg_id': pkg_name
+                                }
+                
+                # ===== SCOOP UPDATES =====
+                if managers['scoop']:
+                    self.progress.emit("Checking Scoop for updates...")
+                    
+                    stdout, stderr, rc = run_cmd(['scoop', 'status'], 120)
+                    
+                    # Parse scoop status output
+                    # Format varies but typically: Name   Installed Version   Latest Version   ...
+                    lines = stdout.split('\n')
+                    found_header = False
+                    
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        # Skip until we find header
+                        if 'name' in line.lower() and 'version' in line.lower():
+                            found_header = True
+                            continue
+                        if line.startswith('--'):
+                            found_header = True
+                            continue
+                        
+                        if not found_header:
+                            continue
+                        
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            pkg_name = parts[0]
+                            current = parts[1]
+                            available = parts[2] if len(parts) > 2 else current
+                            
+                            if available != current:
+                                all_updates[f"scoop:{pkg_name}"] = {
+                                    'name': pkg_name,
+                                    'installed_version': current,
+                                    'latest_version': available,
+                                    'source': 'scoop',
+                                    'pkg_id': pkg_name
+                                }
+                
+                self.finished.emit(all_updates)
+        
+        self.update_check_thread = MultiPMUpdateCheckThread()
+        self.update_check_thread.progress.connect(self._on_update_check_progress)
+        self.update_check_thread.finished.connect(self._on_update_check_complete)
+        self.update_check_thread.start()
+    
+    def _on_update_check_progress(self, message: str):
+        """Update progress during update check"""
+        self.update_status_label.setText(message)
+    
+    def _on_update_check_complete(self, updates: dict):
+        """Handle update check completion"""
+        self.check_updates_btn.setEnabled(True)
+        self.check_updates_btn.setText("Check Updates")
+        self.app_updates = updates
+        
+        if updates:
+            self.update_status_label.setText(f"Found {len(updates)} update(s) available!")
+            self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px; font-weight: 600;")
+        else:
+            self.update_status_label.setText("All checked apps are up to date.")
+            self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        
+        # Refresh the display to show update badges
+        if hasattr(self, 'installed_apps_list'):
+            filter_text = self.installed_filter.text()
+            if filter_text:
+                self._filter_installed_apps(filter_text)
+            else:
+                self._display_installed_apps(self.installed_apps_list)
+    
+    def _update_app(self, app_name: str, pkg_id: str, source: str):
+        """Update an app using the appropriate package manager"""
+        import subprocess
+        
+        # Check if the required package manager is available
+        pm_available = hasattr(self, 'package_managers') and self.package_managers.get(source if source != 'chocolatey' else 'chocolatey', {}).get('installed', False)
+        
+        # For winget source, check winget availability
+        if source == 'winget':
+            if not self.package_managers.get('winget', {}).get('installed', False):
+                self.update_status_label.setText(f"Winget not installed. Click 'Install Manager' to install it.")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 12px;")
+                self.update_status_label.setVisible(True)
+                return
+            
+            # Use winget to update
+            try:
+                self.update_status_label.setText(f"Updating {app_name} via Winget...")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.INFO}; font-size: 12px;")
+                self.update_status_label.setVisible(True)
+                
+                class UpdateThread(QThread):
+                    finished = pyqtSignal(bool, str)
+                    
+                    def __init__(self, pkg_id):
+                        super().__init__()
+                        self.pkg_id = pkg_id
+                    
+                    def run(self):
+                        try:
+                            result = subprocess.run(
+                                ["winget", "upgrade", self.pkg_id, "--accept-source-agreements", "--accept-package-agreements", "--silent"],
+                                capture_output=True,
+                                text=True,
+                                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                                timeout=300  # 5 minute timeout
+                            )
+                            if result.returncode == 0:
+                                self.finished.emit(True, "Update completed successfully!")
+                            else:
+                                self.finished.emit(False, result.stderr or result.stdout or "Update failed")
+                        except subprocess.TimeoutExpired:
+                            self.finished.emit(False, "Update timed out")
+                        except Exception as e:
+                            self.finished.emit(False, str(e))
+                
+                self.current_update_thread = UpdateThread(pkg_id)
+                self.current_update_thread.finished.connect(lambda success, msg: self._on_update_complete(app_name, success, msg))
+                self.current_update_thread.start()
+                
+            except Exception as e:
+                self.update_status_label.setText(f"Failed to start update: {e}")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 12px;")
+        
+        elif source == 'chocolatey':
+            if not self.package_managers.get('chocolatey', {}).get('installed', False):
+                self.update_status_label.setText(f"Chocolatey not installed. Click 'Install Manager' to install it.")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 12px;")
+                self.update_status_label.setVisible(True)
+                return
+            
+            # Open terminal with choco command (needs admin)
+            try:
+                subprocess.Popen(["powershell", "-Command", f"Start-Process powershell -Verb RunAs -ArgumentList 'choco upgrade {pkg_id} -y; pause'"])
+                self.update_status_label.setText(f"Opened admin terminal to update {app_name}")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.INFO}; font-size: 12px;")
+            except Exception as e:
+                self.update_status_label.setText(f"Failed: {e}")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 12px;")
+        
+        elif source == 'scoop':
+            if not self.package_managers.get('scoop', {}).get('installed', False):
+                self.update_status_label.setText(f"Scoop not installed. Click 'Install Manager' to install it.")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.WARNING}; font-size: 12px;")
+                self.update_status_label.setVisible(True)
+                return
+            
+            # Scoop update (doesn't need admin)
+            try:
+                self.update_status_label.setText(f"Updating {app_name} via Scoop...")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.INFO}; font-size: 12px;")
+                self.update_status_label.setVisible(True)
+                
+                # Extract package name from scoop ID (bucket/name format)
+                scoop_pkg = pkg_id.split('/')[-1] if '/' in pkg_id else pkg_id
+                
+                class ScoopUpdateThread(QThread):
+                    finished = pyqtSignal(bool, str)
+                    
+                    def __init__(self, pkg):
+                        super().__init__()
+                        self.pkg = pkg
+                    
+                    def run(self):
+                        try:
+                            result = subprocess.run(
+                                ["scoop", "update", self.pkg],
+                                capture_output=True,
+                                text=True,
+                                shell=True,
+                                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                                timeout=300
+                            )
+                            if result.returncode == 0:
+                                self.finished.emit(True, "Update completed!")
+                            else:
+                                self.finished.emit(False, result.stderr or result.stdout or "Update failed")
+                        except subprocess.TimeoutExpired:
+                            self.finished.emit(False, "Update timed out")
+                        except Exception as e:
+                            self.finished.emit(False, str(e))
+                
+                self.scoop_update_thread = ScoopUpdateThread(scoop_pkg)
+                self.scoop_update_thread.finished.connect(lambda success, msg: self._on_update_complete(app_name, success, msg))
+                self.scoop_update_thread.start()
+                
+            except Exception as e:
+                self.update_status_label.setText(f"Failed: {e}")
+                self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 12px;")
+    
+    def _on_update_complete(self, app_name: str, success: bool, message: str):
+        """Handle update completion"""
+        if success:
+            self.update_status_label.setText(f"{app_name}: {message}")
+            self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+            # Remove from updates dict
+            if app_name in self.app_updates:
+                del self.app_updates[app_name]
+            # Refresh display
+            self._load_installed_apps()
+        else:
+            self.update_status_label.setText(f"{app_name}: {message}")
+            self.update_status_label.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 12px;")
+    
+    def _check_package_managers(self):
+        """Check which package managers are installed"""
+        import subprocess
+        
+        # Store status
+        self.package_managers = {
+            'winget': {'installed': False, 'version': ''},
+            'chocolatey': {'installed': False, 'version': ''},
+            'scoop': {'installed': False, 'version': ''}
+        }
+        
+        class PMCheckThread(QThread):
+            finished = pyqtSignal(dict)
+            
+            def run(self):
+                results = {}
+                
+                # Check Winget
+                try:
+                    result = subprocess.run(
+                        ["winget", "--version"],
+                        capture_output=True, text=True, timeout=10,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    if result.returncode == 0:
+                        results['winget'] = {'installed': True, 'version': result.stdout.strip()}
+                    else:
+                        results['winget'] = {'installed': False, 'version': ''}
+                except:
+                    results['winget'] = {'installed': False, 'version': ''}
+                
+                # Check Chocolatey
+                try:
+                    result = subprocess.run(
+                        ["choco", "--version"],
+                        capture_output=True, text=True, timeout=10,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    if result.returncode == 0:
+                        results['chocolatey'] = {'installed': True, 'version': result.stdout.strip().split('\n')[0]}
+                    else:
+                        results['chocolatey'] = {'installed': False, 'version': ''}
+                except:
+                    results['chocolatey'] = {'installed': False, 'version': ''}
+                
+                # Check Scoop
+                try:
+                    result = subprocess.run(
+                        ["scoop", "--version"],
+                        capture_output=True, text=True, timeout=10,
+                        shell=True,  # Scoop needs shell on some systems
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    if result.returncode == 0 and 'scoop' in result.stdout.lower():
+                        # Parse version from output
+                        ver = ''
+                        for line in result.stdout.split('\n'):
+                            if 'current' in line.lower() or line.strip().startswith('v'):
+                                ver = line.strip()
+                                break
+                        results['scoop'] = {'installed': True, 'version': ver or 'installed'}
+                    else:
+                        results['scoop'] = {'installed': False, 'version': ''}
+                except:
+                    results['scoop'] = {'installed': False, 'version': ''}
+                
+                self.finished.emit(results)
+        
+        self.pm_check_thread = PMCheckThread()
+        self.pm_check_thread.finished.connect(self._on_pm_check_complete)
+        self.pm_check_thread.start()
+    
+    def _on_pm_check_complete(self, results: dict):
+        """Handle package manager check completion"""
+        self.package_managers = results
+        
+        # Update Winget label
+        if results.get('winget', {}).get('installed'):
+            ver = results['winget'].get('version', '')
+            self.pm_winget_label.setText(f"Winget: {ver}")
+            self.pm_winget_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+        else:
+            self.pm_winget_label.setText("Winget: not found")
+            self.pm_winget_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        
+        # Update Chocolatey label
+        if results.get('chocolatey', {}).get('installed'):
+            ver = results['chocolatey'].get('version', '')
+            self.pm_choco_label.setText(f"Choco: {ver}")
+            self.pm_choco_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+        else:
+            self.pm_choco_label.setText("Choco: not found")
+            self.pm_choco_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+        
+        # Update Scoop label
+        if results.get('scoop', {}).get('installed'):
+            ver = results['scoop'].get('version', '')
+            self.pm_scoop_label.setText(f"Scoop: {ver[:15] if len(ver) > 15 else ver}")
+            self.pm_scoop_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
+        else:
+            self.pm_scoop_label.setText("Scoop: not found")
+            self.pm_scoop_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
+    
+    def _show_install_pm_dialog(self):
+        """Show dialog to install package managers"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Install Package Manager")
+        dialog.setFixedSize(500, 400)
+        dialog.setStyleSheet(f"background: {Theme.BG_WINDOW};")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        # Title
+        title = QLabel("Install a Package Manager")
+        title.setStyleSheet(f"color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        layout.addWidget(title)
+        
+        desc = QLabel("Package managers allow you to easily install, update, and manage software from the command line or this app.")
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 13px;")
+        layout.addWidget(desc)
+        
+        # Package manager options
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
+        
+        # Winget
+        winget_card = self._create_pm_install_card(
+            "Winget",
+            "Microsoft's official package manager for Windows. Pre-installed on Windows 11.",
+            "Built into Windows 11, easy to use, large package repository",
+            self.package_managers.get('winget', {}).get('installed', False),
+            lambda: self._install_winget()
+        )
+        content_layout.addWidget(winget_card)
+        
+        # Chocolatey
+        choco_card = self._create_pm_install_card(
+            "Chocolatey",
+            "Community-driven package manager with 9000+ packages. Requires admin.",
+            "Huge repository, well-established, great for IT pros",
+            self.package_managers.get('chocolatey', {}).get('installed', False),
+            lambda: self._install_chocolatey()
+        )
+        content_layout.addWidget(choco_card)
+        
+        # Scoop
+        scoop_card = self._create_pm_install_card(
+            "Scoop",
+            "User-level package manager. No admin required, installs to ~/scoop.",
+            "No admin needed, clean installs, developer-focused",
+            self.package_managers.get('scoop', {}).get('installed', False),
+            lambda: self._install_scoop()
+        )
+        content_layout.addWidget(scoop_card)
+        
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.close)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_SECONDARY};
+                border: none;
+                padding: 10px 24px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
+            }}
+        """)
+        layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        self.pm_dialog = dialog
+        dialog.exec()
+    
+    def _create_pm_install_card(self, name: str, description: str, features: str, installed: bool, install_callback) -> QFrame:
+        """Create a package manager installation card"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {Theme.BG_CARD};
+                border: none;
+                border-radius: {Theme.RADIUS_MD}px;
+            }}
+        """)
+        
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(16)
+        
+        # Info section
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(4)
+        
+        # Name with status
+        name_row = QHBoxLayout()
+        name_label = QLabel(name)
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 15px; font-weight: 600;")
+        name_row.addWidget(name_label)
+        
+        if installed:
+            status = QLabel("INSTALLED")
+            status.setStyleSheet(f"""
+                background: {Theme.SUCCESS};
+                color: white;
+                font-size: 9px;
+                font-weight: bold;
+                padding: 2px 6px;
+                border-radius: 3px;
+            """)
+            name_row.addWidget(status)
+        
+        name_row.addStretch()
+        info_layout.addLayout(name_row)
+        
+        # Description
+        desc_label = QLabel(description)
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
+        info_layout.addWidget(desc_label)
+        
+        # Features
+        feat_label = QLabel(f"✓ {features}")
+        feat_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        info_layout.addWidget(feat_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Install button
+        if not installed:
+            install_btn = QPushButton("Install")
+            install_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            install_btn.clicked.connect(install_callback)
+            install_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ACCENT};
+                    color: white;
+                    border: none;
+                    padding: 8px 20px;
+                    border-radius: {Theme.RADIUS_SM}px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.ACCENT_HOVER};
+                }}
+            """)
+            layout.addWidget(install_btn)
+        else:
+            check_label = QLabel("✓")
+            check_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 20px;")
+            layout.addWidget(check_label)
+        
+        return card
+    
+    def _install_winget(self):
+        """Install Winget (via Microsoft Store App Installer)"""
+        import subprocess
+        import webbrowser
+        from PyQt6.QtWidgets import QMessageBox
+        
+        # Winget is part of App Installer from Microsoft Store
+        # Open the Store page for App Installer
+        try:
+            # Try to open MS Store directly to App Installer
+            subprocess.Popen(["explorer", "ms-windows-store://pdp/?productid=9NBLGGH4NNS1"])
+            
+            # Show message
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Install Winget")
+            msg.setText("Opening Microsoft Store...\n\n"
+                       "Please install 'App Installer' from the Microsoft Store.\n"
+                       "Winget is included with App Installer.\n\n"
+                       "After installation, click 'Refresh' to check status.")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setStyleSheet(f"background: {Theme.BG_WINDOW}; color: {Theme.TEXT_PRIMARY};")
+            msg.exec()
+            
+            # Close dialog and refresh
+            if hasattr(self, 'pm_dialog'):
+                self.pm_dialog.close()
+            QTimer.singleShot(1000, self._check_package_managers)
+            
+        except Exception as e:
+            # Fallback: open web browser
+            webbrowser.open("https://apps.microsoft.com/detail/9NBLGGH4NNS1")
+    
+    def _install_chocolatey(self):
+        """Install Chocolatey package manager"""
+        import subprocess
+        from PyQt6.QtWidgets import QMessageBox
+        
+        # Chocolatey requires admin PowerShell
+        install_cmd = "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Install Chocolatey")
+        msg.setText("Chocolatey requires Administrator privileges to install.\n\n"
+                   "Click OK to open an elevated PowerShell window with the install command.\n\n"
+                   "After installation completes, close the window and click 'Refresh'.")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        msg.setStyleSheet(f"background: {Theme.BG_WINDOW}; color: {Theme.TEXT_PRIMARY};")
+        
+        if msg.exec() == QMessageBox.StandardButton.Ok:
+            try:
+                # Open elevated PowerShell with the install command
+                subprocess.Popen([
+                    "powershell", "-Command",
+                    f"Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command {install_cmd}'"
+                ])
+                
+                if hasattr(self, 'pm_dialog'):
+                    self.pm_dialog.close()
+                    
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to start installer: {e}")
+    
+    def _install_scoop(self):
+        """Install Scoop package manager"""
+        import subprocess
+        from PyQt6.QtWidgets import QMessageBox
+        
+        # Scoop can be installed without admin
+        install_cmd = "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression"
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Install Scoop")
+        msg.setText("Scoop will be installed for your user account (no admin required).\n\n"
+                   "Click OK to open PowerShell and run the installer.\n\n"
+                   "After installation completes, close the window and click 'Refresh'.")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        msg.setStyleSheet(f"background: {Theme.BG_WINDOW}; color: {Theme.TEXT_PRIMARY};")
+        
+        if msg.exec() == QMessageBox.StandardButton.Ok:
+            try:
+                # Open PowerShell with the install command
+                subprocess.Popen([
+                    "powershell", "-NoExit", "-Command", install_cmd
+                ])
+                
+                if hasattr(self, 'pm_dialog'):
+                    self.pm_dialog.close()
+                    
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to start installer: {e}")
     
     def _check_winget_available(self):
         """Check if winget is available on the system"""
@@ -12943,44 +14683,44 @@ class WingetPage(QWidget):
         
         layout.addLayout(info_layout, 1)
         
-        # Install button
-        install_btn = QPushButton("⬇")
-        install_btn.setFixedSize(28, 28)
+        # Install button - use text instead of unicode
+        install_btn = QPushButton("Install")
         install_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        install_btn.setToolTip("Install")
+        install_btn.setToolTip("Install this app")
         install_btn.clicked.connect(lambda: self._install_app(fav.get("id", "")))
         install_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.SUCCESS}40;
-                color: {Theme.SUCCESS};
-                border: none;
-                border-radius: 4px;
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
                 background: {Theme.SUCCESS};
                 color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 11px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.SUCCESS_LIGHT};
             }}
         """)
         layout.addWidget(install_btn)
         
         # Remove button
-        remove_btn = QPushButton("✕")
-        remove_btn.setFixedSize(28, 28)
+        remove_btn = QPushButton("Del")
+        remove_btn.setFixedWidth(40)
         remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         remove_btn.setToolTip("Remove from favorites")
         remove_btn.clicked.connect(lambda: self._remove_favorite(fav.get("id", "")))
         remove_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.ERROR}40;
+                background: transparent;
                 color: {Theme.ERROR};
                 border: none;
-                border-radius: 4px;
-                font-size: 12px;
+                padding: 6px 4px;
+                font-size: 11px;
+                font-weight: 600;
             }}
             QPushButton:hover {{
-                background: {Theme.ERROR};
-                color: white;
+                color: {Theme.ERROR_LIGHT};
             }}
         """)
         layout.addWidget(remove_btn)
@@ -13021,7 +14761,14 @@ class WingetPage(QWidget):
     
     def _search_apps(self):
         """Search for apps using winget"""
+        import os  # Import at method level for debug logging
+        import tempfile
+        
+        # DEBUG: Print to console
+        print(f"DEBUG: _search_apps called")
+        
         query = self.search_input.text().strip()
+        print(f"DEBUG: query = '{query}'")
         if not query:
             return
         
@@ -13036,103 +14783,242 @@ class WingetPage(QWidget):
                 item.widget().deleteLater()
         
         class SearchThread(QThread):
-            finished = pyqtSignal(list)
+            results_ready = pyqtSignal(list)
             error = pyqtSignal(str)
+            progress = pyqtSignal(str)  # For status updates
             
             def __init__(self, query):
                 super().__init__()
                 self.query = query
             
-            def run(self):
-                import subprocess
-                import re
+            def _search_winget(self, query: str) -> list:
+                """Search winget.run API"""
+                import urllib.request
+                import urllib.parse
+                import json
+                import ssl
+                
+                apps = []
                 try:
-                    result = subprocess.run(
-                        ["winget", "search", self.query, "--accept-source-agreements"],
-                        capture_output=True,
-                        text=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
-                        timeout=30,
-                        encoding='utf-8',
-                        errors='replace'
-                    )
+                    encoded_query = urllib.parse.quote(query)
+                    url = f'https://api.winget.run/v2/packages?query={encoded_query}&take=25'
+                    req = urllib.request.Request(url, headers={
+                        'User-Agent': 'WindowsHealthChecker/1.0',
+                        'Accept': 'application/json'
+                    })
+                    ctx = ssl.create_default_context()
+                    response = urllib.request.urlopen(req, timeout=15, context=ctx)
+                    data = json.loads(response.read().decode('utf-8'))
                     
-                    # Parse results
-                    apps = []
-                    output = result.stdout
-                    
-                    # Handle both \r\n and \n line endings
-                    lines = output.replace('\r\n', '\n').split('\n')
-                    
-                    # Find the header line - look for line with Name, Id, Version columns
-                    # Be flexible - winget sometimes outputs junk lines before the header
-                    header_idx = -1
-                    for i, line in enumerate(lines):
-                        # Must have Name, Id, Version and Name should be near the start
-                        if 'Id' in line and 'Version' in line:
-                            # Check if "Name" appears near the beginning (within first 10 chars)
-                            name_pos = line.find('Name')
-                            if name_pos >= 0 and name_pos < 10:
-                                header_idx = i
-                                break
-                    
-                    if header_idx >= 0:
-                        header_line = lines[header_idx]
+                    for pkg in data.get('Packages', []):
+                        pkg_id = pkg.get('Id', '')
+                        latest = pkg.get('Latest', {})
+                        name = latest.get('Name') or (pkg_id.split('.')[-1] if pkg_id else 'Unknown')
+                        versions = pkg.get('Versions', [])
+                        version = versions[0] if versions else 'N/A'
+                        publisher = latest.get('Publisher') or (pkg_id.split('.')[0] if pkg_id and '.' in pkg_id else '')
                         
-                        # Find column positions from the header text
-                        name_col = header_line.find('Name')
-                        if name_col < 0:
-                            name_col = 0
-                        
-                        id_match = re.search(r'\bId\b', header_line)
-                        version_match = re.search(r'\bVersion\b', header_line)
-                        
-                        id_col = id_match.start() if id_match else 30
-                        version_col = version_match.start() if version_match else 60
-                        
-                        # Skip header and separator line (usually next line after header)
-                        data_start = header_idx + 1
-                        # Skip separator line if it exists
-                        if data_start < len(lines) and lines[data_start].strip().startswith('-'):
-                            data_start += 1
-                        
-                        # Parse data lines
-                        for line in lines[data_start:]:
-                            if not line.strip():
-                                continue
-                            
-                            # Extract columns by position
-                            if len(line) > id_col:
-                                name = line[name_col:id_col].strip()
-                                app_id = line[id_col:version_col].strip() if version_col > id_col else line[id_col:].strip().split()[0]
-                                
-                                # Get version
-                                if version_col < len(line):
-                                    version_part = line[version_col:].strip()
-                                    version = version_part.split()[0] if version_part else ""
-                                else:
-                                    version = ""
-                                
-                                if name and app_id:
-                                    apps.append({
-                                        "name": name,
-                                        "id": app_id,
-                                        "version": version
-                                    })
-                    
-                    self.finished.emit(apps[:50])  # Limit to 50 results
-                except subprocess.TimeoutExpired:
-                    self.error.emit("Search timed out. Please try a more specific query.")
+                        if pkg_id:
+                            apps.append({
+                                'name': name,
+                                'id': pkg_id,
+                                'version': version,
+                                'source': 'winget',
+                                'publisher': publisher
+                            })
                 except Exception as e:
+                    print(f"DEBUG: Winget API error: {e}")
+                return apps
+            
+            def _search_chocolatey(self, query: str) -> list:
+                """Search Chocolatey community repository API"""
+                import urllib.request
+                import urllib.parse
+                import xml.etree.ElementTree as ET
+                import ssl
+                
+                apps = []
+                try:
+                    encoded_query = urllib.parse.quote(query)
+                    url = f"https://community.chocolatey.org/api/v2/Search()?$filter=IsLatestVersion&$top=25&searchTerm='{encoded_query}'&targetFramework=''&includePrerelease=false"
+                    req = urllib.request.Request(url, headers={'User-Agent': 'WindowsHealthChecker/1.0'})
+                    ctx = ssl.create_default_context()
+                    response = urllib.request.urlopen(req, timeout=15, context=ctx)
+                    xml_data = response.read().decode('utf-8')
+                    
+                    root = ET.fromstring(xml_data)
+                    ns = {
+                        'atom': 'http://www.w3.org/2005/Atom',
+                        'd': 'http://schemas.microsoft.com/ado/2007/08/dataservices',
+                        'm': 'http://schemas.microsoft.com/ado/2007/08/dataservices/metadata'
+                    }
+                    
+                    for entry in root.findall('.//atom:entry', ns):
+                        props = entry.find('.//m:properties', ns)
+                        if props is not None:
+                            pkg_id_elem = entry.find('.//atom:title', ns)
+                            title_elem = props.find('d:Title', ns)
+                            version_elem = props.find('d:Version', ns)
+                            
+                            pkg_id = pkg_id_elem.text if pkg_id_elem is not None else ''
+                            name = title_elem.text if title_elem is not None and title_elem.text else pkg_id
+                            version = version_elem.text if version_elem is not None else 'N/A'
+                            
+                            if pkg_id:
+                                apps.append({
+                                    'name': name,
+                                    'id': pkg_id,
+                                    'version': version,
+                                    'source': 'chocolatey',
+                                    'publisher': ''
+                                })
+                except Exception as e:
+                    print(f"DEBUG: Chocolatey API error: {e}")
+                return apps
+            
+            def _search_scoop(self, query: str) -> list:
+                """Search Scoop packages via Azure Search API"""
+                import urllib.request
+                import json
+                import ssl
+                
+                apps = []
+                try:
+                    url = 'https://scoopsearch.search.windows.net/indexes/apps/docs/search?api-version=2020-06-30'
+                    body = json.dumps({"search": query, "top": 25}).encode('utf-8')
+                    req = urllib.request.Request(url, data=body, headers={
+                        'Content-Type': 'application/json',
+                        'api-key': 'DC6D2BBE65FC7313F2C52BBD2B0286ED'  # Public API key
+                    })
+                    ctx = ssl.create_default_context()
+                    response = urllib.request.urlopen(req, timeout=15, context=ctx)
+                    data = json.loads(response.read().decode('utf-8'))
+                    
+                    for pkg in data.get('value', []):
+                        name = pkg.get('Name', '')
+                        version = pkg.get('Version', 'N/A')
+                        repo = pkg.get('Repository', '')
+                        
+                        # Scoop ID is bucket/name format
+                        bucket = repo.split('/')[-1] if repo else 'main'
+                        pkg_id = f"{bucket}/{name}" if name else ''
+                        
+                        if name:
+                            apps.append({
+                                'name': name,
+                                'id': pkg_id,
+                                'version': version,
+                                'source': 'scoop',
+                                'publisher': bucket
+                            })
+                except Exception as e:
+                    print(f"DEBUG: Scoop API error: {e}")
+                return apps
+            
+            def _search_nuget(self, query: str) -> list:
+                """Search NuGet packages API (for .NET developers)"""
+                import urllib.request
+                import urllib.parse
+                import json
+                import ssl
+                
+                apps = []
+                try:
+                    encoded_query = urllib.parse.quote(query)
+                    url = f'https://azuresearch-usnc.nuget.org/query?q={encoded_query}&take=15'
+                    req = urllib.request.Request(url, headers={'User-Agent': 'WindowsHealthChecker/1.0'})
+                    ctx = ssl.create_default_context()
+                    response = urllib.request.urlopen(req, timeout=15, context=ctx)
+                    data = json.loads(response.read().decode('utf-8'))
+                    
+                    for pkg in data.get('data', []):
+                        pkg_id = pkg.get('id', '')
+                        version = pkg.get('version', 'N/A')
+                        authors = pkg.get('authors', [])
+                        
+                        if pkg_id:
+                            apps.append({
+                                'name': pkg_id,
+                                'id': pkg_id,
+                                'version': version,
+                                'source': 'nuget',
+                                'publisher': ', '.join(authors) if authors else ''
+                            })
+                except Exception as e:
+                    print(f"DEBUG: NuGet API error: {e}")
+                return apps
+            
+            def run(self):
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                
+                print(f"DEBUG: Thread run() started for query: {self.query}")
+                
+                all_apps = []
+                sources_searched = []
+                
+                try:
+                    # Search all APIs in parallel using ThreadPoolExecutor
+                    with ThreadPoolExecutor(max_workers=4) as executor:
+                        futures = {
+                            executor.submit(self._search_winget, self.query): 'winget',
+                            executor.submit(self._search_chocolatey, self.query): 'chocolatey',
+                            executor.submit(self._search_scoop, self.query): 'scoop',
+                            executor.submit(self._search_nuget, self.query): 'nuget'
+                        }
+                        
+                        for future in as_completed(futures):
+                            source = futures[future]
+                            try:
+                                results = future.result()
+                                if results:
+                                    all_apps.extend(results)
+                                    sources_searched.append(f"{source}({len(results)})")
+                                    print(f"DEBUG: {source} returned {len(results)} results")
+                            except Exception as e:
+                                print(f"DEBUG: {source} failed: {e}")
+                    
+                    print(f"DEBUG: Total results from all sources: {len(all_apps)}")
+                    print(f"DEBUG: Sources: {', '.join(sources_searched)}")
+                    
+                    # Sort results: prioritize exact matches, then by source
+                    query_lower = self.query.lower()
+                    def sort_key(app):
+                        name_lower = app['name'].lower()
+                        id_lower = app['id'].lower()
+                        # Exact name match = highest priority
+                        if name_lower == query_lower:
+                            return (0, app['source'], name_lower)
+                        # Name starts with query
+                        if name_lower.startswith(query_lower):
+                            return (1, app['source'], name_lower)
+                        # ID starts with query
+                        if id_lower.startswith(query_lower):
+                            return (2, app['source'], name_lower)
+                        # Name contains query
+                        if query_lower in name_lower:
+                            return (3, app['source'], name_lower)
+                        return (4, app['source'], name_lower)
+                    
+                    all_apps.sort(key=sort_key)
+                    
+                    self.results_ready.emit(all_apps[:75])  # Limit to 75 total results
+                    
+                except Exception as e:
+                    print(f"DEBUG: Exception in aggregated search: {e}")
                     self.error.emit(str(e))
         
         self.search_thread = SearchThread(query)
-        self.search_thread.finished.connect(self._on_search_complete)
+        self.search_thread.results_ready.connect(self._on_search_complete)
         self.search_thread.error.connect(self._on_search_error)
         self.search_thread.start()
+        print("DEBUG: Thread started")
     
     def _on_search_complete(self, apps: list):
         """Handle search results"""
+        print(f"DEBUG: _on_search_complete called with {len(apps)} apps")
+        if apps:
+            print(f"DEBUG: First app: {apps[0]}")
+        
         self.search_btn.setEnabled(True)
         self.search_btn.setText("Search")
         
@@ -13140,7 +15026,15 @@ class WingetPage(QWidget):
             self.results_label.setText("No apps found. Try a different search term.")
             return
         
-        self.results_label.setText(f"Found {len(apps)} apps:")
+        # Count results per source
+        source_counts = {}
+        for app in apps:
+            source = app.get('source', 'unknown')
+            source_counts[source] = source_counts.get(source, 0) + 1
+        
+        # Build summary string
+        source_summary = ', '.join([f"{s}: {c}" for s, c in sorted(source_counts.items())])
+        self.results_label.setText(f"Found {len(apps)} apps from 4 sources ({source_summary}):")
         self.search_results = apps
         
         fav_ids = {f.get("id") for f in self.favorites}
@@ -13151,6 +15045,16 @@ class WingetPage(QWidget):
     
     def _on_search_error(self, error: str):
         """Handle search error"""
+        import os
+        import tempfile
+        # DEBUG: Log error callback
+        try:
+            debug_path = os.path.join(tempfile.gettempdir(), 'winget_search_debug.txt')
+            with open(debug_path, 'a', encoding='utf-8') as f:
+                f.write(f"=== _on_search_error called: {error} ===\n")
+        except:
+            pass
+        
         self.search_btn.setEnabled(True)
         self.search_btn.setText("Search")
         self.results_label.setText(f"Error: {error}")
@@ -13174,8 +15078,15 @@ class WingetPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
         
-        # App icon placeholder
-        icon_label = QLabel("📦")
+        # App icon based on source
+        source = app.get("source", "winget")
+        source_icons = {
+            'winget': '📦',
+            'chocolatey': '🍫',
+            'scoop': '🥄',
+            'nuget': '📚'
+        }
+        icon_label = QLabel(source_icons.get(source, '📦'))
         icon_label.setStyleSheet("background: transparent; font-size: 24px;")
         layout.addWidget(icon_label)
         
@@ -13184,9 +15095,34 @@ class WingetPage(QWidget):
         info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(2)
         
+        # Name row with source badge
+        name_row = QHBoxLayout()
+        name_row.setSpacing(8)
+        
         name_label = QLabel(app["name"])
         name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
-        info_layout.addWidget(name_label)
+        name_row.addWidget(name_label)
+        
+        # Source badge with colors - using semi-transparent backgrounds per spec
+        source_colors = {
+            'winget': ('#60cdff', 'rgba(0, 120, 212, 0.15)'),      # Blue
+            'chocolatey': ('#ba68c8', 'rgba(156, 39, 176, 0.15)'), # Purple
+            'scoop': ('#81c784', 'rgba(76, 175, 80, 0.15)'),       # Green
+            'nuget': ('#64b5f6', 'rgba(33, 150, 243, 0.15)')       # Blue
+        }
+        badge_fg, badge_bg = source_colors.get(source, ('#808088', 'rgba(128, 128, 128, 0.15)'))
+        source_badge = QLabel(source.upper())
+        source_badge.setStyleSheet(f"""
+            background: {badge_bg};
+            color: {badge_fg};
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 4px;
+        """)
+        name_row.addWidget(source_badge)
+        name_row.addStretch()
+        info_layout.addLayout(name_row)
         
         details_layout = QHBoxLayout()
         details_layout.setSpacing(8)
@@ -13197,7 +15133,7 @@ class WingetPage(QWidget):
         
         # Only show version if it's a real version (not "Unknown" or empty)
         version = app.get("version", "")
-        if version and version.lower() != "unknown":
+        if version and version.lower() not in ("unknown", "n/a"):
             version_label = QLabel(f"v{version}")
             version_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT}; font-size: 11px;")
             details_layout.addWidget(version_label)
@@ -13207,46 +15143,71 @@ class WingetPage(QWidget):
         
         layout.addLayout(info_layout, 1)
         
-        # Info/Details button
-        info_btn = QPushButton("ℹ")
-        info_btn.setFixedSize(32, 32)
-        info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        info_btn.setToolTip("Show package details & verification")
-        info_btn.clicked.connect(lambda: self._show_package_details(app["id"]))
-        info_btn.setStyleSheet(f"""
+        # Favorite/Remove button - shows +Fav to add, X to remove
+        if is_favorite:
+            # Show X button to remove from favorites
+            remove_btn = QPushButton("X")
+            remove_btn.setObjectName("fav_btn")
+            remove_btn.setFixedSize(36, 36)
+            remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            remove_btn.setToolTip("Remove from favorites")
+            remove_btn.clicked.connect(lambda: self._toggle_favorite(app["id"], app["name"]))
+            remove_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.ERROR}30;
+                    color: {Theme.ERROR};
+                    border: none;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background: {Theme.ERROR}50;
+                }}
+            """)
+            layout.addWidget(remove_btn)
+        else:
+            # Show +Fav button to add to favorites
+            fav_btn = QPushButton("+Fav")
+            fav_btn.setObjectName("fav_btn")
+            fav_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            fav_btn.setToolTip("Add to favorites")
+            fav_btn.clicked.connect(lambda: self._toggle_favorite(app["id"], app["name"]))
+            fav_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {Theme.TEXT_TERTIARY};
+                    border: none;
+                    padding: 6px 8px;
+                    font-size: 11px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    color: {Theme.WARNING};
+                }}
+            """)
+            layout.addWidget(fav_btn)
+        
+        # Details button - text instead of icon
+        details_btn = QPushButton("Details")
+        details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        details_btn.setToolTip("Show package details & verification")
+        details_btn.clicked.connect(lambda checked, a=app: self._show_package_details(a))
+        details_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {Theme.BG_ELEVATED};
                 color: {Theme.TEXT_SECONDARY};
                 border: none;
-                border-radius: 4px;
-                font-size: 14px;
+                padding: 8px 12px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 12px;
             }}
             QPushButton:hover {{
                 background: {Theme.INFO}40;
                 color: {Theme.INFO};
             }}
         """)
-        layout.addWidget(info_btn)
-        
-        # Favorite button
-        fav_btn = QPushButton("★" if is_favorite else "☆")
-        fav_btn.setObjectName("fav_btn")
-        fav_btn.setFixedSize(32, 32)
-        fav_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        fav_btn.setToolTip("Remove from favorites" if is_favorite else "Add to favorites")
-        fav_btn.clicked.connect(lambda: self._toggle_favorite(app["id"], app["name"]))
-        fav_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {Theme.WARNING if is_favorite else Theme.TEXT_TERTIARY};
-                border: none;
-                font-size: 18px;
-            }}
-            QPushButton:hover {{
-                color: {Theme.WARNING};
-            }}
-        """)
-        layout.addWidget(fav_btn)
+        layout.addWidget(details_btn)
         
         # Install button
         install_btn = QPushButton("Install")
@@ -13288,9 +15249,9 @@ class WingetPage(QWidget):
         dialog = WingetInstallDialog(app_id, self)
         dialog.exec()
     
-    def _show_package_details(self, app_id: str):
+    def _show_package_details(self, app: dict):
         """Show detailed package information for verification"""
-        dialog = WingetPackageDetailsDialog(app_id, self)
+        dialog = WingetPackageDetailsDialog(app, self)
         dialog.exec()
     
     def _install_all_favorites(self):
@@ -13353,16 +15314,60 @@ class WingetPage(QWidget):
                     QMessageBox.information(self, "Import Complete", f"Imported {len(imported)} favorites.")
             except Exception as e:
                 QMessageBox.warning(self, "Import Error", f"Failed to import: {str(e)}")
+    
+    def refresh_accent_colors(self):
+        """Update accent-colored elements when theme changes"""
+        # Search button
+        self.search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
+        
+        # Check Updates button
+        self.check_updates_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Theme.ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: {Theme.RADIUS_SM}px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {Theme.ACCENT_HOVER};
+            }}
+            QPushButton:disabled {{
+                background: {Theme.BG_ELEVATED};
+                color: {Theme.TEXT_TERTIARY};
+            }}
+        """)
 
 
 class WingetPackageDetailsDialog(QDialog):
     """Dialog showing detailed package information for verification"""
     
-    def __init__(self, app_id: str, parent=None):
+    def __init__(self, app: dict, parent=None):
         super().__init__(parent)
-        self.app_id = app_id
-        self.setWindowTitle(f"Package Details: {app_id}")
-        self.setFixedSize(600, 500)
+        self.app = app
+        self.app_id = app.get('id', 'Unknown')
+        self.source = app.get('source', 'winget')
+        self.setWindowTitle(f"Package Details: {self.app_id}")
+        self.setFixedSize(600, 550)
         self.setup_ui()
         self._load_details()
     
@@ -13377,10 +15382,32 @@ class WingetPackageDetailsDialog(QDialog):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
         
-        # Title
+        # Title with source badge
+        title_layout = QHBoxLayout()
         title = QLabel(f"🔍 Package Verification")
         title.setStyleSheet(f"color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
-        layout.addWidget(title)
+        title_layout.addWidget(title)
+        
+        # Source badge - using semi-transparent backgrounds per spec
+        source_colors = {
+            'winget': ('#60cdff', 'rgba(0, 120, 212, 0.15)'),
+            'chocolatey': ('#ba68c8', 'rgba(156, 39, 176, 0.15)'),
+            'scoop': ('#81c784', 'rgba(76, 175, 80, 0.15)'),
+            'nuget': ('#64b5f6', 'rgba(33, 150, 243, 0.15)')
+        }
+        badge_fg, badge_bg = source_colors.get(self.source, ('#808088', 'rgba(128, 128, 128, 0.15)'))
+        source_badge = QLabel(self.source.upper())
+        source_badge.setStyleSheet(f"""
+            background: {badge_bg};
+            color: {badge_fg};
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 4px;
+        """)
+        title_layout.addWidget(source_badge)
+        title_layout.addStretch()
+        layout.addLayout(title_layout)
         
         # Subtitle
         subtitle = QLabel(f"Details for: {self.app_id}")
@@ -13406,7 +15433,7 @@ class WingetPackageDetailsDialog(QDialog):
         
         scroll.setWidget(self.details_widget)
         scroll.setVisible(False)
-        self.scroll = scroll
+        self.scroll_area = scroll
         layout.addWidget(scroll)
         
         # Verification summary
@@ -13456,131 +15483,236 @@ class WingetPackageDetailsDialog(QDialog):
         layout.addLayout(btn_layout)
     
     def _load_details(self):
-        """Load package details using winget show"""
+        """Load package details from HTTP API based on source"""
         class DetailsThread(QThread):
-            finished = pyqtSignal(dict)
+            details_ready = pyqtSignal(dict)
             error = pyqtSignal(str)
             
-            def __init__(self, app_id):
+            def __init__(self, app: dict):
                 super().__init__()
-                self.app_id = app_id
+                self.app = app
+                self.source = app.get('source', 'winget')
+                self.app_id = app.get('id', '')
             
             def run(self):
-                import subprocess
+                import urllib.request
+                import urllib.parse
+                import json
+                import ssl
+                import xml.etree.ElementTree as ET
+                
+                details = {
+                    'Name': self.app.get('name', 'Unknown'),
+                    'ID': self.app_id,
+                    'Version': self.app.get('version', 'N/A'),
+                    'Publisher': self.app.get('publisher', ''),
+                    'Source': self.source.upper()
+                }
+                
+                ctx = ssl.create_default_context()
+                
                 try:
-                    result = subprocess.run(
-                        ["winget", "show", self.app_id, "--accept-source-agreements"],
-                        capture_output=True,
-                        text=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
-                        timeout=30,
-                        encoding='utf-8',
-                        errors='replace'
-                    )
-                    
-                    # Parse the output
-                    details = {}
-                    current_key = None
-                    current_value = []
-                    
-                    for line in result.stdout.split('\n'):
-                        if ':' in line and not line.startswith(' '):
-                            # Save previous key-value
-                            if current_key:
-                                details[current_key] = '\n'.join(current_value).strip()
+                    if self.source == 'winget':
+                        # Query winget.run API for more details
+                        encoded_id = urllib.parse.quote(self.app_id)
+                        url = f'https://api.winget.run/v2/packages/{encoded_id}'
+                        req = urllib.request.Request(url, headers={'User-Agent': 'WindowsHealthChecker/1.0'})
+                        
+                        try:
+                            response = urllib.request.urlopen(req, timeout=10, context=ctx)
+                            data = json.loads(response.read().decode('utf-8'))
                             
-                            # Parse new key-value
-                            parts = line.split(':', 1)
-                            current_key = parts[0].strip()
-                            current_value = [parts[1].strip()] if len(parts) > 1 else []
-                        elif line.startswith('  ') and current_key:
-                            current_value.append(line.strip())
+                            latest = data.get('Latest', {})
+                            details['Name'] = latest.get('Name', details['Name'])
+                            details['Publisher'] = latest.get('Publisher', details['Publisher'])
+                            details['Description'] = latest.get('Description', '')
+                            details['Homepage'] = latest.get('Homepage', '')
+                            details['License'] = latest.get('License', '')
+                            details['License URL'] = latest.get('LicenseUrl', '')
+                            
+                            versions = data.get('Versions', [])
+                            if versions:
+                                details['Version'] = versions[0]
+                                details['Available Versions'] = ', '.join(versions[:5])
+                                if len(versions) > 5:
+                                    details['Available Versions'] += f' (+{len(versions)-5} more)'
+                            
+                            tags = latest.get('Tags', [])
+                            if tags:
+                                details['Tags'] = ', '.join(tags)
+                        except:
+                            pass  # Use basic info from search
                     
-                    # Save last key-value
-                    if current_key:
-                        details[current_key] = '\n'.join(current_value).strip()
+                    elif self.source == 'chocolatey':
+                        # Query Chocolatey API for more details
+                        encoded_id = urllib.parse.quote(self.app_id)
+                        url = f"https://community.chocolatey.org/api/v2/Packages(Id='{encoded_id}',Version='{self.app.get('version', '')}')"
+                        req = urllib.request.Request(url, headers={'User-Agent': 'WindowsHealthChecker/1.0'})
+                        
+                        try:
+                            response = urllib.request.urlopen(req, timeout=10, context=ctx)
+                            xml_data = response.read().decode('utf-8')
+                            root = ET.fromstring(xml_data)
+                            ns = {
+                                'd': 'http://schemas.microsoft.com/ado/2007/08/dataservices',
+                                'm': 'http://schemas.microsoft.com/ado/2007/08/dataservices/metadata'
+                            }
+                            
+                            props = root.find('.//m:properties', ns)
+                            if props is not None:
+                                desc = props.find('d:Description', ns)
+                                if desc is not None and desc.text:
+                                    # Clean up description (remove markdown)
+                                    clean_desc = desc.text[:300].replace('#', '').replace('*', '')
+                                    details['Description'] = clean_desc + ('...' if len(desc.text) > 300 else '')
+                                
+                                proj_url = props.find('d:ProjectUrl', ns)
+                                if proj_url is not None:
+                                    details['Homepage'] = proj_url.text or ''
+                                
+                                lic_url = props.find('d:LicenseUrl', ns)
+                                if lic_url is not None:
+                                    details['License URL'] = lic_url.text or ''
+                                
+                                downloads = props.find('d:DownloadCount', ns)
+                                if downloads is not None:
+                                    details['Total Downloads'] = f"{int(downloads.text):,}" if downloads.text else ''
+                                
+                                tags = props.find('d:Tags', ns)
+                                if tags is not None:
+                                    details['Tags'] = tags.text or ''
+                                
+                                pkg_status = props.find('d:PackageStatus', ns)
+                                if pkg_status is not None:
+                                    details['Package Status'] = pkg_status.text or ''
+                        except:
+                            pass
                     
-                    self.finished.emit(details)
-                except subprocess.TimeoutExpired:
-                    self.error.emit("Request timed out")
+                    elif self.source == 'scoop':
+                        # Scoop packages - use the bucket/name info
+                        details['Bucket'] = self.app.get('publisher', 'main')
+                        details['Note'] = 'Scoop packages are installed to ~/scoop/apps/'
+                    
+                    elif self.source == 'nuget':
+                        # Query NuGet API
+                        encoded_id = urllib.parse.quote(self.app_id)
+                        url = f'https://api.nuget.org/v3/registration5-gz-semver2/{encoded_id.lower()}/index.json'
+                        req = urllib.request.Request(url, headers={
+                            'User-Agent': 'WindowsHealthChecker/1.0',
+                            'Accept-Encoding': 'gzip'
+                        })
+                        
+                        try:
+                            response = urllib.request.urlopen(req, timeout=10, context=ctx)
+                            # Handle gzip
+                            import gzip
+                            data = json.loads(gzip.decompress(response.read()).decode('utf-8'))
+                            
+                            items = data.get('items', [])
+                            if items:
+                                latest_page = items[-1]
+                                page_items = latest_page.get('items', [])
+                                if page_items:
+                                    latest = page_items[-1].get('catalogEntry', {})
+                                    details['Description'] = latest.get('description', '')[:300]
+                                    details['Authors'] = latest.get('authors', '')
+                                    details['Project URL'] = latest.get('projectUrl', '')
+                                    details['License URL'] = latest.get('licenseUrl', '')
+                                    details['Tags'] = latest.get('tags', '')
+                        except:
+                            pass
+                    
+                    self.details_ready.emit(details)
+                    
                 except Exception as e:
-                    self.error.emit(str(e))
+                    # Return basic details even on error
+                    details['Error'] = str(e)
+                    self.details_ready.emit(details)
         
-        self.details_thread = DetailsThread(self.app_id)
-        self.details_thread.finished.connect(self._on_details_loaded)
+        self.details_thread = DetailsThread(self.app)
+        self.details_thread.details_ready.connect(self._on_details_loaded)
         self.details_thread.error.connect(self._on_details_error)
         self.details_thread.start()
     
     def _on_details_loaded(self, details: dict):
         """Display the loaded details"""
         self.loading_label.setVisible(False)
-        self.scroll.setVisible(True)
+        self.scroll_area.setVisible(True)
         self.verification_frame.setVisible(True)
         
-        # Important fields for verification
+        # Important fields for verification - order matters
         important_fields = [
             ("Name", "📦"),
-            ("Publisher", "🏢"),
-            ("Author", "👤"),
+            ("ID", "🏷️"),
             ("Version", "🔢"),
-            ("Publisher Url", "🌐"),
-            ("Publisher Support Url", "🆘"),
-            ("Homepage", "🏠"),
-            ("License", "📄"),
-            ("License Url", "📄"),
-            ("Installer Type", "💿"),
-            ("Installer Url", "⬇️"),
-            ("Installer SHA256", "🔐"),
+            ("Publisher", "🏢"),
+            ("Authors", "👤"),
             ("Source", "📂"),
+            ("Package Status", "✅"),
+            ("Description", "📝"),
+            ("Homepage", "🏠"),
+            ("Project URL", "🌐"),
+            ("License", "📄"),
+            ("License URL", "📄"),
+            ("Tags", "🏷️"),
+            ("Total Downloads", "📊"),
+            ("Available Versions", "📋"),
+            ("Bucket", "🪣"),
+            ("Note", "ℹ️"),
         ]
         
         # Add detail rows
         for field, icon in important_fields:
             value = details.get(field, "")
             if value:
-                self._add_detail_row(icon, field, value)
+                self._add_detail_row(icon, field, str(value))
         
         # Add any other fields not in the important list
         shown_fields = {f[0] for f in important_fields}
+        shown_fields.add('Error')  # Don't show error as a row
         for key, value in details.items():
             if key not in shown_fields and value:
-                self._add_detail_row("📋", key, value)
+                self._add_detail_row("📋", key, str(value))
         
         # Build verification summary
-        publisher = details.get("Publisher", "Unknown")
-        source = details.get("Source", "Unknown")
-        has_hash = bool(details.get("Installer SHA256"))
-        installer_url = details.get("Installer Url", "")
-        
-        # Determine trust level
         trust_indicators = []
         
-        if source.lower() == "winget":
-            trust_indicators.append("✅ From official winget repository (Microsoft reviewed)")
-        elif source.lower() == "msstore":
-            trust_indicators.append("✅ From Microsoft Store (Microsoft certified)")
-        else:
-            trust_indicators.append(f"⚠️ From source: {source}")
+        # Source-specific trust info
+        source = self.source.lower()
+        if source == 'winget':
+            trust_indicators.append("✅ From winget.run API (mirrors Microsoft's winget repository)")
+        elif source == 'chocolatey':
+            trust_indicators.append("✅ From Chocolatey Community Repository")
+            if details.get('Package Status') == 'Approved':
+                trust_indicators.append("✅ Package is approved and reviewed")
+            downloads = details.get('Total Downloads', '')
+            if downloads:
+                trust_indicators.append(f"📊 {downloads} total downloads")
+        elif source == 'scoop':
+            trust_indicators.append("✅ From Scoop package repository")
+            trust_indicators.append("ℹ️ Scoop installs apps portably (no admin required)")
+        elif source == 'nuget':
+            trust_indicators.append("✅ From NuGet.org (.NET package repository)")
+            trust_indicators.append("ℹ️ NuGet packages are for .NET developers")
         
-        if publisher and publisher.lower() != "unknown":
-            trust_indicators.append(f"✅ Publisher identified: {publisher}")
+        # Publisher check
+        publisher = details.get('Publisher') or details.get('Authors', '')
+        if publisher:
+            trust_indicators.append(f"✅ Publisher/Author: {publisher}")
         else:
             trust_indicators.append("⚠️ Publisher not specified")
         
-        if has_hash:
-            trust_indicators.append("✅ SHA256 hash verification available")
-        else:
-            trust_indicators.append("⚠️ No hash verification available")
-        
-        # Check if installer URL is from a known trusted domain
-        trusted_domains = ["github.com", "githubusercontent.com", "microsoft.com", "mozilla.org", 
-                          "google.com", "adobe.com", "oracle.com", "python.org", "nodejs.org"]
-        if installer_url:
-            is_trusted = any(domain in installer_url.lower() for domain in trusted_domains)
+        # Homepage check
+        homepage = details.get('Homepage') or details.get('Project URL', '')
+        if homepage:
+            # Check for known trusted domains
+            trusted_domains = ["github.com", "microsoft.com", "mozilla.org", "google.com", 
+                              "adobe.com", "oracle.com", "python.org", "nodejs.org", "nuget.org"]
+            is_trusted = any(domain in homepage.lower() for domain in trusted_domains)
             if is_trusted:
-                trust_indicators.append("✅ Installer from recognized publisher domain")
+                trust_indicators.append(f"✅ Official project website: {homepage[:50]}...")
             else:
-                trust_indicators.append(f"ℹ️ Installer URL: {installer_url[:60]}...")
+                trust_indicators.append(f"🔗 Project website: {homepage[:50]}...")
         
         self.verification_label.setText("\n".join(trust_indicators))
     
@@ -13613,11 +15745,13 @@ class WingetPackageDetailsDialog(QDialog):
         value_widget.setWordWrap(True)
         value_widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
-        # Highlight important security fields
-        if label in ["Installer SHA256", "Publisher"]:
+        # Highlight important fields
+        if label in ["Publisher", "Authors", "Package Status"]:
             value_widget.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px; font-weight: 500;")
-        elif label in ["Installer Url", "Homepage", "Publisher Url"]:
+        elif label in ["Homepage", "Project URL", "License URL"]:
             value_widget.setStyleSheet(f"background: transparent; color: {Theme.ACCENT}; font-size: 12px;")
+        elif label == "Source":
+            value_widget.setStyleSheet(f"background: transparent; color: {Theme.INFO}; font-size: 12px; font-weight: 600;")
         else:
             value_widget.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 12px;")
         
@@ -13720,7 +15854,7 @@ class WingetInstallDialog(QDialog):
                 import subprocess
                 try:
                     process = subprocess.Popen(
-                        ["winget", "install", self.app_id, "--accept-source-agreements", "--accept-package-agreements"],
+                        ["winget", "install", self.app_id, "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity"],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
@@ -13891,7 +16025,7 @@ class WingetBatchInstallDialog(QDialog):
                 import subprocess
                 try:
                     process = subprocess.Popen(
-                        ["winget", "install", self.app_id, "--accept-source-agreements", "--accept-package-agreements"],
+                        ["winget", "install", self.app_id, "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity"],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
@@ -13982,10 +16116,10 @@ class SettingsPage(QWidget):
         appearance_layout.setSpacing(16)
         
         # Theme option
-        self.controls["theme"] = self._create_dropdown(["Dark", "Light", "System"], "theme")
+        self.controls["theme"] = self._create_dropdown(["Dark", "Light"], "theme")
         theme_row = self._create_option_row(
             "Theme", 
-            "Choose between light and dark mode",
+            "Choose between dark and light mode",
             self.controls["theme"]
         )
         appearance_layout.addWidget(theme_row)
@@ -14591,10 +16725,10 @@ class MainWindow(QMainWindow):
         self.pages["tools"] = self.tools_page
         self.content_stack.addWidget(self.tools_page)
         
-        # Add Winget page (package manager with favorites)
-        self.winget_page = WingetPage()
-        self.pages["winget"] = self.winget_page
-        self.content_stack.addWidget(self.winget_page)
+        # Add Software page (package manager with favorites)
+        self.software_page = WingetPage()
+        self.pages["software"] = self.software_page
+        self.content_stack.addWidget(self.software_page)
         
         # Add Settings page
         self.settings_page = SettingsPage()
@@ -14743,11 +16877,11 @@ class MainWindow(QMainWindow):
             ("updates", "download", "Updates"),
             ("storage", "hdd", "Storage"),
             ("security", "shield", "Security"),
+            ("software", "package", "Software"),
             ("hardware", "cpu", "Hardware"),
             ("system", "file", "System"),
             ("events", "alert", "Events"),
             ("audio", "speaker", "Audio"),
-            ("winget", "package", "Winget"),
             ("tools", "wrench", "Tools"),
         ]
         
@@ -14819,16 +16953,20 @@ class MainWindow(QMainWindow):
                     method(self.cached_data[cache_key])
     
     def refresh_accent_colors(self):
-        """Refresh all UI elements that use the accent color"""
-        from PyQt6.QtWidgets import QPushButton
+        """Refresh all UI elements that use the accent color.
+        
+        Called when accent color changes in settings to update all themed elements.
+        """
+        from PyQt6.QtWidgets import QPushButton, QComboBox
         
         # Refresh sidebar items
         for nav_id, item in self.nav_items.items():
             item._update_style()
         
-        # Refresh the Health Checker button
-        if hasattr(self, 'scan_btn'):
-            self.scan_btn.setStyleSheet(f"""
+        # Refresh the Health Checker button on overview page
+        if hasattr(self, 'overview') and hasattr(self.overview, 'health_card'):
+            btn = self.overview.health_card.scan_btn
+            btn.setStyleSheet(f"""
                 QPushButton {{
                     background: {Theme.ACCENT};
                     color: white;
@@ -14852,8 +16990,54 @@ class MainWindow(QMainWindow):
                 if isinstance(control, QFrame) and control.property("checked") is not None:
                     checked = control.property("checked")
                     self.settings_page._update_toggle_style(control, bool(checked))
+                # Refresh combobox selection colors
+                elif isinstance(control, QComboBox):
+                    control.setStyleSheet(f"""
+                        QComboBox {{
+                            background: {Theme.BG_CARD_HOVER};
+                            color: {Theme.TEXT_PRIMARY};
+                            border: none;
+                            border-radius: {Theme.RADIUS_SM}px;
+                            padding: 6px 12px;
+                            font-size: 13px;
+                        }}
+                        QComboBox:hover {{
+                            background: {Theme.BG_ELEVATED};
+                        }}
+                        QComboBox::drop-down {{
+                            border: none;
+                            width: 20px;
+                        }}
+                        QComboBox::down-arrow {{
+                            image: none;
+                            border: none;
+                        }}
+                        QComboBox QAbstractItemView {{
+                            background: {Theme.BG_CARD};
+                            color: {Theme.TEXT_PRIMARY};
+                            border: none;
+                            outline: none;
+                            selection-background-color: {Theme.ACCENT};
+                            selection-color: white;
+                            padding: 4px;
+                        }}
+                        QComboBox QAbstractItemView::item {{
+                            background: {Theme.BG_CARD};
+                            color: {Theme.TEXT_PRIMARY};
+                            border: none;
+                            padding: 8px 12px;
+                            min-height: 24px;
+                        }}
+                        QComboBox QAbstractItemView::item:hover {{
+                            background: {Theme.BG_CARD_HOVER};
+                        }}
+                        QComboBox QAbstractItemView::item:selected {{
+                            background: {Theme.ACCENT};
+                            color: white;
+                        }}
+                    """)
         
-        # Refresh all buttons with accent_style property
+        # Refresh all buttons with accent_style property across all widgets
         for btn in self.findChildren(QPushButton):
             btn_style = btn.property("accent_style")
             if btn_style == "primary":
@@ -14889,9 +17073,38 @@ class MainWindow(QMainWindow):
                     }}
                 """)
         
-        # Force repaint of all widgets to pick up theme changes
+        # Refresh all pages that have accent-colored elements
+        for page_id, page in self.pages.items():
+            if hasattr(page, 'refresh_accent_colors'):
+                page.refresh_accent_colors()
+        
+        # Force repaint
         self.update()
         self.repaint()
+    
+    def apply_full_theme_refresh(self):
+        """Completely rebuild the UI when theme changes (Dark/Light mode).
+        
+        This recreates all widgets with the new theme colors.
+        For production, this shows a message that app restart is recommended.
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        
+        # Trigger accent color refresh for immediate partial update
+        self.refresh_accent_colors()
+        
+        # Force repaint of all widgets that use paintEvent
+        for widget in self.findChildren(QWidget):
+            widget.update()
+        
+        # Show message that restart is recommended for full theme change
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Theme Changed")
+        msg.setText("Theme has been changed.")
+        msg.setInformativeText("Some elements may require restarting the application to fully apply the new theme.")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
     
     def run_scan(self):
         """Run full system scan - all checks run in parallel for speed"""
@@ -15780,9 +17993,6 @@ class MainWindow(QMainWindow):
 # =============================================================================
 # SPLASH SCREEN (Runs in separate process)
 # =============================================================================
-
-APP_VERSION = "2.0.0"
-APP_BUILD = "2025.06.12"
 
 def run_splash_process(pipe_conn):
     """
