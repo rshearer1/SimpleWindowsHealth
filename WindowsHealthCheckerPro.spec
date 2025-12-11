@@ -5,12 +5,12 @@ a = Analysis(
     ['driver_updater_qt_mk5.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[('hardware_scanner.py', '.'), ('startup_scanner.py', '.'), ('perf_utils.py', '.')],
+    hiddenimports=['PyQt6.QtCore', 'PyQt6.QtWidgets', 'PyQt6.QtGui', 'wmi', 'win32com.client', 'pythoncom', 'pywintypes', 'multiprocessing'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy', 'PIL', 'pytest', 'unittest'],
     noarchive=False,
     optimize=0,
 )
@@ -35,4 +35,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version='version_info.txt',
+    uac_admin=True,
+    icon=['icon.ico'],
 )

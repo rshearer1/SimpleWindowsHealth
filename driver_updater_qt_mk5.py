@@ -62,8 +62,8 @@ except ImportError:
 # APPLICATION CONFIGURATION
 # =============================================================================
 
-APP_VERSION = "3.0.2"
-APP_BUILD = "2025.12.09"
+APP_VERSION = "4.0.0"
+APP_BUILD = "2025.12.11"
 
 # Production mode - disable settings persistence for release builds
 PRODUCTION_MODE = True

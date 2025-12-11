@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build script for Windows Health Checker Pro v1.0.0
+Build script for Windows Health Checker Pro v4.0.0
 Creates a production executable using PyInstaller
 """
 
@@ -11,9 +11,10 @@ from pathlib import Path
 
 # Configuration
 APP_NAME = "WindowsHealthCheckerPro"
-VERSION = "1.0.0"
+VERSION = "4.0.0"
 MAIN_SCRIPT = "driver_updater_qt_mk5.py"
-ICON_FILE = None  # Set to "icon.ico" if you have one
+ICON_FILE = "icon.ico"  # Heart with pulse icon
+VERSION_FILE = "version_info.txt"  # Windows version info
 
 def build():
     print(f"Building {APP_NAME} v{VERSION}...")
@@ -62,6 +63,10 @@ def build():
     # Add icon if available
     if ICON_FILE and Path(ICON_FILE).exists():
         cmd.extend(["--icon", ICON_FILE])
+    
+    # Add version info file for Windows metadata
+    if VERSION_FILE and Path(VERSION_FILE).exists():
+        cmd.extend(["--version-file", VERSION_FILE])
     
     print("Running PyInstaller...")
     print(f"Command: {' '.join(cmd)}")
