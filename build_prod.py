@@ -43,6 +43,7 @@ def build():
         "--add-data", "hardware_scanner.py;.",
         "--add-data", "startup_scanner.py;.",
         "--add-data", "perf_utils.py;.",
+        "--add-data", "icon.ico;.",  # Include icon for runtime loading
         
         # Exclude unnecessary modules to reduce size
         "--exclude-module", "tkinter",

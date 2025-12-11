@@ -5,7 +5,7 @@
 **The all-in-one Windows system diagnostics and optimization tool**
 
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows)](https://www.microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-3.0.2-green?style=for-the-badge)](https://github.com/rshearer1/SimpleWindowsHealth/releases/latest)
+[![Version](https://img.shields.io/badge/Version-4.0.0-green?style=for-the-badge)](https://github.com/rshearer1/SimpleWindowsHealth/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/rshearer1/SimpleWindowsHealth/total?style=for-the-badge&color=blue)](https://github.com/rshearer1/SimpleWindowsHealth/releases)
 
@@ -27,6 +27,7 @@ Windows Health Checker Pro is a **free, portable system utility** that gives you
 - ✅ **No telemetry** - Your data stays on your machine
 - ✅ **No bloatware** - Clean, focused functionality
 - ✅ **Modern UI** - Beautiful dark/light theme with accent colors
+- ✅ **Custom Icon** - Heart with pulse design for easy identification
 - ✅ **Fast** - Parallel scanning completes in seconds
 - ✅ **Comprehensive** - 10+ diagnostic modules in one tool
 
@@ -190,22 +191,26 @@ python -m PyInstaller --clean --noconfirm WindowsHealthCheckerPro.spec
 
 ## 📋 Changelog
 
-### v3.0.2 (December 2025) - Latest
-- ✨ **Theme System** - Full Dark/Light mode support
-- 🎨 **Accent Colors** - 6 customizable accent colors
-- 📦 **Winget Integration** - Search, install, and update software
-- 🔄 **Update Checker** - Check for software updates via Winget
+### v4.0.0 (December 2025) - Latest
+- 💜 **Custom App Icon** - Heart with pulse design for taskbar and window
+- ✨ **Theme System** - Full Dark/Light mode support with proper card theming
+- 🎨 **Accent Colors** - 6 customizable accent colors (Blue, Green, Purple, Orange, Pink, Teal)
+- 📦 **Winget Integration** - Search, install, and update software via Windows Package Manager
+- 🔄 **Update Checker** - Check for software updates across all installed apps
+- 📄 **Architecture Documentation** - Code quality and performance review
 - 🐛 Bug fixes and performance improvements
 
 ### v3.0.1
 - Fixed update checking functionality
 - Improved error handling
+- Live accent color customization
 
 ### v3.0.0
 - Major UI overhaul with glass-effect cards
 - Added Software/Winget page
 - Enhanced hardware monitoring
 - New splash screen with loading progress
+- Custom frameless title bar (Outlook-style)
 
 ### v2.0.0
 - Complete UI redesign with modern dark theme

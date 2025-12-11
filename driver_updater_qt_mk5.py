@@ -16602,12 +16602,41 @@ class MainWindow(QMainWindow):
         self._active_threads = []  # Track active threads to prevent GC crashes
         
         self.setWindowTitle("Windows Health Checker Pro")
+        
+        # Set window icon - load from embedded resource or file
+        self._set_app_icon()
+        
         # Per spec: Min 1100x720, Default 1280x800
         self.setMinimumSize(1100, 720)
         self.resize(1280, 800)
         
         self.current_nav = "overview"
         self.setup_ui()
+    
+    def _set_app_icon(self):
+        """Set the application window icon."""
+        import sys
+        import os
+        from PyQt6.QtGui import QIcon
+        
+        # Try to find icon.ico in various locations
+        possible_paths = [
+            # When running as exe (PyInstaller)
+            os.path.join(getattr(sys, '_MEIPASS', ''), 'icon.ico'),
+            # Same directory as script/exe
+            os.path.join(os.path.dirname(sys.executable), 'icon.ico'),
+            # Current working directory
+            'icon.ico',
+            # Script directory (for development)
+            os.path.join(os.path.dirname(__file__), 'icon.ico'),
+        ]
+        
+        for icon_path in possible_paths:
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+                return
+        
+        # If no icon file found, the embedded exe icon will be used by Windows
     
     def setup_ui(self):
         self.setStyleSheet(GLOBAL_STYLE)
