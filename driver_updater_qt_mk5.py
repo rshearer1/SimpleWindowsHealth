@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import ctypes
+import threading
 from ctypes import wintypes
 from datetime import datetime
 from enum import Enum
@@ -27,7 +28,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
     QSizePolicy, QDialog, QGridLayout, QTextEdit, QSpacerItem, QLineEdit
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, pyqtSignal, QThread, QObject
+from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, pyqtSignal, QThread, QObject, QPoint
 from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QFontDatabase, QPainterPath, QIcon, QPixmap
 
 from driver_backend import (
@@ -416,18 +417,17 @@ class Theme:
     
     # =========================================================================
     # TEXT COLORS - High Contrast for Readability
-    # Material Design: High emphasis text at 87% white
-    # But we use NEAR-WHITE for better visibility
+    # Optimized for dark backgrounds with improved contrast ratios
     # =========================================================================
     TEXT_PRIMARY = "#ffffff"           # Pure white for headings
-    TEXT_SECONDARY = "#c0c0c8"         # Light grey for body (higher than 60%)
-    TEXT_TERTIARY = "#808088"          # Medium grey for captions
-    TEXT_DISABLED = "#606068"          # Disabled state
+    TEXT_SECONDARY = "#b8b8c0"         # Slightly brighter for better subtitle readability
+    TEXT_TERTIARY = "#909098"          # Improved contrast for captions/timestamps
+    TEXT_DISABLED = "#686870"          # Slightly lighter disabled state
     
     # Hex versions (same as above for Qt stylesheet compatibility)
     TEXT_PRIMARY_HEX = "#ffffff"
-    TEXT_SECONDARY_HEX = "#c0c0c8"
-    TEXT_TERTIARY_HEX = "#808088"
+    TEXT_SECONDARY_HEX = "#b8b8c0"
+    TEXT_TERTIARY_HEX = "#909098"
     
     # =========================================================================
     # PRIMARY ACCENT - Windows Blue (Vibrant!)
@@ -453,41 +453,43 @@ class Theme:
     ON_SECONDARY = "#000000"
     
     # =========================================================================
-    # SEMANTIC COLORS - Vibrant but not eye-straining
+    # SEMANTIC COLORS - Balanced for visibility and comfort
+    # Clear enough to communicate status, comfortable for extended viewing
     # =========================================================================
-    # Success - Green (vibrant but not neon)
-    SUCCESS = "#4caf50"                # Material Green 500
-    SUCCESS_LIGHT = "#81c784"          # Lighter for text
-    SUCCESS_BG = "rgba(76, 175, 80, 0.15)"
+    # Success - Green (clear and positive)
+    SUCCESS = "#22c55e"                # Tailwind Green 500 - balanced
+    SUCCESS_LIGHT = "#4ade80"          # Lighter for text
+    SUCCESS_BG = "rgba(34, 197, 94, 0.15)"
     
-    # Warning - Amber/Orange
-    WARNING = "#ff9800"                # Material Orange 500
-    WARNING_LIGHT = "#ffb74d"          # Lighter for text
-    WARNING_BG = "rgba(255, 152, 0, 0.15)"
+    # Warning - Amber/Gold (warm and noticeable)
+    WARNING = "#eab308"                # Tailwind Yellow 500 - golden
+    WARNING_LIGHT = "#facc15"          # Lighter for text
+    WARNING_BG = "rgba(234, 179, 8, 0.15)"
     
-    # Error - Red (vibrant)
-    ERROR = "#f44336"                  # Material Red 500
-    ERROR_LIGHT = "#ef5350"            # Lighter variant
-    ERROR_BG = "rgba(244, 67, 54, 0.15)"
+    # Error - Red (attention-getting but not alarming)
+    ERROR = "#ef4444"                  # Tailwind Red 500 - balanced
+    ERROR_LIGHT = "#f87171"            # Lighter variant
+    ERROR_BG = "rgba(239, 68, 68, 0.15)"
     
-    # Info - Blue
-    INFO = "#2196f3"                   # Material Blue 500
-    INFO_LIGHT = "#64b5f6"             # Lighter for text
-    INFO_BG = "rgba(33, 150, 243, 0.15)"
+    # Info - Blue (informative and calm)
+    INFO = "#3b82f6"                   # Tailwind Blue 500 - balanced
+    INFO_LIGHT = "#60a5fa"             # Lighter for text
+    INFO_BG = "rgba(59, 130, 246, 0.15)"
     
-    # Running/Progress - Purple
-    RUNNING = "#9c27b0"                # Material Purple 500
-    RUNNING_LIGHT = "#ba68c8"          # Lighter variant
-    RUNNING_BG = "rgba(156, 39, 176, 0.15)"
+    # Running/Progress - Purple (engaging)
+    RUNNING = "#a855f7"                # Tailwind Purple 500 - balanced
+    RUNNING_LIGHT = "#c084fc"          # Lighter variant
+    RUNNING_BG = "rgba(168, 85, 247, 0.15)"
     
     # =========================================================================
-    # APPLE-STYLE GLOW COLORS - For status icon animations
+    # STATUS GLOW COLORS - Balanced for clarity and comfort
+    # Vibrant enough to be clear, soft enough to not cause fatigue
     # =========================================================================
-    GLOW_SUCCESS = "#30d158"           # Apple green - vibrant
-    GLOW_ERROR = "#ff453a"             # Apple red - vibrant
-    GLOW_WARNING = "#ffd60a"           # Apple yellow - vibrant
-    GLOW_INFO = "#0a84ff"              # Apple blue - vibrant
-    GLOW_RUNNING = "#bf5af2"           # Apple purple - vibrant
+    GLOW_SUCCESS = "#22c55e"           # Balanced green - clear but not neon
+    GLOW_ERROR = "#ef4444"             # Balanced red - visible but not harsh
+    GLOW_WARNING = "#eab308"           # Balanced yellow/gold - warm and clear
+    GLOW_INFO = "#3b82f6"              # Balanced blue - clear and calming
+    GLOW_RUNNING = "#a855f7"           # Balanced purple - engaging
     
     # =========================================================================
     # GLASSMORPHISM - Apple-style glass effect
@@ -500,7 +502,7 @@ class Theme:
     # =========================================================================
     # SPACING & SIZING
     # =========================================================================
-    SIDEBAR_W = 240
+    SIDEBAR_W = 184
     RADIUS_SM = 6                      # Slightly more rounded
     RADIUS_MD = 8
     RADIUS_LG = 12
@@ -602,7 +604,7 @@ class Theme:
                     color: white;
                     border: none;
                     border-radius: {Theme.RADIUS_SM}px;
-                    padding: 8px 16px;
+                    padding: 10px 24px;
                     font-size: 13px;
                     font-weight: 600;
                 }}
@@ -700,14 +702,14 @@ QScrollBar::handle:horizontal:hover {{
 QProgressBar {{
     background: {Theme.SURFACE_02DP};
     border: none;
-    border-radius: 5px;
-    height: 10px;
+    border-radius: 3px;
+    height: 6px;
 }}
 
 QProgressBar::chunk {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 {Theme.PRIMARY}, stop:1 {Theme.ACCENT_LIGHT});
-    border-radius: 4px;
+    border-radius: 3px;
 }}
 
 QTextEdit {{
@@ -810,6 +812,15 @@ QMenu::item {{
 
 QMenu::item:selected {{
     background: {Theme.BG_CARD_HOVER};
+}}
+
+QToolTip {{
+    background: #1e1e1e;
+    color: {Theme.TEXT_PRIMARY};
+    border: 1px solid #3a3a3f;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
 }}
 """
 
@@ -1547,7 +1558,7 @@ class GlowButton(QPushButton):
                 color: white;
                 border: none;
                 border-radius: {Theme.RADIUS_SM}px;
-                padding: 12px 28px;
+                padding: 10px 24px;
                 font-size: 14px;
                 font-weight: 600;
             }}
@@ -1618,7 +1629,7 @@ class ModernListRow(QFrame):
     
     def _setup_ui(self, title: str, subtitle: str, status: str, status_text: str, show_chevron: bool):
         self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(16, 14, 16, 14)
+        self.main_layout.setContentsMargins(16, 16, 16, 16)
         self.main_layout.setSpacing(14)
         
         # Status icon
@@ -1648,7 +1659,7 @@ class ModernListRow(QFrame):
             self.subtitle_label = QLabel(subtitle)
             self.subtitle_label.setStyleSheet(f"""
                 background: transparent;
-                color: {Theme.TEXT_TERTIARY};
+                color: {Theme.TEXT_SECONDARY};
                 font-size: 12px;
             """)
             content.addWidget(self.subtitle_label)
@@ -1719,17 +1730,17 @@ class ModernListRow(QFrame):
         else:
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {Theme.BG_ELEVATED};
-                    color: {Theme.TEXT_SECONDARY};
-                    border: none;
+                    background: transparent;
+                    color: {Theme.ACCENT};
+                    border: 1px solid {Theme.ACCENT};
                     padding: 4px 14px;
                     border-radius: 4px;
                     font-size: 11px;
                     font-weight: 500;
                 }}
                 QPushButton:hover {{
-                    background: {Theme.BG_CARD_HOVER};
-                    color: {Theme.TEXT_PRIMARY};
+                    background: {Theme.ACCENT};
+                    color: white;
                 }}
             """)
         btn.clicked.connect(callback)
@@ -1737,7 +1748,8 @@ class ModernListRow(QFrame):
         return btn
     
     def _apply_style(self):
-        bg = Theme.BG_CARD if not self.is_alternate else "#292930"
+        # More noticeable alternating row colors
+        bg = Theme.BG_CARD if not self.is_alternate else "#252528"
         hover_bg = Theme.BG_CARD_HOVER
         
         self.setStyleSheet(f"""
@@ -1769,19 +1781,19 @@ class ModernCategoryHeader(QFrame):
     
     def __init__(self, title: str, count: int = 0, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(48)
+        self.setFixedHeight(40)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 0, 20, 0)
         
-        # Category title - larger and bolder
+        # Category title - per spec Section 16.3
         title_label = QLabel(title.upper())
         title_label.setStyleSheet(f"""
             background: transparent;
-            color: {Theme.TEXT_PRIMARY};
-            font-size: 13px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
+            color: {Theme.TEXT_SECONDARY};
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
         """)
         layout.addWidget(title_label)
         
@@ -1791,7 +1803,7 @@ class ModernCategoryHeader(QFrame):
             count_label.setStyleSheet(f"""
                 background: transparent;
                 color: {Theme.TEXT_TERTIARY};
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 600;
             """)
             layout.addWidget(count_label)
@@ -1882,17 +1894,23 @@ class ModernListContainer(QFrame):
 
 
 class NavIcon(QWidget):
-    """Navigation icon widget"""
+    """Navigation icon widget using Segoe Fluent Icons"""
     
-    ICONS = {
-        "overview": "grid",
-        "updates": "download",
-        "storage": "hdd",
-        "security": "shield",
-        "hardware": "cpu",
-        "system": "file",
-        "events": "alert",
-        "settings": "gear",
+    # Segoe Fluent Icons unicode characters
+    FLUENT_ICONS = {
+        "grid": "\uE80A",       # GridView
+        "download": "\uE896",   # Download
+        "hdd": "\uEDA2",        # HardDrive
+        "shield": "\uE83D",     # Shield
+        "cpu": "\uE950",        # Processor
+        "file": "\uE8A5",       # Document
+        "alert": "\uE7BA",      # Warning
+        "gear": "\uE713",       # Settings
+        "chip": "\uE964",       # DeveloperBoard
+        "rocket": "\uE7C4",     # Up arrow / Launch
+        "speaker": "\uE767",    # Volume
+        "wrench": "\uE90F",     # Repair
+        "package": "\uE7B8",    # Package
     }
     
     def __init__(self, icon_name: str, size: int = 20, parent=None):
@@ -1901,201 +1919,33 @@ class NavIcon(QWidget):
         self.icon_size = size
         self.color = Theme.TEXT_SECONDARY
         self.setFixedSize(size, size)
+        
+        # Create label for the icon
+        self.icon_label = QLabel(self)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setGeometry(0, 0, size, size)
+        self._update_icon()
     
     def set_color(self, color: str):
         self.color = color
-        self.update()
+        self._update_icon()
     
-    def paintEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        pen = QPen(QColor(self.color))
-        pen.setWidth(2)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        
-        s = self.icon_size
-        m = 3  # margin
-        
-        if self.icon_name == "grid":
-            # 2x2 grid
-            gap = 2
-            box = (s - 2*m - gap) // 2
-            painter.drawRoundedRect(m, m, box, box, 2, 2)
-            painter.drawRoundedRect(m+box+gap, m, box, box, 2, 2)
-            painter.drawRoundedRect(m, m+box+gap, box, box, 2, 2)
-            painter.drawRoundedRect(m+box+gap, m+box+gap, box, box, 2, 2)
-            
-        elif self.icon_name == "download":
-            cx = s // 2
-            painter.drawLine(cx, m+2, cx, s-m-4)
-            painter.drawLine(cx-4, s-m-7, cx, s-m-3)
-            painter.drawLine(cx+4, s-m-7, cx, s-m-3)
-            painter.drawLine(m+2, s-m, s-m-2, s-m)
-            
-        elif self.icon_name == "hdd":
-            painter.drawRoundedRect(m, m+2, s-2*m, s-2*m-4, 3, 3)
-            painter.drawLine(m+3, s//2, s-m-3, s//2)
-            # LED dot
-            painter.setBrush(QBrush(QColor(self.color)))
-            painter.drawEllipse(s-m-5, s//2+3, 3, 3)
-            
-        elif self.icon_name == "shield":
-            path = QPainterPath()
-            cx = s / 2
-            path.moveTo(cx, m)
-            path.lineTo(s-m, m+4)
-            path.lineTo(s-m, s//2+2)
-            path.quadTo(s-m, s-m-2, cx, s-m)
-            path.quadTo(m, s-m-2, m, s//2+2)
-            path.lineTo(m, m+4)
-            path.closeSubpath()
-            painter.drawPath(path)
-            
-        elif self.icon_name == "cpu":
-            # Main chip
-            painter.drawRoundedRect(m+3, m+3, s-2*m-6, s-2*m-6, 2, 2)
-            # Pins
-            for i in range(3):
-                x = m + 5 + i * 4
-                painter.drawLine(x, m, x, m+3)
-                painter.drawLine(x, s-m-3, x, s-m)
-                painter.drawLine(m, m+5+i*4, m+3, m+5+i*4)
-                painter.drawLine(s-m-3, m+5+i*4, s-m, m+5+i*4)
-                
-        elif self.icon_name == "file":
-            painter.drawRoundedRect(m+2, m, s-2*m-4, s-2*m, 2, 2)
-            # Lines
-            for i in range(3):
-                y = m + 5 + i * 4
-                painter.drawLine(m+5, y, s-m-5, y)
-                
-        elif self.icon_name == "alert":
-            # Triangle
-            path = QPainterPath()
-            cx = s / 2
-            path.moveTo(cx, m+1)
-            path.lineTo(s-m, s-m-1)
-            path.lineTo(m, s-m-1)
-            path.closeSubpath()
-            painter.drawPath(path)
-            # Exclamation
-            painter.drawLine(int(cx), m+6, int(cx), s-m-6)
-            painter.setBrush(QBrush(QColor(self.color)))
-            painter.drawEllipse(int(cx)-1, s-m-4, 2, 2)
-            
-        elif self.icon_name == "gear":
-            # Simple gear
-            cx, cy = s//2, s//2
-            painter.drawEllipse(cx-3, cy-3, 6, 6)
-            for i in range(8):
-                import math
-                angle = i * math.pi / 4
-                x1 = int(cx + 4 * math.cos(angle))
-                y1 = int(cy + 4 * math.sin(angle))
-                x2 = int(cx + 7 * math.cos(angle))
-                y2 = int(cy + 7 * math.sin(angle))
-                painter.drawLine(x1, y1, x2, y2)
-        
-        elif self.icon_name == "chip":
-            # Chip/driver icon - circuit board style
-            painter.drawRoundedRect(m+2, m+2, s-2*m-4, s-2*m-4, 2, 2)
-            # Inner square
-            painter.drawRect(m+5, m+5, s-2*m-10, s-2*m-10)
-            # Connection pins on all sides
-            cx, cy = s//2, s//2
-            pin_len = 3
-            # Top and bottom pins
-            painter.drawLine(cx-3, m+2, cx-3, m+2-pin_len)
-            painter.drawLine(cx+3, m+2, cx+3, m+2-pin_len)
-            painter.drawLine(cx-3, s-m-2, cx-3, s-m-2+pin_len)
-            painter.drawLine(cx+3, s-m-2, cx+3, s-m-2+pin_len)
-            # Left and right pins
-            painter.drawLine(m+2, cy-3, m+2-pin_len, cy-3)
-            painter.drawLine(m+2, cy+3, m+2-pin_len, cy+3)
-            painter.drawLine(s-m-2, cy-3, s-m-2+pin_len, cy-3)
-            painter.drawLine(s-m-2, cy+3, s-m-2+pin_len, cy+3)
-        
-        elif self.icon_name == "rocket":
-            # Rocket icon for startup programs
-            import math
-            cx, cy = s // 2, s // 2
-            # Rocket body (rotated 45 degrees - pointing up-right)
-            path = QPainterPath()
-            path.moveTo(s - m - 2, m + 2)  # nose
-            path.lineTo(s - m - 5, m + 5)
-            path.lineTo(m + 5, s - m - 5)
-            path.lineTo(m + 2, s - m - 2)  # tail
-            path.lineTo(m + 5, s - m - 5)
-            path.lineTo(s - m - 5, m + 5)
-            path.closeSubpath()
-            painter.drawPath(path)
-            # Fins
-            painter.drawLine(m + 3, s - m - 6, m + 6, s - m - 3)
-            painter.drawLine(s - m - 6, m + 3, s - m - 3, m + 6)
-            # Exhaust flames
-            painter.drawLine(m + 1, s - m - 1, m + 4, s - m - 4)
-            painter.drawLine(m + 3, s - m + 1, m + 6, s - m - 2)
-        
-        elif self.icon_name == "speaker":
-            # Speaker/audio icon
-            import math
-            # Speaker cone
-            path = QPainterPath()
-            path.moveTo(m + 2, s // 2 - 3)
-            path.lineTo(m + 5, s // 2 - 3)
-            path.lineTo(m + 9, s // 2 - 6)
-            path.lineTo(m + 9, s // 2 + 6)
-            path.lineTo(m + 5, s // 2 + 3)
-            path.lineTo(m + 2, s // 2 + 3)
-            path.closeSubpath()
-            painter.drawPath(path)
-            # Sound waves
-            for i, radius in enumerate([4, 7]):
-                cx = m + 9
-                cy = s // 2
-                start_angle = -45
-                span_angle = 90
-                painter.drawArc(cx, cy - radius, radius * 2, radius * 2, start_angle * 16, span_angle * 16)
-        
-        elif self.icon_name == "wrench":
-            # Wrench/tools icon
-            import math
-            # Wrench handle (diagonal)
-            painter.drawLine(m + 2, s - m - 2, s // 2, s // 2)
-            # Wrench head (hexagonal shape at top)
-            cx, cy = s // 2 + 3, s // 2 - 3
-            head_size = 4
-            path = QPainterPath()
-            path.moveTo(cx - head_size, cy - 1)
-            path.lineTo(cx - 1, cy - head_size)
-            path.lineTo(cx + head_size - 1, cy - head_size + 1)
-            path.lineTo(cx + head_size, cy + 1)
-            path.lineTo(cx + 1, cy + head_size)
-            path.lineTo(cx - head_size + 1, cy + head_size - 1)
-            path.closeSubpath()
-            painter.drawPath(path)
-            # Opening in wrench head
-            painter.drawLine(cx + 2, cy - 2, s - m - 1, m + 1)
-        
-        elif self.icon_name == "package":
-            # Package/box icon for winget
-            # Box outline
-            painter.drawRect(m + 1, m + 3, s - 2*m - 2, s - 2*m - 4)
-            # Top flap (closed box)
-            painter.drawLine(m + 1, m + 3, s // 2, m)
-            painter.drawLine(s - m - 1, m + 3, s // 2, m)
-            # Vertical tape line
-            painter.drawLine(s // 2, m + 3, s // 2, s - m - 1)
-            # Horizontal tape line  
-            painter.drawLine(m + 1, s // 2 + 1, s - m - 1, s // 2 + 1)
+    def _update_icon(self):
+        icon_char = self.FLUENT_ICONS.get(self.icon_name, "\uE946")  # Default to a generic icon
+        self.icon_label.setText(icon_char)
+        self.icon_label.setStyleSheet(f"""
+            background: transparent;
+            color: {self.color};
+            font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+            font-size: {self.icon_size}px;
+        """)
 
 
 class SidebarItem(QFrame):
-    """Refined sidebar navigation item"""
+    """Refined sidebar navigation item with keyboard navigation support
+    
+    Per UI spec section 10.5: Arrow Up/Down to navigate, Enter/Space to select
+    """
     
     clicked = pyqtSignal()  # Signal emitted when item is clicked
     
@@ -2106,6 +1956,7 @@ class SidebarItem(QFrame):
         self.is_active = False
         self.setFixedHeight(36)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # Enable keyboard navigation
         self.setup_ui()
         self._update_style()
     
@@ -2136,28 +1987,26 @@ class SidebarItem(QFrame):
     def _update_style(self):
         """Update style - Apple-style glass with vibrant accent"""
         if self.is_active:
-            # Selected state: glowing left border, glass background
+            # Selected state: full-width highlight with left accent border
             self.setStyleSheet(f"""
                 SidebarItem {{
                     background: {Theme.ACCENT_SUBTLE};
                     border-left: 3px solid {Theme.ACCENT};
                     border-radius: 0px;
-                    margin-left: 0px;
-                    margin-right: 12px;
+                    margin: 0px;
                     padding-left: 9px;
                 }}
             """)
             self.icon.set_color(Theme.ACCENT)
             self.label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-weight: 600;")
         else:
-            # Default state: transparent
+            # Default state: transparent, no margins
             self.setStyleSheet(f"""
                 SidebarItem {{
                     background: transparent;
                     border-left: 3px solid transparent;
                     border-radius: 0px;
-                    margin-left: 0px;
-                    margin-right: 12px;
+                    margin: 0px;
                     padding-left: 9px;
                 }}
             """)
@@ -2166,14 +2015,13 @@ class SidebarItem(QFrame):
     
     def enterEvent(self, event):
         if not self.is_active:
-            # Hover state: subtle background
+            # Hover state: subtle background, full width
             self.setStyleSheet(f"""
                 SidebarItem {{
                     background: {Theme.BG_CARD_HOVER};
                     border-left: 3px solid transparent;
                     border-radius: 0px;
-                    margin-left: 0px;
-                    margin-right: 12px;
+                    margin: 0px;
                     padding-left: 9px;
                 }}
             """)
@@ -2182,10 +2030,43 @@ class SidebarItem(QFrame):
     
     def leaveEvent(self, event): # pyright: ignore[reportIncompatibleMethodOverride]
         self._update_style()
+    
+    def keyPressEvent(self, event):
+        """Handle keyboard activation per UI spec section 10.5"""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Space):
+            self.clicked.emit()
+        else:
+            super().keyPressEvent(event)
+    
+    def focusInEvent(self, event):
+        """Show focus indicator - blue outline per UI spec"""
+        if not self.is_active:
+            self.setStyleSheet(f"""
+                SidebarItem {{
+                    background: {Theme.BG_CARD_HOVER};
+                    border-left: 3px solid {Theme.ACCENT_LIGHT};
+                    border-radius: 0px;
+                    margin: 0px;
+                    padding-left: 9px;
+                    outline: none;
+                }}
+            """)
+            self.icon.set_color(Theme.ACCENT_LIGHT)
+            self.label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-weight: normal;")
+        super().focusInEvent(event)
+    
+    def focusOutEvent(self, event):
+        """Remove focus indicator"""
+        self._update_style()
+        super().focusOutEvent(event)
 
 
 class ScoreRing(QWidget):
-    """Animated score ring widget"""
+    """Animated score ring widget with health context tooltip
+    
+    Per UI spec section 5.7 and 10.6: Shows health score with gradient
+    colors and provides context via tooltip.
+    """
     
     def __init__(self, size: int = 120, parent=None):
         super().__init__(parent)
@@ -2193,6 +2074,8 @@ class ScoreRing(QWidget):
         self.score = 0
         self.target_score = 0
         self.setFixedSize(size, size)
+        self.setCursor(Qt.CursorShape.WhatsThisCursor)  # Indicate help available
+        self.setToolTip("Health score based on system checks.\\n80+ = Healthy\\n60-79 = Needs attention\\nBelow 60 = Critical issues")
         
         # Animation timer
         self.anim_timer = QTimer()
@@ -2271,7 +2154,14 @@ class ScoreRing(QWidget):
 
 
 class GlassCard(QFrame):
-    """Clean glass card without glow - glow is painted by parent container"""
+    """Interactive glass card with hover animations and visual feedback
+    
+    Features:
+    - Lift effect on hover (translateY simulation via margin)
+    - Glow intensification on hover
+    - Smooth transitions
+    - Keyboard navigation support
+    """
     
     clicked = pyqtSignal()
     
@@ -2279,33 +2169,81 @@ class GlassCard(QFrame):
         super().__init__(parent)
         self.title_text = title
         self._status = "pending"
-        self.setFixedHeight(72)
+        self._hovered = False
+        self._base_margin = 4  # Base margin for lift effect
+        self.setMinimumHeight(80)  # Increased for lift animation space
+        self.setMaximumHeight(98)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        
+        # Hover animation
+        self._hover_progress = 0.0
+        self._hover_timer = QTimer(self)
+        self._hover_timer.timeout.connect(self._animate_hover)
+        self._hover_timer.setInterval(16)  # 60fps
+        
         self.setup_ui()
+    
+    def _animate_hover(self):
+        """Animate hover progress for smooth transitions"""
+        if self._hovered:
+            self._hover_progress = min(1.0, self._hover_progress + 0.15)
+        else:
+            self._hover_progress = max(0.0, self._hover_progress - 0.15)
+        
+        # Update margins for lift effect
+        lift = int(self._hover_progress * 4)
+        self.setContentsMargins(0, self._base_margin - lift, 0, self._base_margin + lift)
+        
+        # Stop timer when animation complete
+        if (self._hovered and self._hover_progress >= 1.0) or (not self._hovered and self._hover_progress <= 0.0):
+            self._hover_timer.stop()
+        
+        self.update()
+        if self.parent():
+            self.parent().update()
+    
+    def enterEvent(self, event):
+        """Start hover animation"""
+        self._hovered = True
+        if not self._hover_timer.isActive():
+            self._hover_timer.start()
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """End hover animation"""
+        self._hovered = False
+        if not self._hover_timer.isActive():
+            self._hover_timer.start()
+        super().leaveEvent(event)
+    
+    def get_hover_progress(self) -> float:
+        """Return current hover animation progress (0.0 to 1.0)"""
+        return self._hover_progress
     
     def setup_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
         
-        # Status icon
-        self.status_icon = QLabel("○")
-        self.status_icon.setFixedSize(22, 22)
+        # Status icon - per spec Section 5.4 status icon 24x24 container, 18px icon
+        self.status_icon = QLabel("\uE946")  # Fluent icon - default info
+        self.status_icon.setFixedSize(24, 24)
         self.status_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_icon.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 16px;")
+        self.status_icon.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets'; font-size: 18px;")
         layout.addWidget(self.status_icon)
         
-        # Text
+        # Text - per spec Section 5.4 status icon positioning
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
         
         self.title = QLabel(self.title_text)
-        self.title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 600;")
+        self.title.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;")
         text_layout.addWidget(self.title)
         
         self.subtitle = QLabel("Checking...")
-        self.subtitle.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
+        self.subtitle.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 12px;")
         text_layout.addWidget(self.subtitle)
         
         layout.addLayout(text_layout)
@@ -2334,23 +2272,40 @@ class GlassCard(QFrame):
         self.clicked.emit()
         super().mousePressEvent(event)
     
+    def keyPressEvent(self, event):
+        """Handle keyboard activation per UI spec section 10.5"""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Space):
+            self.clicked.emit()
+        else:
+            super().keyPressEvent(event)
+    
+    def focusInEvent(self, event):
+        """Show focus indicator per UI spec section 10.5"""
+        self.setStyleSheet(f"border: 2px solid {Theme.ACCENT_LIGHT};")
+        super().focusInEvent(event)
+    
+    def focusOutEvent(self, event):
+        """Remove focus indicator"""
+        self.setStyleSheet("")
+        super().focusOutEvent(event)
+    
     def set_status(self, status: str, subtitle: str):
         self._status = status
         self.subtitle.setText(subtitle)
-        self.subtitle.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
+        self.subtitle.setStyleSheet(f"background: transparent; color: {Theme.TEXT_SECONDARY}; font-size: 12px;")
         
-        # Update icon with vibrant colors
+        # Update icon with vibrant colors - using Segoe Fluent Icons
         icons = {
-            "check": ("✓", Theme.GLOW_SUCCESS),
-            "warning": ("!", Theme.GLOW_WARNING),
-            "error": ("✕", Theme.GLOW_ERROR),
-            "info": ("i", Theme.GLOW_INFO),
-            "running": ("◐", Theme.GLOW_RUNNING),
-            "pending": ("○", Theme.TEXT_TERTIARY),
+            "check": ("\uE73E", Theme.GLOW_SUCCESS),      # CheckMark
+            "warning": ("\uE7BA", Theme.GLOW_WARNING),    # Warning
+            "error": ("\uE711", Theme.GLOW_ERROR),        # Cancel/X
+            "info": ("\uE946", Theme.GLOW_INFO),          # Info
+            "running": ("\uE895", Theme.GLOW_RUNNING),    # Sync/Running
+            "pending": ("\uE946", Theme.TEXT_TERTIARY),   # Info (pending)
         }
-        icon_char, icon_color = icons.get(status, ("○", Theme.TEXT_TERTIARY))
+        icon_char, icon_color = icons.get(status, ("\uE946", Theme.TEXT_TERTIARY))
         self.status_icon.setText(icon_char)
-        self.status_icon.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 16px; font-weight: bold;")
+        self.status_icon.setStyleSheet(f"background: transparent; color: {icon_color}; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets'; font-size: 16px;")
         
         # Trigger parent repaint for glow update
         if self.parent():
@@ -2420,17 +2375,24 @@ class GlowingCardGrid(QWidget):
             glow_color = card.get_glow_color()
             card_rect = card.geometry()
             
-            # Very subtle 2-layer glow
-            for i in range(2, 0, -1):
+            # Get hover progress for intensified glow on hover
+            hover_progress = card.get_hover_progress()
+            hover_boost = 1.0 + hover_progress * 0.8  # Up to 80% more intense on hover
+            
+            # Dynamic glow layers - more layers and intensity on hover
+            glow_layers = 2 + int(hover_progress * 2)  # 2-4 layers based on hover
+            for i in range(glow_layers, 0, -1):
                 layer_color = QColor(glow_color)
-                # Much more subtle - max alpha around 20
-                alpha = int(18 * pulse * (3 - i) / 2)
+                # Base alpha with hover boost
+                base_alpha = 18 * pulse * (glow_layers + 1 - i) / glow_layers
+                alpha = int(base_alpha * hover_boost)
+                alpha = min(alpha, 60)  # Cap to prevent over-saturation
                 layer_color.setAlpha(alpha)
                 
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QBrush(layer_color))
                 
-                expand = i * 6
+                expand = i * (6 + int(hover_progress * 4))  # Larger glow on hover
                 glow_rect = card_rect.adjusted(-expand, -expand, expand, expand)
                 
                 path = QPainterPath()
@@ -2459,12 +2421,16 @@ class GlowingCardGrid(QWidget):
             )
             painter.drawPath(path)
             
-            # Colored border for status cards - more subtle
+            # Colored border for status cards - intensifies on hover
             if status in ("check", "error", "warning"):
                 glow_color = card.get_glow_color()
-                border_alpha = int(80 + 50 * pulse)
+                hover_progress = card.get_hover_progress()
+                # Border gets brighter on hover
+                border_alpha = int((80 + 50 * pulse) * (1 + hover_progress * 0.5))
+                border_alpha = min(border_alpha, 200)
                 border_color = QColor(glow_color.red(), glow_color.green(), glow_color.blue(), border_alpha)
-                painter.setPen(QPen(border_color, 1.5))
+                border_width = 1.5 + hover_progress * 0.5  # Slightly thicker on hover
+                painter.setPen(QPen(border_color, border_width))
             else:
                 painter.setPen(QPen(QColor(55, 55, 60), 1))
             
@@ -2494,10 +2460,36 @@ class HealthSummaryCard(QWidget):
         rect = self.rect()
         radius = Theme.RADIUS_LG
         
-        # Simple solid card background - uses theme color
-        bg_color = QColor(Theme.BG_CARD)
+        # Dynamic gradient background based on health score
+        from PyQt6.QtGui import QLinearGradient
+        
+        # Base card color
+        base_color = QColor(Theme.BG_CARD)
+        
+        # Tint color based on score (subtle gradient overlay)
+        if self._score >= 80:
+            tint_color = QColor(Theme.GLOW_SUCCESS)  # Green tint for good health
+        elif self._score >= 50:
+            tint_color = QColor(Theme.GLOW_WARNING)  # Yellow tint for warning
+        else:
+            tint_color = QColor(Theme.GLOW_ERROR)    # Red tint for poor health
+        
+        # Create diagonal gradient from top-left to bottom-right
+        gradient = QLinearGradient(0, 0, rect.width(), rect.height())
+        
+        # Start with base color, blend to tinted color
+        start_color = QColor(base_color)
+        end_color = QColor(
+            int(base_color.red() * 0.92 + tint_color.red() * 0.08),
+            int(base_color.green() * 0.92 + tint_color.green() * 0.08),
+            int(base_color.blue() * 0.92 + tint_color.blue() * 0.08)
+        )
+        
+        gradient.setColorAt(0, start_color)
+        gradient.setColorAt(1, end_color)
+        
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(bg_color))
+        painter.setBrush(QBrush(gradient))
         
         path = QPainterPath()
         path.addRoundedRect(float(rect.x()), float(rect.y()),
@@ -2610,22 +2602,23 @@ class HealthSummaryCard(QWidget):
 class TipsCarousel(QFrame):
     """Rotating carousel of Windows health and safety tips"""
     
+    # Using Segoe Fluent Icons unicode characters per spec
     TIPS = [
-        ("💡", "Keep Windows Updated", "Enable automatic updates to protect against the latest security threats and get new features."),
-        ("🛡️", "Use Windows Defender", "Windows Defender provides real-time protection against viruses, malware, and other threats."),
-        ("💾", "Back Up Your Data", "Use Windows Backup or File History to regularly back up important files to an external drive or cloud."),
-        ("🔒", "Enable BitLocker", "Encrypt your drives with BitLocker to protect your data if your device is lost or stolen."),
-        ("🧹", "Clean Up Disk Space", "Run Disk Cleanup monthly to remove temporary files and free up storage space."),
-        ("⚡", "Manage Startup Programs", "Disable unnecessary startup programs to improve boot time and system performance."),
-        ("🔐", "Use Strong Passwords", "Create unique, complex passwords and consider using Windows Hello for biometric login."),
-        ("📡", "Secure Your Network", "Use WPA3 WiFi encryption and keep your router firmware updated."),
-        ("🚫", "Avoid Suspicious Downloads", "Only download software from trusted sources like the Microsoft Store or official websites."),
-        ("🔄", "Restart Regularly", "Restart your PC weekly to apply updates and clear temporary memory issues."),
-        ("🛠️", "Check Driver Updates", "Keep device drivers updated for better performance and security."),
-        ("📊", "Monitor System Health", "Use this tool regularly to check for issues before they become problems."),
-        ("🌐", "Use a Secure Browser", "Keep your browser updated and use extensions to block malicious websites."),
-        ("⏰", "Schedule Scans", "Set up weekly antivirus scans during off-hours for comprehensive protection."),
-        ("🔔", "Review App Permissions", "Periodically check which apps have access to your camera, microphone, and location."),
+        ("\uE946", "Keep Windows Updated", "Enable automatic updates to protect against the latest security threats and get new features."),
+        ("\uE83D", "Use Windows Defender", "Windows Defender provides real-time protection against viruses, malware, and other threats."),
+        ("\uEDA2", "Back Up Your Data", "Use Windows Backup or File History to regularly back up important files to an external drive or cloud."),
+        ("\uE72E", "Enable BitLocker", "Encrypt your drives with BitLocker to protect your data if your device is lost or stolen."),
+        ("\uE90F", "Clean Up Disk Space", "Run Disk Cleanup monthly to remove temporary files and free up storage space."),
+        ("\uE7C4", "Manage Startup Programs", "Disable unnecessary startup programs to improve boot time and system performance."),
+        ("\uE72E", "Use Strong Passwords", "Create unique, complex passwords and consider using Windows Hello for biometric login."),
+        ("\uE839", "Secure Your Network", "Use WPA3 WiFi encryption and keep your router firmware updated."),
+        ("\uE8F8", "Avoid Suspicious Downloads", "Only download software from trusted sources like the Microsoft Store or official websites."),
+        ("\uE72C", "Restart Regularly", "Restart your PC weekly to apply updates and clear temporary memory issues."),
+        ("\uE90F", "Check Driver Updates", "Keep device drivers updated for better performance and security."),
+        ("\uE80A", "Monitor System Health", "Use this tool regularly to check for issues before they become problems."),
+        ("\uE774", "Use a Secure Browser", "Keep your browser updated and use extensions to block malicious websites."),
+        ("\uE916", "Schedule Scans", "Set up weekly antivirus scans during off-hours for comprehensive protection."),
+        ("\uE7BA", "Review App Permissions", "Periodically check which apps have access to your camera, microphone, and location."),
     ]
     
     def __init__(self, parent=None):
@@ -2662,9 +2655,9 @@ class TipsCarousel(QFrame):
         icon_layout = QHBoxLayout(self.icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.icon_label = QLabel("💡")
+        self.icon_label = QLabel("\uE946")  # Fluent icon
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.icon_label.setStyleSheet("background: transparent; font-size: 24px;")
+        self.icon_label.setStyleSheet(f"background: transparent; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets'; font-size: 24px; color: {Theme.ACCENT};")
         icon_layout.addWidget(self.icon_label)
         layout.addWidget(self.icon_container)
         
@@ -2839,6 +2832,188 @@ class TipsCarousel(QFrame):
         self._update_display()  # Refresh dot colors
 
 
+class FloatingToolButton(QLabel):
+    """Circular floating tool button with proper hover effect"""
+    
+    def __init__(self, icon: str, tooltip: str, action, parent=None):
+        super().__init__(parent)
+        self.action = action
+        self.icon_char = icon
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(tooltip)
+        self.setFixedSize(44, 44)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setText(icon)
+        
+        # Store colors for hover effect
+        accent = Theme.ACCENT.lstrip('#')
+        self.r, self.g, self.b = int(accent[0:2], 16), int(accent[2:4], 16), int(accent[4:6], 16)
+        
+        self._hovered = False
+        self._update_style()
+    
+    def _update_style(self):
+        if self._hovered:
+            self.setStyleSheet(f"""
+                background: rgba({self.r}, {self.g}, {self.b}, 0.35);
+                border: 1px solid rgba({self.r}, {self.g}, {self.b}, 0.5);
+                border-radius: 22px;
+                color: {Theme.TEXT_PRIMARY};
+                font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+                font-size: 18px;
+            """)
+        else:
+            self.setStyleSheet(f"""
+                background: rgba({self.r}, {self.g}, {self.b}, 0.15);
+                border: 1px solid transparent;
+                border-radius: 22px;
+                color: {Theme.TEXT_PRIMARY};
+                font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+                font-size: 18px;
+            """)
+    
+    def enterEvent(self, event):
+        self._hovered = True
+        self._update_style()
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        self._hovered = False
+        self._update_style()
+        super().leaveEvent(event)
+    
+    def mousePressEvent(self, event):
+        if self.action:
+            self.action()
+        super().mousePressEvent(event)
+
+
+class FloatingToolbar(QFrame):
+    """Reusable floating toolbar component for any page"""
+    
+    def __init__(self, tools: list, parent=None):
+        """
+        Create a floating toolbar with the given tools.
+        
+        Args:
+            tools: List of tuples (tooltip, icon_unicode, action_callback)
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self._toolbar_visible = True
+        self._scrollbar_margin = 16
+        self._toolbar_width = 60
+        self._toggle_width = 20
+        self._tools = tools
+        
+        self._create_toolbar()
+    
+    def _create_toolbar(self):
+        """Create the toolbar panel and toggle button"""
+        # Toolbar panel with glass effect
+        self.toolbar_panel = QFrame(self.parent())
+        self.toolbar_panel.setFixedWidth(self._toolbar_width)
+        
+        # Glass effect background
+        accent = Theme.ACCENT.lstrip('#')
+        r, g, b = int(accent[0:2], 16), int(accent[2:4], 16), int(accent[4:6], 16)
+        
+        self.toolbar_panel.setStyleSheet(f"""
+            QFrame {{
+                background: rgba(30, 30, 30, 0.85);
+                border: 1px solid rgba({r}, {g}, {b}, 0.3);
+                border-radius: {Theme.RADIUS_LG}px;
+            }}
+        """)
+        Theme.apply_shadow(self.toolbar_panel, blur_radius=20, offset_y=4, opacity=100)
+        
+        toolbar_layout = QVBoxLayout(self.toolbar_panel)
+        toolbar_layout.setContentsMargins(8, 12, 8, 12)
+        toolbar_layout.setSpacing(8)
+        
+        # Add tool buttons
+        for tooltip, icon, action in self._tools:
+            btn = FloatingToolButton(icon, tooltip, action)
+            toolbar_layout.addWidget(btn)
+        
+        self.toolbar_panel.adjustSize()
+        
+        # Toggle button - pinned to right edge
+        self.toggle_btn = QFrame(self.parent())
+        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle_btn.setFixedSize(self._toggle_width, 48)
+        self.toggle_btn.setToolTip("Hide Quick Tools")
+        self.toggle_btn.setStyleSheet(f"""
+            QFrame {{
+                background: rgba(30, 30, 30, 0.85);
+                border: 1px solid {Theme.BORDER};
+                border-radius: 6px;
+            }}
+            QFrame:hover {{
+                background: {Theme.BG_CARD_HOVER};
+            }}
+        """)
+        toggle_layout = QVBoxLayout(self.toggle_btn)
+        toggle_layout.setContentsMargins(0, 0, 0, 0)
+        self.toggle_icon = QLabel("\uE76B")  # ChevronLeft
+        self.toggle_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.toggle_icon.setStyleSheet(f"""
+            background: transparent;
+            color: {Theme.TEXT_SECONDARY};
+            font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+            font-size: 12px;
+        """)
+        toggle_layout.addWidget(self.toggle_icon)
+        self.toggle_btn.mousePressEvent = lambda e: self._toggle()
+    
+    def _toggle(self):
+        """Toggle toolbar visibility"""
+        self._toolbar_visible = not self._toolbar_visible
+        
+        if self._toolbar_visible:
+            self.toolbar_panel.show()
+            self.toggle_icon.setText("\uE76B")  # ChevronLeft
+            self.toggle_btn.setToolTip("Hide Quick Tools")
+        else:
+            self.toolbar_panel.hide()
+            self.toggle_icon.setText("\uE76C")  # ChevronRight
+            self.toggle_btn.setToolTip("Show Quick Tools")
+        
+        self.update_position()
+    
+    def update_position(self):
+        """Position the toolbar and toggle button"""
+        parent = self.parent()
+        if not parent:
+            return
+            
+        # Toggle is always pinned to the right edge
+        toggle_x = parent.width() - self._toggle_width - self._scrollbar_margin
+        toggle_y = (parent.height() - self.toggle_btn.height()) // 2
+        self.toggle_btn.move(toggle_x, toggle_y)
+        self.toggle_btn.raise_()
+        
+        # Toolbar is to the left of the toggle
+        if self._toolbar_visible:
+            toolbar_x = toggle_x - self._toolbar_width - 4
+        else:
+            toolbar_x = parent.width() + 10  # Off screen
+        
+        toolbar_y = (parent.height() - self.toolbar_panel.height()) // 2
+        self.toolbar_panel.move(toolbar_x, toolbar_y)
+    
+    def show_toolbar(self):
+        """Show both toolbar and toggle"""
+        self.toolbar_panel.show()
+        self.toggle_btn.show()
+        self.update_position()
+    
+    def hide_toolbar(self):
+        """Hide both toolbar and toggle"""
+        self.toolbar_panel.hide()
+        self.toggle_btn.hide()
+
+
 class ActivityItem(QFrame):
     """Single activity log item with glowing status indicator"""
     
@@ -2902,7 +3077,7 @@ def get_startup_data() -> dict:
         "disabled_count": 0,
         "unknown_count": 0,
         "high_impact": [],
-        "threshold": 15,
+        "threshold": 30,  # Per UI spec: ≤30 OK, 31-60 Warning, >60 Attention
         "total": 0,
         "warnings": ["Startup scanner not available"],
     }
@@ -2961,9 +3136,9 @@ class StartupProgramsCard(QFrame):
         """)
         icon_layout = QHBoxLayout(icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
-        icon_label = QLabel("▶")
+        icon_label = QLabel("\uE768")  # Play icon for Startup
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px; font-weight: bold;")
+        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 16px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         icon_layout.addWidget(icon_label)
         header.addWidget(icon_container)
         
@@ -2978,7 +3153,7 @@ class StartupProgramsCard(QFrame):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         title_row.addWidget(title)
@@ -2987,9 +3162,9 @@ class StartupProgramsCard(QFrame):
         self.status_chip.setStyleSheet(f"""
             background: {Theme.SUCCESS_BG};
             color: {Theme.SUCCESS};
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 600;
-            padding: 3px 8px;
+            padding: 4px 10px;
             border-radius: 4px;
         """)
         title_row.addWidget(self.status_chip)
@@ -3039,36 +3214,66 @@ class StartupProgramsCard(QFrame):
         layout.addWidget(self.action_btn)
     
     def load_data(self):
-        """Load and display startup data"""
+        """Load and display startup data
+        
+        Per UI spec section 5.8 - Warning Thresholds:
+        - ≤30 enabled = OK (Healthy)
+        - 31-60 enabled = Warning
+        - >60 enabled = Attention
+        - >100 or unknown apps = Critical
+        """
         data = get_startup_data()
         
         enabled = data["enabled_count"]
         disabled = data["disabled_count"]
         unknown = data["unknown_count"]
-        threshold = data["threshold"]
         
         # Update summary
         self.summary_label.setText(f"{enabled} enabled, {disabled} disabled")
         
-        # Update status chip with vibrant glow colors
-        if enabled > threshold or unknown > 0:
+        # Update status chip based on thresholds per UI spec section 5.8
+        if enabled > 100 or unknown > 0:
+            # Critical - too many or unknown problematic apps
+            self.status_chip.setText("Critical")
+            self.status_chip.setStyleSheet(f"""
+                background: rgba(255, 69, 58, 0.2);
+                color: {Theme.GLOW_ERROR};
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 4px;
+            """)
+        elif enabled > 60:
+            # Attention - significantly too many
+            self.status_chip.setText("Attention")
+            self.status_chip.setStyleSheet(f"""
+                background: rgba(255, 149, 0, 0.2);
+                color: #ff9500;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 4px;
+            """)
+        elif enabled > 30:
+            # Warning - more than recommended
             self.status_chip.setText("Warning")
             self.status_chip.setStyleSheet(f"""
                 background: rgba(255, 214, 10, 0.2);
                 color: {Theme.GLOW_WARNING};
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 600;
-                padding: 3px 8px;
+                padding: 4px 10px;
                 border-radius: 4px;
             """)
         else:
+            # Healthy - 30 or fewer
             self.status_chip.setText("Healthy")
             self.status_chip.setStyleSheet(f"""
                 background: rgba(48, 209, 88, 0.2);
                 color: {Theme.GLOW_SUCCESS};
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 600;
-                padding: 3px 8px;
+                padding: 4px 10px;
                 border-radius: 4px;
             """)
         
@@ -3160,9 +3365,9 @@ class BootSecurityCard(QFrame):
         """)
         icon_layout = QHBoxLayout(icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
-        icon_label = QLabel("⛨")
+        icon_label = QLabel("\uE72E")  # Lock icon for Boot Security
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px;")
+        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         icon_layout.addWidget(icon_label)
         header.addWidget(icon_container)
         
@@ -3170,7 +3375,7 @@ class BootSecurityCard(QFrame):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         header.addWidget(title)
@@ -3326,9 +3531,9 @@ class SystemInfoCard(QFrame):
         """)
         icon_layout = QHBoxLayout(icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
-        icon_label = QLabel("⏱")
+        icon_label = QLabel("\uE916")  # Timer icon for System Info
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px;")
+        icon_label.setStyleSheet(f"background: transparent; color: {Theme.ACCENT_LIGHT}; font-size: 14px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         icon_layout.addWidget(icon_label)
         header.addWidget(icon_container)
         
@@ -3336,7 +3541,7 @@ class SystemInfoCard(QFrame):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         header.addWidget(title)
@@ -3664,12 +3869,16 @@ class ScanProgressDialog(QDialog):
 # =============================================================================
 
 class OverviewPage(QWidget):
-    """Main overview/dashboard page"""
+    """Main overview/dashboard page with staggered fade-in animations"""
     
     card_clicked = pyqtSignal(str)  # Signal emits card_id when clicked
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._animated_widgets = []  # Widgets to animate on show
+        self._animation_index = 0
+        self._animation_timer = None
+        self._first_show = True  # Only animate on first show
         self.setup_ui()
     
     def setup_ui(self):
@@ -3695,10 +3904,14 @@ class OverviewPage(QWidget):
         
         # Tips Carousel at top
         self.tips_carousel = TipsCarousel()
+        self.tips_carousel.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.tips_carousel)
         layout.addWidget(self.tips_carousel)
         
         # Health summary card
         self.health_card = HealthSummaryCard()
+        self.health_card.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.health_card)
         layout.addWidget(self.health_card)
         
         # Quick Status section
@@ -3714,6 +3927,8 @@ class OverviewPage(QWidget):
         
         # Status cards in glowing grid container
         self.card_grid = GlowingCardGrid()
+        self.card_grid.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.card_grid)
         
         self.status_cards = {}
         # Map card_id to the navigation page id
@@ -3740,9 +3955,13 @@ class OverviewPage(QWidget):
         
         self.startup_card = StartupProgramsCard()
         self.startup_card.manage_clicked.connect(lambda: self.card_clicked.emit("startup"))
+        self.startup_card.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.startup_card)
         cards_row.addWidget(self.startup_card, 1)
         
         self.boot_security_card = BootSecurityCard()
+        self.boot_security_card.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.boot_security_card)
         cards_row.addWidget(self.boot_security_card, 1)
         
         layout.addLayout(cards_row)
@@ -3752,6 +3971,8 @@ class OverviewPage(QWidget):
         cards_row2.setSpacing(16)
         
         self.system_info_card = SystemInfoCard()
+        self.system_info_card.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.system_info_card)
         cards_row2.addWidget(self.system_info_card, 1)
         
         # Spacer to match layout (or add another card here later)
@@ -3778,6 +3999,8 @@ class OverviewPage(QWidget):
             border-radius: {Theme.RADIUS_MD}px;
         """)
         Theme.apply_shadow(self.activity_container)
+        self.activity_container.setGraphicsEffect(self._create_opacity_effect(0))
+        self._animated_widgets.append(self.activity_container)
         self.activity_layout = QVBoxLayout(self.activity_container)
         self.activity_layout.setContentsMargins(4, 8, 4, 8)
         self.activity_layout.setSpacing(0)
@@ -3788,50 +4011,6 @@ class OverviewPage(QWidget):
         
         layout.addWidget(self.activity_container)
         
-        # Quick Tools section
-        tools_header = QLabel("Quick Tools")
-        tools_header.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_PRIMARY};
-            font-size: 16px;
-            font-weight: 600;
-            margin-top: 8px;
-        """)
-        layout.addWidget(tools_header)
-        
-        # Tools grid
-        self.tools_container = QFrame()
-        self.tools_container.setStyleSheet(f"""
-            QFrame {{
-                background: {Theme.BG_CARD};
-                border: none;
-                border-radius: {Theme.RADIUS_MD}px;
-            }}
-        """)
-        Theme.apply_shadow(self.tools_container)
-        tools_layout = QVBoxLayout(self.tools_container)
-        tools_layout.setContentsMargins(16, 16, 16, 16)
-        tools_layout.setSpacing(10)
-        
-        # Create tools grid
-        tools_grid = QGridLayout()
-        tools_grid.setSpacing(10)
-        
-        # Define quick tools with colors
-        quick_tools = [
-            ("Task Manager", "📊", "#10b981", self._open_task_manager),
-            ("Device Manager", "🔧", "#f59e0b", self._open_device_manager),
-            ("Disk Cleanup", "🧹", "#8b5cf6", self._open_disk_cleanup),
-            ("Windows Update", "🔄", "#3b82f6", self._open_windows_update),
-        ]
-        
-        for idx, (label, icon, color, action) in enumerate(quick_tools):
-            btn = self._create_quick_tool_button(label, icon, color, action)
-            tools_grid.addWidget(btn, 0, idx)
-        
-        tools_layout.addLayout(tools_grid)
-        layout.addWidget(self.tools_container)
-        
         layout.addStretch()
         
         scroll.setWidget(content)
@@ -3839,60 +4018,69 @@ class OverviewPage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Floating Quick Tools bar (fixed to right side)
+        tools = [
+            ("Task Manager", "\uE9D5", self._open_task_manager),
+            ("Device Manager", "\uE772", self._open_device_manager),
+            ("Disk Cleanup", "\uE90F", self._open_disk_cleanup),
+            ("Windows Update", "\uE895", self._open_windows_update),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
     
-    def _create_quick_tool_button(self, label: str, icon: str, color: str, action) -> QPushButton:
-        """Create a compact styled tool button for the overview"""
-        btn = QPushButton()
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(action)
-        btn.setFixedHeight(72)
-        btn.setMinimumWidth(140)
+    def _create_opacity_effect(self, opacity: float):
+        """Create a QGraphicsOpacityEffect for fade animation"""
+        from PyQt6.QtWidgets import QGraphicsOpacityEffect
+        effect = QGraphicsOpacityEffect()
+        effect.setOpacity(opacity)
+        return effect
+    
+    def showEvent(self, event):
+        """Start staggered fade-in animation when page is shown"""
+        super().showEvent(event)
+        if self._first_show and self._animated_widgets:
+            self._first_show = False
+            self._animation_index = 0
+            # Start animation timer
+            self._animation_timer = QTimer(self)
+            self._animation_timer.timeout.connect(self._animate_next_widget)
+            self._animation_timer.start(80)  # 80ms between each widget
+    
+    def _animate_next_widget(self):
+        """Animate the next widget in the sequence"""
+        if self._animation_index >= len(self._animated_widgets):
+            if self._animation_timer:
+                self._animation_timer.stop()
+                self._animation_timer = None
+            return
         
-        # Create layout for button content
-        btn_layout = QVBoxLayout(btn)
-        btn_layout.setContentsMargins(12, 10, 12, 10)
-        btn_layout.setSpacing(6)
-        btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        widget = self._animated_widgets[self._animation_index]
+        effect = widget.graphicsEffect()
         
-        # Icon with colored background
-        icon_label = QLabel(icon)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(f"""
-            background: {color}25;
-            border-radius: 8px;
-            font-size: 20px;
-            padding: 6px;
-        """)
-        icon_label.setFixedSize(36, 36)
-        btn_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignCenter)
+        if effect and hasattr(effect, 'setOpacity'):
+            # Create smooth fade-in animation
+            self._fade_in_widget(widget, effect)
         
-        # Label
-        text_label = QLabel(label)
-        text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        text_label.setStyleSheet(f"""
-            background: transparent;
-            color: {Theme.TEXT_PRIMARY};
-            font-size: 11px;
-            font-weight: 500;
-        """)
-        btn_layout.addWidget(text_label)
+        self._animation_index += 1
+    
+    def _fade_in_widget(self, widget, effect):
+        """Smoothly fade in a widget"""
+        from PyQt6.QtCore import QPropertyAnimation
         
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {Theme.BG_ELEVATED};
-                border: 1px solid transparent;
-                border-radius: {Theme.RADIUS_MD}px;
-            }}
-            QPushButton:hover {{
-                background: {Theme.BG_CARD_HOVER};
-                border: 1px solid {color}55;
-            }}
-            QPushButton:pressed {{
-                background: {color}20;
-            }}
-        """)
-        
-        return btn
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setDuration(300)
+        animation.setStartValue(0.0)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        # Remove the graphics effect after animation to prevent rendering issues with child widgets
+        animation.finished.connect(lambda: widget.setGraphicsEffect(None))
+        animation.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
     
     def _open_task_manager(self):
         """Open Task Manager"""
@@ -4350,8 +4538,40 @@ class DriversPage(QWidget):
         
         # Show placeholder
         self._show_installed_placeholder()
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("Device Manager", "\uE772", self._open_device_manager),
+            ("Windows Update", "\uE895", self._open_windows_update),
+            ("System Info", "\uE946", self._open_system_info),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_windows_update(self):
+        """Open Windows Update settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:windowsupdate"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
+    
+    def _open_system_info(self):
+        """Open System Information"""
+        import subprocess
+        try:
+            subprocess.Popen(["msinfo32"])
+        except:
+            pass
     
     def _get_tab_style(self, is_active: bool) -> str:
+        """Tab styling per spec Section 7.0.2 - 44px height, 14px font"""
         if is_active:
             return f"""
                 QPushButton {{
@@ -4359,8 +4579,10 @@ class DriversPage(QWidget):
                     color: {Theme.TEXT_PRIMARY};
                     border: none;
                     border-bottom: 2px solid {Theme.ACCENT};
+                    border-radius: 8px 8px 0 0;
                     padding: 12px 24px;
-                    font-size: 13px;
+                    min-height: 44px;
+                    font-size: 14px;
                     font-weight: 600;
                 }}
             """
@@ -4372,12 +4594,13 @@ class DriversPage(QWidget):
                     border: none;
                     border-bottom: 2px solid transparent;
                     padding: 12px 24px;
-                    font-size: 13px;
+                    min-height: 44px;
+                    font-size: 14px;
                     font-weight: 500;
                 }}
                 QPushButton:hover {{
                     color: {Theme.TEXT_PRIMARY};
-                    background: {Theme.BG_CARD};
+                    background: {Theme.BG_CARD_HOVER};
                 }}
             """
     
@@ -4710,8 +4933,8 @@ class DriversPage(QWidget):
             clean_layout.setContentsMargins(24, 24, 24, 24)
             clean_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            check_icon = QLabel("✓")
-            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 36px; font-weight: bold;")
+            check_icon = QLabel("\uE73E")
+            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 36px; font-weight: bold; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
             check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             clean_layout.addWidget(check_icon)
             
@@ -4764,7 +4987,8 @@ class DriversPage(QWidget):
                         status="ok",
                         status_text="Safe"
                     )
-                    row.add_action_button("Remove", lambda checked, d=driver: self._remove_driver(d), primary=True)
+                    # Use secondary button - less prominent for bulk actions
+                    row.add_action_button("Remove", lambda checked, d=driver: self._remove_driver(d), primary=False)
                 
                 self.cleanup_layout.insertWidget(self.cleanup_layout.count() - 1, container)
             
@@ -5121,7 +5345,7 @@ class DriversPage(QWidget):
         # =================================================================
         
         if has_detected:
-            detected_header = QLabel("⚡ Recommended for Your Hardware")
+            detected_header = QLabel("Recommended for Your Hardware")
             detected_header.setStyleSheet(f"""
                 background: transparent;
                 color: {Theme.SUCCESS};
@@ -5137,7 +5361,7 @@ class DriversPage(QWidget):
             if vendors['nvidia_gpu']:
                 nvidia_row = detected_container.add_row(
                     title="NVIDIA GeForce Drivers",
-                    subtitle="✓ NVIDIA GPU detected • Game Ready & Studio drivers",
+                    subtitle="NVIDIA GPU detected - Game Ready & Studio drivers",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5148,7 +5372,7 @@ class DriversPage(QWidget):
             if vendors['amd_gpu']:
                 amd_row = detected_container.add_row(
                     title="AMD Radeon Software",
-                    subtitle="✓ AMD GPU detected • Adrenalin Edition",
+                    subtitle="AMD GPU detected - Adrenalin Edition",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5159,7 +5383,7 @@ class DriversPage(QWidget):
             if vendors['intel_gpu']:
                 intel_row = detected_container.add_row(
                     title="Intel Graphics Drivers",
-                    subtitle="✓ Intel GPU detected • Arc, Iris Xe, or integrated",
+                    subtitle="Intel GPU detected - Arc, Iris Xe, or integrated",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5170,7 +5394,7 @@ class DriversPage(QWidget):
             if vendors['intel_cpu']:
                 intel_chipset_row = detected_container.add_row(
                     title="Intel Chipset Drivers",
-                    subtitle="✓ Intel CPU detected • INF utility for system stability",
+                    subtitle="Intel CPU detected - INF utility for system stability",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5180,7 +5404,7 @@ class DriversPage(QWidget):
             if vendors['amd_cpu']:
                 amd_chipset_row = detected_container.add_row(
                     title="AMD Chipset Drivers",
-                    subtitle="✓ AMD CPU detected • Ryzen chipset drivers",
+                    subtitle="AMD CPU detected - Ryzen chipset drivers",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5190,7 +5414,7 @@ class DriversPage(QWidget):
             if vendors['realtek_audio']:
                 realtek_row = detected_container.add_row(
                     title="Realtek Audio Drivers",
-                    subtitle="✓ Realtek audio detected • HD Audio codecs",
+                    subtitle="Realtek audio detected - HD Audio codecs",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5200,7 +5424,7 @@ class DriversPage(QWidget):
             if vendors['intel_network']:
                 intel_net_row = detected_container.add_row(
                     title="Intel Network Drivers",
-                    subtitle="✓ Intel network adapter detected",
+                    subtitle="Intel network adapter detected",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5210,7 +5434,7 @@ class DriversPage(QWidget):
             if vendors['realtek_network']:
                 realtek_net_row = detected_container.add_row(
                     title="Realtek Network Drivers",
-                    subtitle="✓ Realtek ethernet detected",
+                    subtitle="Realtek ethernet detected",
                     status="ok",
                     status_text="Detected"
                 )
@@ -5223,7 +5447,7 @@ class DriversPage(QWidget):
                 dock_model = dock_info.get('model', '')
                 dock_type = dock_info.get('dock_type', '')
                 
-                subtitle_parts = ["✓ HP docking station detected"]
+                subtitle_parts = ["HP docking station detected"]
                 if dock_model:
                     subtitle_parts.append(f"• {dock_model}")
                 elif dock_type:
@@ -5255,7 +5479,7 @@ class DriversPage(QWidget):
                     name, url = mfr_urls[mfr]
                     mfr_row = detected_container.add_row(
                         title=name,
-                        subtitle=f"✓ {mfr.title()} system detected • Get system-specific drivers",
+                        subtitle=f"{mfr.title()} system detected • Get system-specific drivers",
                         status="ok",
                         status_text="Detected"
                     )
@@ -5386,7 +5610,7 @@ class DriversPage(QWidget):
             if mfr_id == detected_mfr:
                 row = tools_container.add_row(
                     title=name,
-                    subtitle=f"✓ {desc}",
+                    subtitle=f"{desc}",
                     status="ok",
                     status_text="Your System"
                 )
@@ -5502,7 +5726,7 @@ class DriversPage(QWidget):
                     widget.deleteLater()
         
         if not updates:
-            result_label = QLabel("✓ No driver updates available from Windows Update")
+            result_label = QLabel("No driver updates available from Windows Update")
             result_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 13px;")
             self.wu_results_layout.addWidget(result_label)
         else:
@@ -5888,7 +6112,7 @@ class StartupPage(QWidget):
                 background: {Theme.ACCENT};
                 color: white;
                 border: none;
-                padding: 12px 28px;
+                padding: 10px 24px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
                 font-weight: 600;
@@ -5991,6 +6215,37 @@ class StartupPage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("Task Manager", "\uE9D5", self.open_task_manager),
+            ("Startup Apps", "\uE7B5", self._open_startup_settings),
+            ("Services", "\uE912", self._open_services),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_startup_settings(self):
+        """Open Windows Startup Apps Settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:startupapps"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
+    
+    def _open_services(self):
+        """Open Services MMC"""
+        import subprocess
+        try:
+            subprocess.Popen(["services.msc"])
+        except:
+            pass
     
     def _add_stat_divider(self, layout):
         """Add a vertical divider between stats"""
@@ -6314,7 +6569,7 @@ class StartupPage(QWidget):
                 background: {Theme.ACCENT};
                 color: white;
                 border: none;
-                padding: 12px 28px;
+                padding: 10px 24px;
                 border-radius: {Theme.RADIUS_SM}px;
                 font-size: 13px;
                 font-weight: 600;
@@ -6448,6 +6703,37 @@ class EventsPage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("Event Viewer", "\uE7C4", self._open_event_viewer),
+            ("Reliability Monitor", "\uE9D9", self._open_reliability_monitor),
+            ("Problem Reports", "\uE946", self._open_problem_reports),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_reliability_monitor(self):
+        """Open Reliability Monitor"""
+        import subprocess
+        try:
+            subprocess.Popen(["perfmon", "/rel"])
+        except:
+            pass
+    
+    def _open_problem_reports(self):
+        """Open Problem Reports"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:privacy-diagnostics"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
     
     def _add_stat_divider(self, layout):
         """Add a vertical divider between stats"""
@@ -7085,10 +7371,10 @@ class AudioDeviceCard(QFrame):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
         
-        # Icon
-        icon_char = "🔊" if self.device_type == "output" else "🎤"
+        # Icon - Fluent Icons for speaker/microphone
+        icon_char = "\uE767" if self.device_type == "output" else "\uE720"  # Speaker or Microphone
         icon = QLabel(icon_char)
-        icon.setStyleSheet(f"background: transparent; font-size: 24px;")
+        icon.setStyleSheet(f"background: transparent; font-size: 24px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         icon.setFixedWidth(32)
         layout.addWidget(icon)
         
@@ -7629,9 +7915,39 @@ class AudioPage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
         
+        # Floating Quick Tools bar
+        tools = [
+            ("Sound Settings", "\uE767", self._open_sound_settings),
+            ("Volume Mixer", "\uE992", self._open_volume_mixer),
+            ("Device Manager", "\uE772", self._open_device_manager),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+        
         # Background worker
         self._worker = None
         self._thread = None
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_volume_mixer(self):
+        """Open Volume Mixer"""
+        import subprocess
+        try:
+            subprocess.Popen(["sndvol.exe"])
+        except:
+            pass
+    
+    def _open_device_manager(self):
+        """Open Device Manager"""
+        import subprocess
+        try:
+            subprocess.Popen(["devmgmt.msc"])
+        except:
+            pass
     
     def scan_devices(self):
         """Scan for audio devices"""
@@ -7720,24 +8036,88 @@ class AudioPage(QWidget):
             self._start_oscilloscope()
     
     def _start_oscilloscope(self):
-        """Start the oscilloscope visualization"""
+        """Start the oscilloscope visualization and play test tone"""
         self.oscilloscope.set_amplitude(0.7)
         self.oscilloscope.start(demo_mode=True)
         self.start_scope_btn.setEnabled(False)
         self.stop_scope_btn.setEnabled(True)
         self.amp_value.setText("ACTIVE")
         self.amp_value.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 18px; font-weight: 600;")
+        
+        # Pre-generate tone files if not already done
+        self._ensure_tone_files()
+        
+        # Start playing with async flag for non-blocking
+        self._tone_playing = True
+        self._play_current_tone()
+    
+    def _ensure_tone_files(self):
+        """Pre-generate WAV files for all frequencies"""
+        if hasattr(self, '_tone_files') and self._tone_files:
+            return  # Already generated
+        
+        import wave
+        import struct
+        import tempfile
+        import math
+        
+        self._tone_files = {}
+        frequencies = {'Low': 220, 'Mid': 440, 'High': 880}
+        sample_rate = 44100
+        duration = 0.5  # Shorter duration for smoother looping
+        
+        for name, freq in frequencies.items():
+            try:
+                num_samples = int(sample_rate * duration)
+                temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+                temp_file.close()
+                
+                with wave.open(temp_file.name, 'w') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(sample_rate)
+                    
+                    for i in range(num_samples):
+                        value = int(32767 * 0.5 * math.sin(2 * math.pi * freq * i / sample_rate))
+                        wav_file.writeframes(struct.pack('<h', value))
+                
+                self._tone_files[name] = temp_file.name
+            except Exception as e:
+                print(f"Error creating tone file for {name}: {e}")
+    
+    def _play_current_tone(self):
+        """Play the current frequency tone asynchronously"""
+        if not self._tone_playing:
+            return
+        
+        import winsound
+        
+        # Get current frequency
+        current = 'Mid'
+        for btn in self.freq_btns:
+            if btn.isChecked():
+                current = btn.text()
+                break
+        
+        if hasattr(self, '_tone_files') and current in self._tone_files:
+            # Play async and loop
+            winsound.PlaySound(self._tone_files[current], winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
     
     def _stop_oscilloscope(self):
-        """Stop the oscilloscope"""
+        """Stop the oscilloscope and test tone"""
         self.oscilloscope.stop()
         self.start_scope_btn.setEnabled(True)
         self.stop_scope_btn.setEnabled(False)
         self.amp_value.setText("OFF")
         self.amp_value.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 18px; font-weight: 600;")
+        
+        # Stop the tone asynchronously
+        self._tone_playing = False
+        import winsound
+        winsound.PlaySound(None, winsound.SND_ASYNC)
     
     def _set_frequency(self, freq: str):
-        """Set oscilloscope frequency display"""
+        """Set oscilloscope frequency and change tone instantly if playing"""
         for btn in self.freq_btns:
             btn.setChecked(btn.text() == freq)
         
@@ -7748,38 +8128,122 @@ class AudioPage(QWidget):
             self.oscilloscope.set_amplitude(0.7)
         else:
             self.oscilloscope.set_amplitude(0.9)
+        
+        # If tone is playing, switch immediately (no lag)
+        if hasattr(self, '_tone_playing') and self._tone_playing:
+            self._play_current_tone()  # This instantly switches to new frequency
+    
+    def _cleanup_tone_files(self):
+        """Clean up temporary tone files"""
+        if hasattr(self, '_tone_files'):
+            for path in self._tone_files.values():
+                try:
+                    os.remove(path)
+                except:
+                    pass
+            self._tone_files = {}
     
     def _play_test_tone(self):
-        """Play a test tone using Windows built-in beep"""
-        import subprocess
-        try:
-            # Use PowerShell to play a beep tone
-            command = '''
-            [console]::beep(440, 500)
-            Start-Sleep -Milliseconds 200
-            [console]::beep(554, 500)
-            Start-Sleep -Milliseconds 200  
-            [console]::beep(659, 500)
-            '''
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-            )
-        except Exception as e:
-            print(f"Error playing tone: {e}")
+        """Play a test tone through speakers using generated WAV"""
+        def play_tone():
+            import wave
+            import struct
+            import tempfile
+            import winsound
+            import math
+            
+            # Play ascending tones (C4, E4, G4)
+            frequencies = [261.63, 329.63, 392.00]  # C4, E4, G4
+            sample_rate = 44100
+            duration = 0.4
+            
+            for freq in frequencies:
+                try:
+                    num_samples = int(sample_rate * duration)
+                    
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                        temp_wav = f.name
+                    
+                    with wave.open(temp_wav, 'w') as wav_file:
+                        wav_file.setnchannels(1)
+                        wav_file.setsampwidth(2)
+                        wav_file.setframerate(sample_rate)
+                        
+                        for i in range(num_samples):
+                            # Generate sine wave with fade in/out
+                            envelope = 1.0
+                            if i < num_samples * 0.1:
+                                envelope = i / (num_samples * 0.1)
+                            elif i > num_samples * 0.9:
+                                envelope = (num_samples - i) / (num_samples * 0.1)
+                            
+                            value = int(32767 * 0.5 * envelope * math.sin(2 * math.pi * freq * i / sample_rate))
+                            wav_file.writeframes(struct.pack('<h', value))
+                    
+                    winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
+                    
+                    # Cleanup
+                    try:
+                        os.remove(temp_wav)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    print(f"Error playing tone: {e}")
+        
+        # Run in background thread
+        threading.Thread(target=play_tone, daemon=True).start()
     
     def _play_channel_test(self, channel: str):
-        """Play test tone for a specific channel"""
-        import subprocess
-        try:
+        """Play test tone for a specific channel (left/right speaker test)"""
+        def play_channel():
+            import wave
+            import struct
+            import tempfile
+            import winsound
+            import math
+            
             freq = 440 if channel == "left" else 554
-            command = f'[console]::beep({freq}, 1000)'
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-            )
-        except Exception as e:
-            print(f"Error playing channel test: {e}")
+            sample_rate = 44100
+            duration = 1.0
+            num_samples = int(sample_rate * duration)
+            
+            try:
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                    temp_wav = f.name
+                
+                # Create stereo WAV (left channel only or right channel only)
+                with wave.open(temp_wav, 'w') as wav_file:
+                    wav_file.setnchannels(2)  # Stereo
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(sample_rate)
+                    
+                    for i in range(num_samples):
+                        # Generate sine wave with fade
+                        envelope = 1.0
+                        if i < num_samples * 0.05:
+                            envelope = i / (num_samples * 0.05)
+                        elif i > num_samples * 0.95:
+                            envelope = (num_samples - i) / (num_samples * 0.05)
+                        
+                        value = int(32767 * 0.5 * envelope * math.sin(2 * math.pi * freq * i / sample_rate))
+                        
+                        if channel == "left":
+                            wav_file.writeframes(struct.pack('<hh', value, 0))  # Left only
+                        else:
+                            wav_file.writeframes(struct.pack('<hh', 0, value))  # Right only
+                
+                winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
+                
+                try:
+                    os.remove(temp_wav)
+                except:
+                    pass
+                    
+            except Exception as e:
+                print(f"Error playing channel test: {e}")
+        
+        threading.Thread(target=play_channel, daemon=True).start()
     
     def _open_sound_settings(self):
         """Open Windows Sound Settings"""
@@ -7959,6 +8423,38 @@ class WindowsUpdatePage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("Windows Update", "\uE895", self._open_windows_update),
+            ("Update History", "\uE81C", self._open_update_history),
+            ("Advanced Options", "\uE713", self._open_advanced_options),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_update_history(self):
+        """Open Windows Update History"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:windowsupdate-history"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
+    
+    def _open_advanced_options(self):
+        """Open Windows Update Advanced Options"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:windowsupdate-options"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
     
     def _add_stat_divider(self, layout):
         """Add a vertical divider between stats"""
@@ -8134,14 +8630,14 @@ class WindowsUpdatePage(QWidget):
             icon_layout.setContentsMargins(0, 0, 0, 0)
             icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            check_icon = QLabel("✓")
-            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 18px; font-weight: bold;")
+            check_icon = QLabel("\uE73E")  # Fluent checkmark
+            check_icon.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets'; font-size: 18px;")
             check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             icon_layout.addWidget(check_icon)
             up_to_date_layout.addWidget(icon_container)
             
             up_to_date_text = QLabel("Your device is up to date")
-            up_to_date_text.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 15px; font-weight: 500;")
+            up_to_date_text.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 500;")
             up_to_date_layout.addWidget(up_to_date_text)
             up_to_date_layout.addStretch()
             
@@ -8338,17 +8834,17 @@ class WindowsUpdatePage(QWidget):
         # Result icon
         result = entry.get('Result', 'Unknown')
         if result == 'Succeeded':
-            icon = "✓"
+            icon = "\uE73E"
             icon_color = Theme.SUCCESS
         elif result == 'Failed':
-            icon = "✗"
+            icon = "\uE711"
             icon_color = Theme.ERROR
         else:
-            icon = "○"
+            icon = "\uE946"
             icon_color = Theme.TEXT_TERTIARY
 
         icon_label = QLabel(icon)
-        icon_label.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 14px; font-weight: bold;")
+        icon_label.setStyleSheet(f"background: transparent; color: {icon_color}; font-size: 14px; font-weight: bold; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         icon_label.setFixedWidth(20)
         layout.addWidget(icon_label)
 
@@ -8614,6 +9110,37 @@ class StoragePage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("Disk Cleanup", "\uE90F", self._open_disk_cleanup),
+            ("Disk Management", "\uE964", self._open_disk_management),
+            ("Storage Settings", "\uEDA2", self._open_storage_settings),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_disk_management(self):
+        """Open Disk Management"""
+        import subprocess
+        try:
+            subprocess.Popen(["diskmgmt.msc"])
+        except:
+            pass
+    
+    def _open_storage_settings(self):
+        """Open Storage Settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:storagesense"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
     
     def _add_stat_divider(self, layout):
         """Add a vertical divider between stats"""
@@ -8936,9 +9463,9 @@ class StoragePage(QWidget):
         
         # Disk icon based on type
         media_type = disk.get('MediaType', 'Unknown')
-        icon_text = "💾" if 'SSD' in media_type else "💿"
+        icon_text = "\uEDA2" if 'SSD' in media_type else "\uE958"  # HardDrive or Disc
         icon = QLabel(icon_text)
-        icon.setStyleSheet("background: transparent; font-size: 24px;")
+        icon.setStyleSheet("background: transparent; font-size: 24px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         layout.addWidget(icon)
         
         # Disk info
@@ -9309,8 +9836,40 @@ class SecurityPage(QWidget):
         
         # Show placeholder
         self._show_placeholder("Click 'Open Windows Security' or run a full system scan to see security status")
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("Windows Security", "\uE83D", self._open_windows_security),
+            ("Firewall Settings", "\uE8D8", self._open_firewall_settings),
+            ("Event Viewer", "\uE7C4", self._open_event_viewer),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_firewall_settings(self):
+        """Open Windows Firewall Settings"""
+        import subprocess
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "ms-settings:windowsdefender-firewall"],
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
+        except:
+            pass
+    
+    def _open_event_viewer(self):
+        """Open Event Viewer"""
+        import subprocess
+        try:
+            subprocess.Popen(["eventvwr.msc"])
+        except:
+            pass
     
     def _get_tab_style(self, is_active: bool) -> str:
+        """Tab styling per spec Section 7.0.2 - 44px height, 14px font"""
         if is_active:
             return f"""
                 QPushButton {{
@@ -9318,8 +9877,10 @@ class SecurityPage(QWidget):
                     color: {Theme.TEXT_PRIMARY};
                     border: none;
                     border-bottom: 2px solid {Theme.ACCENT};
+                    border-radius: 8px 8px 0 0;
                     padding: 12px 24px;
-                    font-size: 13px;
+                    min-height: 44px;
+                    font-size: 14px;
                     font-weight: 600;
                 }}
             """
@@ -9331,12 +9892,13 @@ class SecurityPage(QWidget):
                     border: none;
                     border-bottom: 2px solid transparent;
                     padding: 12px 24px;
-                    font-size: 13px;
+                    min-height: 44px;
+                    font-size: 14px;
                     font-weight: 500;
                 }}
                 QPushButton:hover {{
                     color: {Theme.TEXT_PRIMARY};
-                    background: {Theme.BG_CARD};
+                    background: {Theme.BG_CARD_HOVER};
                 }}
             """
     
@@ -9632,7 +10194,7 @@ class SecurityPage(QWidget):
         name_label.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         header.addWidget(name_label)
@@ -10018,6 +10580,44 @@ class SystemPage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+        
+        # Floating Quick Tools bar
+        tools = [
+            ("System Restore", "\uE777", self._open_system_restore),
+            ("Task Scheduler", "\uE787", self._open_task_scheduler),
+            ("Defragment", "\uE8FA", self._open_defragment),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_system_restore(self):
+        """Open System Restore"""
+        import subprocess
+        try:
+            subprocess.Popen(["rstrui.exe"])
+        except:
+            pass
+    
+    def _open_task_scheduler(self):
+        """Open Task Scheduler"""
+        import subprocess
+        try:
+            subprocess.Popen(["taskschd.msc"])
+        except:
+            pass
+    
+    def _open_defragment(self):
+        """Open Defragment and Optimize Drives"""
+        import subprocess
+        try:
+            subprocess.Popen(["dfrgui.exe"])
+        except:
+            pass
     
     def scan_system(self):
         """Scan system configuration using background thread"""
@@ -11025,7 +11625,7 @@ class HardwareInfoCard(QFrame):
     def set_status(self, status: str, text: str = ""):
         """Set the status chip"""
         # Common style base - note the fixed height is set on widget itself
-        base_style = "padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 600;"
+        base_style = "padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;"
         
         if status == "healthy" or status == "check":
             self.status_chip.setStyleSheet(f"""
@@ -11168,7 +11768,7 @@ class HardwareDetailCard(QFrame):
         self.title_label.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         header_layout.addWidget(self.title_label)
@@ -11330,7 +11930,7 @@ class TemperatureMonitorCard(QFrame):
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         """)
         header.addWidget(title)
@@ -11719,47 +12319,51 @@ class HardwarePage(QWidget):
         
         tab_container.addStretch()
         
-        # Style the tab buttons per spec section 5.5
+        # Style the tab buttons per spec section 7.0.2 - underline style, 44px height, 14px font
         self.overview_tab_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.BG_CARD};
+                background: transparent;
                 color: {Theme.TEXT_SECONDARY};
                 border: none;
-                padding: 10px 24px;
-                font-size: 13px;
+                border-bottom: 2px solid transparent;
+                padding: 12px 24px;
+                min-height: 44px;
+                font-size: 14px;
                 font-weight: 500;
-                border-top-left-radius: {Theme.RADIUS_SM}px;
-                border-bottom-left-radius: {Theme.RADIUS_SM}px;
-                border-top-right-radius: 0;
-                border-bottom-right-radius: 0;
             }}
             QPushButton:checked {{
-                background: {Theme.ACCENT};
-                color: white;
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border-bottom: 2px solid {Theme.ACCENT};
+                border-radius: 8px 8px 0 0;
+                font-weight: 600;
             }}
             QPushButton:hover:!checked {{
                 background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
             }}
         """)
         self.details_tab_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.BG_CARD};
+                background: transparent;
                 color: {Theme.TEXT_SECONDARY};
                 border: none;
-                padding: 10px 24px;
-                font-size: 13px;
+                border-bottom: 2px solid transparent;
+                padding: 12px 24px;
+                min-height: 44px;
+                font-size: 14px;
                 font-weight: 500;
-                border-top-left-radius: 0;
-                border-bottom-left-radius: 0;
-                border-top-right-radius: {Theme.RADIUS_SM}px;
-                border-bottom-right-radius: {Theme.RADIUS_SM}px;
             }}
             QPushButton:checked {{
-                background: {Theme.ACCENT};
-                color: white;
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border-bottom: 2px solid {Theme.ACCENT};
+                border-radius: 8px 8px 0 0;
+                font-weight: 600;
             }}
             QPushButton:hover:!checked {{
                 background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
             }}
         """)
         
@@ -11836,9 +12440,39 @@ class HardwarePage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
         
+        # Floating Quick Tools bar
+        tools = [
+            ("Device Manager", "\uE772", self.open_device_manager),
+            ("System Info", "\uE946", self._open_system_info),
+            ("Task Manager", "\uE9D5", self._open_task_manager),
+        ]
+        self._floating_toolbar = FloatingToolbar(tools, self)
+        
         # Background worker setup
         self._worker = None
         self._thread = None
+    
+    def resizeEvent(self, event):
+        """Reposition floating toolbar on resize"""
+        super().resizeEvent(event)
+        if hasattr(self, '_floating_toolbar'):
+            self._floating_toolbar.update_position()
+    
+    def _open_system_info(self):
+        """Open System Information"""
+        import subprocess
+        try:
+            subprocess.Popen(["msinfo32"])
+        except:
+            pass
+    
+    def _open_task_manager(self):
+        """Open Task Manager"""
+        import subprocess
+        try:
+            subprocess.Popen(["taskmgr"])
+        except:
+            pass
     
     def _setup_details_tab(self):
         """Setup the Full Details tab with expandable sections for each hardware component"""
@@ -12112,8 +12746,8 @@ class HardwarePage(QWidget):
         
         # Security (inline)
         card.add_subsection("Security")
-        secure_boot = "✓ Enabled" if mb.secure_boot else "✗ Disabled"
-        tpm = f"✓ v{mb.tpm_version}" if mb.tpm_present else "✗ Not detected"
+        secure_boot = "Enabled" if mb.secure_boot else "Disabled"
+        tpm = f"v{mb.tpm_version}" if mb.tpm_present else "Not detected"
         card.add_info_row("Secure Boot", secure_boot)
         card.add_info_row("TPM", tpm)
         
@@ -12405,7 +13039,7 @@ class WindowsToolsPage(QWidget):
         self.categories = [
             # Windows Settings section
             ("_settings_header", None, "SETTINGS", None),
-            ("system", "🖥️", "System", [
+            ("system", "\uE770", "System", [
                 ("Display", "ms-settings:display", "Screen resolution, brightness, and display settings"),
                 ("Sound", "ms-settings:sound", "Volume, output devices, and sound preferences"),
                 ("Notifications", "ms-settings:notifications", "App notifications and focus assist"),
@@ -12415,7 +13049,7 @@ class WindowsToolsPage(QWidget):
                 ("Activation", "ms-settings:activation", "Windows activation status and product key"),
                 ("About", "ms-settings:about", "Device specs, rename PC, and Windows version"),
             ]),
-            ("network", "🌐", "Network", [
+            ("network", "\uE774", "Network", [
                 ("Wi-Fi", "ms-settings:network-wifi", "Connect to wireless networks"),
                 ("Ethernet", "ms-settings:network-ethernet", "Wired network adapter settings"),
                 ("VPN", "ms-settings:network-vpn", "Add and manage VPN connections"),
@@ -12423,7 +13057,7 @@ class WindowsToolsPage(QWidget):
                 ("Proxy", "ms-settings:network-proxy", "Configure proxy server settings"),
                 ("Advanced Network", "ms-settings:network-advancedsettings", "Network adapters and data usage"),
             ]),
-            ("personalize", "🎨", "Personalize", [
+            ("personalize", "\uE771", "Personalize", [
                 ("Background", "ms-settings:personalization-background", "Desktop wallpaper and slideshow"),
                 ("Colors", "ms-settings:colors", "Accent color and transparency effects"),
                 ("Lock Screen", "ms-settings:lockscreen", "Lock screen background and apps"),
@@ -12432,32 +13066,32 @@ class WindowsToolsPage(QWidget):
                 ("Start Menu", "ms-settings:personalization-start", "Start menu layout and pinned apps"),
                 ("Taskbar", "ms-settings:taskbar", "Taskbar buttons, icons, and behaviors"),
             ]),
-            ("apps", "📦", "Apps", [
+            ("apps", "\uE74C", "Apps", [
                 ("Installed Apps", "ms-settings:appsfeatures", "Manage and uninstall applications"),
                 ("Default Apps", "ms-settings:defaultapps", "Choose default programs for file types"),
                 ("Startup Apps", "ms-settings:startupapps", "Apps that run when Windows starts"),
                 ("Optional Features", "ms-settings:optionalfeatures", "Add or remove Windows features"),
             ]),
-            ("accounts", "👤", "Accounts", [
+            ("accounts", "\uE77B", "Accounts", [
                 ("Your Info", "ms-settings:yourinfo", "Account picture and sign-in options"),
                 ("Email & Accounts", "ms-settings:emailandaccounts", "Email, calendar, and contacts accounts"),
                 ("Sign-in Options", "ms-settings:signinoptions", "Password, PIN, and Windows Hello"),
                 ("Family & Others", "ms-settings:otherusers", "Add family members or other users"),
                 ("Sync Settings", "ms-settings:sync", "Sync your settings across devices"),
             ]),
-            ("time", "🕐", "Time & Language", [
+            ("time", "\uE823", "Time & Language", [
                 ("Date & Time", "ms-settings:dateandtime", "Time zone, clock, and calendar settings"),
                 ("Language & Region", "ms-settings:regionlanguage", "Display language and regional format"),
                 ("Typing", "ms-settings:typing", "Keyboard, autocorrect, and suggestions"),
                 ("Speech", "ms-settings:speech", "Speech recognition and text-to-speech"),
             ]),
-            ("gaming", "🎮", "Gaming", [
+            ("gaming", "\uE7FC", "Gaming", [
                 ("Game Bar", "ms-settings:gaming-gamebar", "Game Bar shortcuts and features"),
                 ("Captures", "ms-settings:gaming-gamedvr", "Screenshots and game recording settings"),
                 ("Game Mode", "ms-settings:gaming-gamemode", "Optimize your PC for gaming"),
                 ("Xbox Networking", "ms-settings:gaming-xboxnetworking", "Xbox Live connection status"),
             ]),
-            ("access", "♿", "Accessibility", [
+            ("access", "\uE776", "Accessibility", [
                 ("Text Size", "ms-settings:easeofaccess-display", "Make text and apps larger"),
                 ("Visual Effects", "ms-settings:easeofaccess-visualeffects", "Animations and transparency"),
                 ("Mouse Pointer", "ms-settings:easeofaccess-mousepointer", "Pointer size, color, and style"),
@@ -12467,7 +13101,7 @@ class WindowsToolsPage(QWidget):
                 ("Keyboard", "ms-settings:easeofaccess-keyboard", "On-screen keyboard and sticky keys"),
                 ("Captions", "ms-settings:easeofaccess-captions", "Subtitle appearance settings"),
             ]),
-            ("privacy", "🔒", "Privacy & Security", [
+            ("privacy", "\uE72E", "Privacy & Security", [
                 ("Windows Security", "ms-settings:windowsdefender", "Virus protection and firewall status"),
                 ("Find My Device", "ms-settings:findmydevice", "Locate your lost device"),
                 ("General Privacy", "ms-settings:privacy", "Advertising ID and app permissions"),
@@ -12476,7 +13110,7 @@ class WindowsToolsPage(QWidget):
                 ("Microphone", "ms-settings:privacy-microphone", "Microphone access for apps"),
                 ("Diagnostics", "ms-settings:privacy-feedback", "Diagnostic data and feedback"),
             ]),
-            ("update", "🔄", "Windows Update", [
+            ("update", "\uE895", "Windows Update", [
                 ("Check for Updates", "ms-settings:windowsupdate", "Download and install Windows updates"),
                 ("Update History", "ms-settings:windowsupdate-history", "View installed updates"),
                 ("Advanced Options", "ms-settings:windowsupdate-options", "Update schedule and delivery"),
@@ -12484,7 +13118,7 @@ class WindowsToolsPage(QWidget):
             ]),
             # System Tools section
             ("_tools_header", None, "TOOLS", None),
-            ("core", "⚙️", "Core Tools", [
+            ("core", "\uE713", "Core Tools", [
                 ("Control Panel", "control", "Classic Windows settings and configuration"),
                 ("Device Manager", "devmgmt.msc", "View and manage hardware devices"),
                 ("Disk Management", "diskmgmt.msc", "Partition, format, and manage disks"),
@@ -12496,7 +13130,7 @@ class WindowsToolsPage(QWidget):
                 ("Component Services", "dcomcnfg", "COM+ applications and DCOM config"),
                 ("Run Dialog", "shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}", "Quick command launcher"),
             ]),
-            ("admin", "🛠️", "Admin Tools", [
+            ("admin", "\uE90F", "Admin Tools", [
                 ("Task Manager", "taskmgr", "Running processes and performance"),
                 ("Resource Monitor", "resmon", "CPU, memory, disk, and network usage"),
                 ("Performance Monitor", "perfmon", "System performance data and logs"),
@@ -12510,7 +13144,7 @@ class WindowsToolsPage(QWidget):
                 ("Steps Recorder", "psr", "Record steps to reproduce a problem"),
                 ("Windows Admin Center", "cmd /c start https://localhost:6516", "Web-based server management tool"),
             ]),
-            ("enterprise", "🏢", "Enterprise Admin", [
+            ("enterprise", "\uE731", "Enterprise Admin", [
                 ("Active Directory Users", "dsa.msc", "Manage AD users, groups, and computers"),
                 ("Active Directory Domains", "domain.msc", "Manage AD domains and trusts"),
                 ("Active Directory Sites", "dssite.msc", "Manage AD replication and sites"),
@@ -12531,7 +13165,7 @@ class WindowsToolsPage(QWidget):
                 ("Windows Deployment Services", "wdsmgmt.msc", "Network-based OS deployment"),
                 ("WSUS Console", "wsus.msc", "Windows Server Update Services"),
             ]),
-            ("security_tools", "🛡️", "Security Tools", [
+            ("security_tools", "\uE83D", "Security Tools", [
                 ("Windows Security", "windowsdefender:", "Antivirus, firewall, and protection"),
                 ("Windows Firewall", "wf.msc", "Advanced firewall rules and settings"),
                 ("User Accounts", "netplwiz", "Manage user accounts and passwords"),
@@ -12546,7 +13180,7 @@ class WindowsToolsPage(QWidget):
                 ("Shared Folders", "fsmgmt.msc", "View and manage shared folders"),
                 ("Encrypted File System", "cmd /c cipher", "EFS encryption management"),
             ]),
-            ("network_tools", "📡", "Network Tools", [
+            ("network_tools", "\uEC05", "Network Tools", [
                 ("Network Connections", "ncpa.cpl", "Network adapter settings and status"),
                 ("Network Sharing Center", "control /name Microsoft.NetworkAndSharingCenter", "Network status and sharing options"),
                 ("Windows Firewall", "firewall.cpl", "Basic firewall settings"),
@@ -12555,7 +13189,7 @@ class WindowsToolsPage(QWidget):
                 ("iSCSI Initiator", "iscsicpl", "Connect to iSCSI storage targets"),
                 ("Quick Assist", "quickassist", "Give or get remote assistance"),
             ]),
-            ("disk", "💾", "Disk Tools", [
+            ("disk", "\uEDA2", "Disk Tools", [
                 ("Disk Cleanup", "cleanmgr", "Delete temporary and junk files"),
                 ("Defragment & Optimize", "dfrgui", "Optimize drive performance"),
                 ("Disk Management", "diskmgmt.msc", "Partition and format drives"),
@@ -12563,14 +13197,14 @@ class WindowsToolsPage(QWidget):
                 ("Backup Settings", "ms-settings:backup", "File backup configuration"),
                 ("Recovery Drive", "RecoveryDrive", "Create USB recovery media"),
             ]),
-            ("display_tools", "🖼️", "Display Tools", [
+            ("display_tools", "\uE7F4", "Display Tools", [
                 ("Display Properties", "desk.cpl", "Screen resolution and orientation"),
                 ("Color Management", "colorcpl", "Color profiles for monitors"),
                 ("ClearType Tuner", "cttune", "Improve text readability"),
                 ("DirectX Diagnostics", "dxdiag", "Graphics and sound diagnostics"),
                 ("Advanced Graphics", "ms-settings:display-advancedgraphics", "GPU preferences for apps"),
             ]),
-            ("devices", "🔊", "Device Tools", [
+            ("devices", "\uE7F5", "Device Tools", [
                 ("Sound Settings", "mmsys.cpl", "Playback and recording devices"),
                 ("Device Manager", "devmgmt.msc", "Hardware device management"),
                 ("Printers & Scanners", "control printers", "Add and manage printers"),
@@ -12579,12 +13213,12 @@ class WindowsToolsPage(QWidget):
                 ("Keyboard Properties", "control keyboard", "Keyboard repeat rate and cursor"),
                 ("Windows Fax and Scan", "wfs", "Send faxes and scan documents"),
             ]),
-            ("power", "🔋", "Power Tools", [
+            ("power", "\uE945", "Power Tools", [
                 ("Power Options", "powercfg.cpl", "Power plans and advanced settings"),
                 ("Windows Mobility Center", "mblctr", "Laptop display, battery, and sync"),
                 ("Memory Diagnostics", "mdsched", "Check RAM for errors"),
             ]),
-            ("dev", "💻", "Developer Tools", [
+            ("dev", "\uE756", "Developer Tools", [
                 ("Command Prompt", "cmd", "Windows command line interface"),
                 ("PowerShell", "powershell", "Advanced command shell and scripting"),
                 ("PowerShell (x86)", "%SystemRoot%\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe", "32-bit PowerShell for compatibility"),
@@ -12596,14 +13230,14 @@ class WindowsToolsPage(QWidget):
                 ("ODBC Data Sources (32)", "%SystemRoot%\\SysWOW64\\odbcad32.exe", "32-bit database connections"),
                 ("Windows Features", "optionalfeatures", "Enable or disable Windows features"),
             ]),
-            ("recovery", "🔧", "Recovery Tools", [
+            ("recovery", "\uE777", "Recovery Tools", [
                 ("Troubleshooters", "ms-settings:troubleshoot", "Fix common Windows problems"),
                 ("Recovery Options", "ms-settings:recovery", "Reset or reinstall Windows"),
                 ("System Restore", "rstrui", "Restore to a previous state"),
                 ("Backup & Restore", "control /name Microsoft.BackupAndRestore", "Windows 7 style backup"),
                 ("File History", "control /name Microsoft.FileHistory", "Automatic file backup"),
             ]),
-            ("utilities", "🧰", "Utilities", [
+            ("utilities", "\uE74E", "Utilities", [
                 ("Character Map", "charmap", "Insert special characters and symbols"),
                 ("WordPad", "wordpad", "Basic word processor"),
                 ("Notepad", "notepad", "Simple text editor"),
@@ -12690,8 +13324,8 @@ class WindowsToolsPage(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(12)
         
-        self.cat_icon = QLabel("⚙️")
-        self.cat_icon.setStyleSheet(f"background: transparent; font-size: 24px;")
+        self.cat_icon = QLabel("\uE713")
+        self.cat_icon.setStyleSheet(f"background: transparent; font-size: 24px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         header_layout.addWidget(self.cat_icon)
         
         self.cat_title = QLabel("Select a Category")
@@ -12752,11 +13386,11 @@ class WindowsToolsPage(QWidget):
         layout.setContentsMargins(12, 0, 10, 0)
         layout.setSpacing(10)
         
-        # Icon - emoji for visual recognition
+        # Icon - Fluent Icon for visual recognition
         icon_label = QLabel(icon)
         icon_label.setFixedWidth(20)
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet("background: transparent; border: none; font-size: 14px;")
+        icon_label.setStyleSheet("background: transparent; border: none; font-size: 14px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
         layout.addWidget(icon_label)
         
         # Name
@@ -13106,13 +13740,13 @@ class WingetPage(QWidget):
         right_layout.setContentsMargins(24, 20, 24, 20)
         right_layout.setSpacing(16)
         
-        # Header
+        # Header - page title per spec Section 7.0.1
         header = QHBoxLayout()
-        title = QLabel("📦 Software Manager")
+        title = QLabel("Software Manager")
         title.setStyleSheet(f"""
             background: transparent;
             color: {Theme.TEXT_PRIMARY};
-            font-size: 24px;
+            font-size: 28px;
             font-weight: 600;
         """)
         header.addWidget(title)
@@ -13125,7 +13759,7 @@ class WingetPage(QWidget):
         
         right_layout.addLayout(header)
         
-        # Tab bar for switching between views
+        # Tab bar for switching between views - styled per spec Section 7.0.2
         tab_bar = QHBoxLayout()
         tab_bar.setSpacing(0)
         
@@ -13136,23 +13770,25 @@ class WingetPage(QWidget):
         self.tab_find.clicked.connect(lambda: self._switch_tab(0))
         self.tab_find.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.ACCENT};
-                color: white;
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
                 border: none;
-                padding: 10px 20px;
-                border-radius: {Theme.RADIUS_SM}px 0 0 {Theme.RADIUS_SM}px;
-                font-size: 13px;
+                border-bottom: 2px solid {Theme.ACCENT};
+                border-radius: 8px 8px 0 0;
+                padding: 12px 24px;
+                min-height: 44px;
+                font-size: 14px;
                 font-weight: 600;
             }}
-            QPushButton:checked {{
-                background: {Theme.ACCENT};
-            }}
             QPushButton:!checked {{
-                background: {Theme.BG_ELEVATED};
+                background: transparent;
                 color: {Theme.TEXT_SECONDARY};
+                border-bottom: 2px solid transparent;
+                font-weight: 500;
             }}
             QPushButton:!checked:hover {{
                 background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
             }}
         """)
         tab_bar.addWidget(self.tab_find)
@@ -13163,20 +13799,25 @@ class WingetPage(QWidget):
         self.tab_installed.clicked.connect(lambda: self._switch_tab(1))
         self.tab_installed.setStyleSheet(f"""
             QPushButton {{
-                background: {Theme.BG_ELEVATED};
+                background: transparent;
                 color: {Theme.TEXT_SECONDARY};
                 border: none;
-                padding: 10px 20px;
-                border-radius: 0 {Theme.RADIUS_SM}px {Theme.RADIUS_SM}px 0;
-                font-size: 13px;
-                font-weight: 600;
+                border-bottom: 2px solid transparent;
+                padding: 12px 24px;
+                min-height: 44px;
+                font-size: 14px;
+                font-weight: 500;
             }}
             QPushButton:checked {{
-                background: {Theme.ACCENT};
-                color: white;
+                background: {Theme.BG_CARD};
+                color: {Theme.TEXT_PRIMARY};
+                border-bottom: 2px solid {Theme.ACCENT};
+                border-radius: 8px 8px 0 0;
+                font-weight: 600;
             }}
             QPushButton:!checked:hover {{
                 background: {Theme.BG_CARD_HOVER};
+                color: {Theme.TEXT_PRIMARY};
             }}
         """)
         tab_bar.addWidget(self.tab_installed)
@@ -13456,61 +14097,69 @@ class WingetPage(QWidget):
         QTimer.singleShot(500, self._load_installed_apps)
     
     def _switch_tab(self, index: int):
-        """Switch between tabs"""
+        """Switch between tabs - styled per spec Section 7.0.2"""
         self.tab_stack.setCurrentIndex(index)
         self.tab_find.setChecked(index == 0)
         self.tab_installed.setChecked(index == 1)
         
-        # Update button styles
+        # Update button styles with underline tab pattern
         if index == 0:
             self.tab_find.setStyleSheet(f"""
                 QPushButton {{
-                    background: {Theme.ACCENT};
-                    color: white;
+                    background: {Theme.BG_CARD};
+                    color: {Theme.TEXT_PRIMARY};
                     border: none;
-                    padding: 10px 20px;
-                    border-radius: {Theme.RADIUS_SM}px 0 0 {Theme.RADIUS_SM}px;
-                    font-size: 13px;
+                    border-bottom: 2px solid {Theme.ACCENT};
+                    border-radius: 8px 8px 0 0;
+                    padding: 12px 24px;
+                    min-height: 44px;
+                    font-size: 14px;
                     font-weight: 600;
                 }}
             """)
             self.tab_installed.setStyleSheet(f"""
                 QPushButton {{
-                    background: {Theme.BG_ELEVATED};
+                    background: transparent;
                     color: {Theme.TEXT_SECONDARY};
                     border: none;
-                    padding: 10px 20px;
-                    border-radius: 0 {Theme.RADIUS_SM}px {Theme.RADIUS_SM}px 0;
-                    font-size: 13px;
-                    font-weight: 600;
+                    border-bottom: 2px solid transparent;
+                    padding: 12px 24px;
+                    min-height: 44px;
+                    font-size: 14px;
+                    font-weight: 500;
                 }}
                 QPushButton:hover {{
                     background: {Theme.BG_CARD_HOVER};
+                    color: {Theme.TEXT_PRIMARY};
                 }}
             """)
         else:
             self.tab_find.setStyleSheet(f"""
                 QPushButton {{
-                    background: {Theme.BG_ELEVATED};
+                    background: transparent;
                     color: {Theme.TEXT_SECONDARY};
                     border: none;
-                    padding: 10px 20px;
-                    border-radius: {Theme.RADIUS_SM}px 0 0 {Theme.RADIUS_SM}px;
-                    font-size: 13px;
-                    font-weight: 600;
+                    border-bottom: 2px solid transparent;
+                    padding: 12px 24px;
+                    min-height: 44px;
+                    font-size: 14px;
+                    font-weight: 500;
                 }}
                 QPushButton:hover {{
                     background: {Theme.BG_CARD_HOVER};
+                    color: {Theme.TEXT_PRIMARY};
                 }}
             """)
             self.tab_installed.setStyleSheet(f"""
                 QPushButton {{
-                    background: {Theme.ACCENT};
-                    color: white;
+                    background: {Theme.BG_CARD};
+                    color: {Theme.TEXT_PRIMARY};
                     border: none;
-                    padding: 10px 20px;
-                    border-radius: 0 {Theme.RADIUS_SM}px {Theme.RADIUS_SM}px 0;
-                    font-size: 13px;
+                    border-bottom: 2px solid {Theme.ACCENT};
+                    border-radius: 8px 8px 0 0;
+                    padding: 12px 24px;
+                    min-height: 44px;
+                    font-size: 14px;
                     font-weight: 600;
                 }}
             """)
@@ -14440,7 +15089,7 @@ winget upgrade --include-unknown
         # Name with status
         name_row = QHBoxLayout()
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 15px; font-weight: 600;")
+        name_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_PRIMARY}; font-size: 14px; font-weight: 600;")
         name_row.addWidget(name_label)
         
         if installed:
@@ -14465,7 +15114,7 @@ winget upgrade --include-unknown
         info_layout.addWidget(desc_label)
         
         # Features
-        feat_label = QLabel(f"✓ {features}")
+        feat_label = QLabel(features)
         feat_label.setStyleSheet(f"background: transparent; color: {Theme.TEXT_TERTIARY}; font-size: 11px;")
         info_layout.addWidget(feat_label)
         
@@ -14492,8 +15141,8 @@ winget upgrade --include-unknown
             """)
             layout.addWidget(install_btn)
         else:
-            check_label = QLabel("✓")
-            check_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 20px;")
+            check_label = QLabel("\uE73E")
+            check_label.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 20px; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';")
             layout.addWidget(check_label)
         
         return card
@@ -14620,10 +15269,10 @@ winget upgrade --include-unknown
     def _on_winget_check_complete(self, available: bool, version: str):
         """Handle winget availability check result"""
         if available:
-            self.winget_status.setText(f"✓ winget {version}")
+            self.winget_status.setText(f"winget {version}")
             self.winget_status.setStyleSheet(f"background: transparent; color: {Theme.SUCCESS}; font-size: 12px;")
         else:
-            self.winget_status.setText("✗ winget not found")
+            self.winget_status.setText("winget not found")
             self.winget_status.setStyleSheet(f"background: transparent; color: {Theme.ERROR}; font-size: 12px;")
             self.search_btn.setEnabled(False)
             self.search_input.setEnabled(False)
@@ -16053,7 +16702,7 @@ class WingetBatchInstallDialog(QDialog):
     
     def _on_single_finished(self, success: bool):
         """Handle single app installation completion"""
-        status = "✓ Success" if success else "✗ Failed"
+        status = "Success" if success else "Failed"
         self.output_text.append(f"\n{status}\n")
         
         self.current_index += 1
@@ -16214,15 +16863,14 @@ class SettingsPage(QWidget):
         main_layout.addWidget(scroll)
     
     def _create_section(self, text: str) -> QLabel:
-        """Create a section header"""
+        """Create a section header per spec Section 7.0.3"""
         label = QLabel(text)
         label.setStyleSheet(f"""
             background: transparent;
-            color: {Theme.TEXT_SECONDARY};
-            font-size: 12px;
+            color: {Theme.TEXT_PRIMARY};
+            font-size: 16px;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            margin-top: 8px;
         """)
         return label
     
@@ -16441,9 +17089,39 @@ class CustomTitleBar(QFrame):
         layout.setContentsMargins(12, 0, 0, 0)
         layout.setSpacing(0)
         
-        # App icon (small)
-        icon_label = QLabel("🏥")
-        icon_label.setStyleSheet(f"background: transparent; font-size: 14px;")
+        # App icon (load from file)
+        icon_label = QLabel()
+        icon_label.setFixedSize(18, 18)
+        icon_label.setStyleSheet("background: transparent;")
+        
+        # Try to load the icon
+        import sys
+        import os
+        possible_paths = [
+            os.path.join(getattr(sys, '_MEIPASS', ''), 'icon.ico'),
+            os.path.join(os.path.dirname(sys.executable), 'icon.ico'),
+            'icon.ico',
+            os.path.join(os.path.dirname(__file__), 'icon.ico'),
+        ]
+        
+        icon_loaded = False
+        for icon_path in possible_paths:
+            if os.path.exists(icon_path):
+                from PyQt6.QtGui import QIcon
+                icon = QIcon(icon_path)
+                available_sizes = icon.availableSizes()
+                if available_sizes:
+                    largest_size = max(available_sizes, key=lambda s: s.width() * s.height())
+                    pixmap = icon.pixmap(largest_size)
+                    if not pixmap.isNull():
+                        icon_label.setPixmap(pixmap.scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        icon_loaded = True
+                        break
+        
+        if not icon_loaded:
+            icon_label.setText("💓")
+            icon_label.setStyleSheet("background: transparent; font-size: 14px;")
+        
         layout.addWidget(icon_label)
         
         layout.addSpacing(8)
@@ -16842,12 +17520,23 @@ class MainWindow(QMainWindow):
         if thread in self._active_threads:
             self._active_threads.remove(thread)
     
+    def _add_nav_divider(self, layout: QVBoxLayout):
+        """Add a visual divider between navigation groups per UI spec section 5.2"""
+        layout.addSpacing(8)
+        divider = QFrame()
+        divider.setFixedHeight(1)
+        divider.setStyleSheet(f"background: {Theme.BORDER}; margin-left: 16px; margin-right: 16px;")
+        layout.addWidget(divider)
+        layout.addSpacing(8)
+    
     def create_sidebar(self):
         sidebar = QFrame()
         sidebar.setFixedWidth(Theme.SIDEBAR_W)
+        # Clean solid background - no border to prevent artifacts
         sidebar.setStyleSheet(f"""
             QFrame {{
                 background: {Theme.BG_SIDEBAR};
+                border: none;
             }}
         """)
         
@@ -16862,20 +17551,51 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(20, 0, 16, 0)
         header_layout.setSpacing(10)
         
-        # App icon/title (Fluent style icon container)
-        app_icon_container = QFrame()
-        app_icon_container.setFixedSize(32, 32)
-        app_icon_container.setStyleSheet(f"""
-            background: {Theme.ACCENT};
-            border-radius: {Theme.RADIUS_SM}px;
-        """)
-        app_icon_layout = QHBoxLayout(app_icon_container)
-        app_icon_layout.setContentsMargins(0, 0, 0, 0)
-        app_icon = QLabel("+")
-        app_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        app_icon.setStyleSheet("background: transparent; color: white; font-size: 18px; font-weight: bold;")
-        app_icon_layout.addWidget(app_icon)
-        header_layout.addWidget(app_icon_container)
+        # App icon/title (load actual icon)
+        app_icon_label = QLabel()
+        app_icon_label.setFixedSize(32, 32)
+        app_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Try to load the icon
+        import sys
+        import os
+        icon_paths = [
+            os.path.join(getattr(sys, '_MEIPASS', ''), 'icon.ico'),
+            os.path.join(os.path.dirname(sys.executable), 'icon.ico'),
+            'icon.ico',
+            os.path.join(os.path.dirname(__file__), 'icon.ico'),
+        ]
+        
+        icon_set = False
+        for icon_path in icon_paths:
+            if os.path.exists(icon_path):
+                from PyQt6.QtGui import QIcon
+                icon = QIcon(icon_path)
+                # Get the largest available size from the icon
+                available_sizes = icon.availableSizes()
+                if available_sizes:
+                    # Sort by size and get the largest
+                    largest_size = max(available_sizes, key=lambda s: s.width() * s.height())
+                    pixmap = icon.pixmap(largest_size)
+                    if not pixmap.isNull():
+                        app_icon_label.setPixmap(pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        icon_set = True
+                        break
+        
+        if not icon_set:
+            # Fallback to styled container with +
+            app_icon_label.setStyleSheet(f"""
+                background: {Theme.ACCENT};
+                border-radius: {Theme.RADIUS_SM}px;
+                color: white;
+                font-size: 18px;
+                font-weight: bold;
+            """)
+            app_icon_label.setText("+")
+        else:
+            app_icon_label.setStyleSheet("background: transparent;")
+        
+        header_layout.addWidget(app_icon_label)
         
         app_title = QLabel("Health Checker")
         app_title.setStyleSheet(f"""
@@ -16897,24 +17617,65 @@ class MainWindow(QMainWindow):
         
         layout.addSpacing(8)
         
-        # Navigation items
+        # Navigation items with grouping (per UI spec section 5.2)
         self.nav_items = {}
-        nav_data = [
-            ("overview", "grid", "Overview"),
+        
+        # Group 1: Dashboard (standalone)
+        nav_dashboard = [("overview", "grid", "Overview")]
+        
+        # Group 2: System Health - items that check for issues
+        nav_health = [
             ("drivers", "chip", "Drivers"),
             ("startup", "rocket", "Startup"),
             ("updates", "download", "Updates"),
             ("storage", "hdd", "Storage"),
             ("security", "shield", "Security"),
+        ]
+        
+        # Group 3: System Info - informational pages
+        nav_info = [
             ("software", "package", "Software"),
             ("hardware", "cpu", "Hardware"),
             ("system", "file", "System"),
             ("events", "alert", "Events"),
             ("audio", "speaker", "Audio"),
-            ("tools", "wrench", "Tools"),
         ]
         
-        for nav_id, icon, label in nav_data:
+        # Group 4: Utilities
+        nav_utilities = [("tools", "wrench", "Tools")]
+        
+        # Add Dashboard group
+        for nav_id, icon, label in nav_dashboard:
+            item = SidebarItem(icon, label)
+            item.clicked.connect(lambda nid=nav_id: self.navigate(nid))
+            self.nav_items[nav_id] = item
+            layout.addWidget(item)
+        
+        # Divider after Dashboard
+        self._add_nav_divider(layout)
+        
+        # Add System Health group
+        for nav_id, icon, label in nav_health:
+            item = SidebarItem(icon, label)
+            item.clicked.connect(lambda nid=nav_id: self.navigate(nid))
+            self.nav_items[nav_id] = item
+            layout.addWidget(item)
+        
+        # Divider after System Health
+        self._add_nav_divider(layout)
+        
+        # Add System Info group
+        for nav_id, icon, label in nav_info:
+            item = SidebarItem(icon, label)
+            item.clicked.connect(lambda nid=nav_id: self.navigate(nid))
+            self.nav_items[nav_id] = item
+            layout.addWidget(item)
+        
+        # Divider after System Info
+        self._add_nav_divider(layout)
+        
+        # Add Utilities group
+        for nav_id, icon, label in nav_utilities:
             item = SidebarItem(icon, label)
             item.clicked.connect(lambda nid=nav_id: self.navigate(nid))
             self.nav_items[nav_id] = item

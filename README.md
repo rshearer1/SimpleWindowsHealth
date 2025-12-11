@@ -5,7 +5,7 @@
 **The all-in-one Windows system diagnostics and optimization tool**
 
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows)](https://www.microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-4.0.0-green?style=for-the-badge)](https://github.com/rshearer1/SimpleWindowsHealth/releases/latest)
+[![Version](https://img.shields.io/badge/Version-4.1.0-green?style=for-the-badge)](https://github.com/rshearer1/SimpleWindowsHealth/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/rshearer1/SimpleWindowsHealth/total?style=for-the-badge&color=blue)](https://github.com/rshearer1/SimpleWindowsHealth/releases)
 
@@ -191,7 +191,16 @@ python -m PyInstaller --clean --noconfirm WindowsHealthCheckerPro.spec
 
 ## 📋 Changelog
 
-### v4.0.0 (December 2025) - Latest
+### v4.1.0 (December 2025) - Latest
+- 🎨 **Fluent Icons** - Replaced all emojis with Segoe Fluent Icons for professional Windows 11 look
+- 🔊 **Audio Page Improvements** - Real audio playback through speakers with test tones
+- 🎵 **Oscilloscope** - Working frequency selector (Low/Mid/High) with instant switching
+- 💾 **Storage Detection** - Fixed SSD vs HDD detection for NVMe and modern drives
+- 🛠️ **Windows Tools** - Updated all category icons to Fluent Icons
+- ⚡ **Performance** - Lag-free audio frequency switching with pre-generated tones
+- 🐛 Various bug fixes and UI polish
+
+### v4.0.0 (December 2025)
 - 💜 **Custom App Icon** - Heart with pulse design for taskbar and window
 - ✨ **Theme System** - Full Dark/Light mode support with proper card theming
 - 🎨 **Accent Colors** - 6 customizable accent colors (Blue, Green, Purple, Orange, Pink, Teal)

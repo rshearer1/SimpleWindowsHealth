@@ -26,22 +26,34 @@ This application draws inspiration from **Microsoft PowerToys**, **Windows Secur
 │              │  │ Last scan: Today 2:34 PM        Score: 94/100 ████████░ │ │
 │              │  └─────────────────────────────────────────────────────────┘ │
 │   SIDEBAR    ├──────────────────────────────────────────────────────────────┤
-│   (240px)    │                                                              │
+│   (184px)    │                                                              │
 │              │  CONTENT AREA                                                │
 │  ┌────────┐  │                                                              │
 │  │Overview│  │  ┌─────────────────────────────────────────────────────────┐ │
 │  ├────────┤  │  │                                                         │ │
-│  │Updates │  │  │  Module content renders here based on                   │ │
+│  │Drivers │  │  │  Module content renders here based on                   │ │
 │  ├────────┤  │  │  sidebar selection                                      │ │
+│  │Startup │  │  │                                                         │ │
+│  ├────────┤  │  │                                                         │ │
+│  │Updates │  │  │                                                         │ │
+│  ├────────┤  │  │                                                         │ │
 │  │Storage │  │  │                                                         │ │
 │  ├────────┤  │  │                                                         │ │
 │  │Security│  │  │                                                         │ │
+│  ├────────┤  │  │                                                         │ │
+│  │Software│  │  │                                                         │ │
 │  ├────────┤  │  │                                                         │ │
 │  │Hardware│  │  │                                                         │ │
 │  ├────────┤  │  │                                                         │ │
 │  │System  │  │  │                                                         │ │
 │  ├────────┤  │  │                                                         │ │
 │  │Events  │  │  │                                                         │ │
+│  ├────────┤  │  │                                                         │ │
+│  │Audio   │  │  │                                                         │ │
+│  ├────────┤  │  │                                                         │ │
+│  │Tools   │  │  │                                                         │ │
+│  ├────────┤  │  │                                                         │ │
+│  │Settings│  │  │                                                         │ │
 │  └────────┘  │  │                                                         │ │
 │              │  └─────────────────────────────────────────────────────────┘ │
 ├──────────────┴──────────────────────────────────────────────────────────────┤
@@ -105,24 +117,35 @@ ACCENT_LIGHT    = #b3e5fc    (Light Blue 100)
 SECONDARY       = #03dac6    (Teal 200)
 ```
 
-### Semantic Colors (Desaturated for Dark Theme)
+### Semantic Colors (Optimized for User Comfort)
 
-| Status | Color | Hex | Background Overlay |
-|--------|-------|-----|-------------------|
-| Success | Green 300 | `#81c784` | `rgba(129,199,132,0.12)` |
-| Warning | Orange 200 | `#ffcc80` | `rgba(255,204,128,0.12)` |
-| Error | MD Dark Error | `#cf6679` | `rgba(207,102,121,0.12)` |
-| Info | Blue 200 | `#82b1ff` | `rgba(130,177,255,0.12)` |
-| Running | Purple 200 | `#bb86fc` | `rgba(187,134,252,0.12)` |
+Colors are slightly desaturated from pure Material/Apple colors to reduce visual fatigue on dark backgrounds while maintaining clear status communication.
 
-> **Note:** The error color `#cf6679` is the official Material Design dark theme error, created by applying a 40% white overlay to the light theme error (#b00020).
+| Status | Color | Hex | Background Overlay | Notes |
+|--------|-------|-----|-------------------|-------|
+| Success | Soft Green | `#34c759` | `rgba(74,222,128,0.12)` | Calming, not neon |
+| Warning | Warm Amber | `#f5c542` | `rgba(251,191,36,0.12)` | Warmer than pure yellow |
+| Error | Soft Red | `#e85d5d` | `rgba(248,113,113,0.12)` | Noticeable but not alarming |
+| Info | Soft Blue | `#5a9fff` | `rgba(96,165,250,0.12)` | Calm, informative |
+| Running | Soft Purple | `#a855f7` | `rgba(167,139,250,0.12)` | Engaging but not distracting |
+
+> **Design Philosophy:** Bright, saturated status colors can cause visual fatigue and unnecessary anxiety (especially red). These softer alternatives maintain clear communication while being easier on the eyes during extended use.
+
+### Text Hierarchy (Improved Contrast)
+
+| Level | Hex | Usage |
+|-------|-----|-------|
+| Primary | `#ffffff` | Headings, important labels |
+| Secondary | `#b8b8c0` | Body text, card subtitles |
+| Tertiary | `#909098` | Captions, timestamps |
+| Disabled | `#686870` | Inactive elements |
 
 ### Borders
 
 ```txt
-BORDER        = #3a3a3a    (Subtle - 12% white on surface)
-BORDER_LIGHT  = #454545    (Emphasis)
-BORDER_ACCENT = #bb86fc    (Primary color for focus states)
+BORDER        = #404048    (Visible border)
+BORDER_LIGHT  = #505058    (Emphasis)
+BORDER_ACCENT = #0078d4    (Windows blue for focus states)
 ```txt
 
 ### Shadow System
@@ -173,7 +196,78 @@ SEMANTIC COLORS (OLD - Saturated)
 ```
 Primary:      "Segoe UI Variable", "Segoe UI", system-ui, sans-serif
 Monospace:    "Cascadia Code", "Consolas", monospace
+Icons:        "Segoe Fluent Icons", "Segoe MDL2 Assets"
 ```
+
+### Iconography - Segoe Fluent Icons
+
+All icons in the application use **Segoe Fluent Icons** - the native Windows 11 icon font. This ensures:
+- Consistent visual language with Windows 11
+- Crisp rendering at any size
+- Automatic theme color inheritance
+- No external icon assets needed
+
+#### Icon Reference Table
+
+| Name       | Unicode  | Usage                          |
+|------------|----------|--------------------------------|
+| grid       | `\uE80A` | Overview/Dashboard             |
+| download   | `\uE896` | Drivers/Downloads              |
+| hdd        | `\uEDA2` | Storage                        |
+| shield     | `\uE83D` | Security                       |
+| cpu        | `\uE950` | Hardware/Processor             |
+| file       | `\uE8A5` | System/Documents               |
+| alert      | `\uE7BA` | Events/Warnings                |
+| gear       | `\uE713` | Settings                       |
+| chip       | `\uE964` | Memory/Hardware                |
+| rocket     | `\uE7C4` | Startup/Launch                 |
+| speaker    | `\uE767` | Audio                          |
+| wrench     | `\uE90F` | Tools/Repair                   |
+| package    | `\uE7B8` | Software/Apps                  |
+| update     | `\uE895` | Windows Update                 |
+| defender   | `\uE83D` | Windows Defender               |
+| storage    | `\uE8B7` | Storage/Disk                   |
+| health     | `\uE8C9` | Drive Health                   |
+| memory     | `\uE964` | Memory/RAM                     |
+| events     | `\uE7BA` | Event Logs                     |
+| play       | `\uE768` | Startup Programs               |
+| lock       | `\uE72E` | Boot Security                  |
+| timer      | `\uE916` | System Info/Uptime             |
+| task       | `\uE9D5` | Task Manager                   |
+| device     | `\uE772` | Device Manager                 |
+| broom      | `\uE90F` | Disk Cleanup                   |
+
+#### Implementation
+
+```python
+class NavIcon(QWidget):
+    """Navigation icon using Segoe Fluent Icons"""
+    
+    FLUENT_ICONS = {
+        "grid": "\uE80A",
+        "download": "\uE896",
+        "shield": "\uE83D",
+        # ... etc
+    }
+    
+    def _update_icon(self):
+        icon_char = self.FLUENT_ICONS.get(self.icon_name, "\uE946")
+        self.icon_label.setStyleSheet(f"""
+            background: transparent;
+            color: {self.color};
+            font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+            font-size: {self.icon_size}px;
+        """)
+```
+
+#### Icon Sizing Guidelines
+
+| Context           | Size    | Notes                              |
+|-------------------|---------|------------------------------------|
+| Sidebar Nav       | 20px    | Standard navigation icons          |
+| Card Headers      | 14-16px | Compact card title icons           |
+| Quick Tools       | 18px    | Action button icons                |
+| Status Indicators | 12px    | Small inline status icons          |
 
 ### Type Scale
 
@@ -266,7 +360,70 @@ STATES:
 │  Left border: 3px solid #0078d4     │
 │  Text: #ffffff                      │
 │  Icon: #60cdff                      │
+│  Border-radius: 0px (straight edges)│
+│  Margin: 0px (full-width highlight) │
 └─────────────────────────────────────┘
+
+SIDEBAR DESIGN PRINCIPLES:
+- Full-width highlight: Selected item highlight spans entire sidebar width
+- No margins: Sidebar items have no left/right margins
+- Straight edges: No rounded corners on sidebar items (border-radius: 0px)
+- Sidebar width sized to content: 184px matches text content without excess space
+```
+
+#### Sidebar Navigation Grouping
+
+To improve navigation clarity, sidebar items are organized into logical groups with subtle visual separators.
+
+```
+NAVIGATION GROUPS:
+
+┌──────────────────────────┐
+│  📊  Overview            │  ← Dashboard (standalone)
+├──────────────────────────┤
+│                          │  ← Subtle divider (8px space + 1px line)
+│  SYSTEM HEALTH           │  ← Group label (optional)
+│  🔧  Drivers             │
+│  🚀  Startup             │
+│  📥  Updates             │
+│  💾  Storage             │
+│  🛡️  Security            │
+├──────────────────────────┤
+│                          │
+│  SYSTEM INFO             │
+│  📦  Software            │
+│  🖥️  Hardware            │
+│  📄  System              │
+│  ⚠️  Events              │
+│  🔊  Audio               │
+├──────────────────────────┤
+│                          │
+│  🛠️  Tools               │  ← Utilities (standalone)
+├──────────────────────────┤
+│  ⚙️  Settings            │  ← Settings (always at bottom)
+└──────────────────────────┘
+
+GROUP SPECIFICATIONS:
+- Group label (optional): 10px, uppercase, #7a7a7a, letter-spacing 1px
+- Divider: 1px solid #3a3a3f
+- Spacing above divider: 8px
+- Spacing below divider: 8px
+- Group label padding: 12px 16px 4px 16px
+
+GROUP DEFINITIONS:
+├── Dashboard:     Overview (home/summary page)
+├── System Health: Drivers, Startup, Updates, Storage, Security
+│                  (items that check for issues and can be "fixed")
+├── System Info:   Software, Hardware, System, Events, Audio
+│                  (informational pages, less actionable)
+├── Utilities:     Tools (Windows tools launcher)
+└── Settings:      App settings (always bottom, separated)
+
+VISUAL DISTINCTION:
+- Groups help users understand what each section does
+- "System Health" items typically show status indicators
+- "System Info" items are more informational
+- Separators create visual breathing room in long list
 ```
 
 ### 5.3 Status Indicator Chips
@@ -301,7 +458,447 @@ RUNNING (Purple)
                             Icon: Animated spinner
 ```
 
-### 5.4 Progress Indicators
+### 5.4 Quick Status Card (Dashboard Grid)
+
+Compact status cards displayed in a 3×2 grid on the Overview dashboard.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   ✓   Windows Update                                    >   │
+│       Up to date                                            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+SPECIFICATIONS:
+- Width: Flexible, typically 1/3 of content area (3 per row)
+- Height: 80-90px (auto-expand for longer content)
+- Min-height: 80px
+- Padding: 16px
+- Border radius: 8px
+- Background: #2d2d32 (BG_CARD)
+- Hover background: #38383d (BG_CARD_HOVER)
+- Border: 1px solid transparent (default)
+- Border on error/warning: 1px solid status color at 30% opacity
+- Clickable: Yes (navigates to detail module)
+- Cursor: pointer
+
+ADAPTIVE SIZING (Content-aware):
+- Cards in the same row should align to the tallest card's height
+- Use CSS Grid with `grid-auto-rows: minmax(80px, auto)` or Flexbox with `align-items: stretch`
+- Subtitle text wraps to 2 lines maximum before truncation
+- For cards with longer content (e.g., "0 critical, 22 errors"):
+  ├── Allow natural height expansion
+  ├── Keep consistent padding
+  └── Row alignment ensures visual harmony
+
+CONTENT PRIORITY:
+- If subtitle is too long, truncate with ellipsis
+- Tooltip shows full text on hover for truncated content
+- Status badge takes priority over subtitle space
+```
+
+#### Status Icon Positioning (CRITICAL - Consistency Rule)
+
+```
+LAYOUT STRUCTURE:
+┌─────────────────────────────────────────────────────────────┐
+│  [STATUS_ICON]  [CONTENT]                        [CHEVRON]  │
+│      24px        flex-1                            16px     │
+└─────────────────────────────────────────────────────────────┘
+
+STATUS ICON (Left side, ALWAYS visible):
+- Position: Left side, vertically centered
+- Size: 24×24px container, 18px icon
+- Margin right: 14px
+- Icons by status:
+  ├── OK:      ✓ (checkmark) in #0f9d58 (green)
+  ├── Warning: ⚠ (triangle) in #f4b400 (amber)  
+  ├── Error:   ✗ (x mark) in #db4437 (red)
+  └── Info:    ℹ (info) in #60cdff (blue)
+
+CONTENT (Center):
+- Title: 14px, SemiBold, #ffffff (TEXT_PRIMARY)
+- Subtitle: 12px, Regular, #9e9e9e (TEXT_SECONDARY)
+- Line height: Title 20px, Subtitle 18px
+- Max lines: Title 1 (ellipsis), Subtitle 1 (ellipsis)
+
+CHEVRON (Right side):
+- Icon: > (right arrow) 
+- Size: 16px
+- Color: #636363 (disabled/hint)
+- Hover color: #9e9e9e
+- Indicates clickability
+```
+
+#### Status-Specific Card Styling
+
+```
+OK STATUS:
+├── Background: #2d2d32
+├── Border: 1px solid transparent
+├── Icon: ✓ in #0f9d58
+└── No additional styling
+
+WARNING STATUS:
+├── Background: #2d2d32
+├── Border: 1px solid rgba(244,180,0,0.3)
+├── Icon: ⚠ in #f4b400
+└── Subtle amber tint on hover
+
+ERROR STATUS:
+├── Background: #2d2d32  
+├── Border: 1px solid rgba(219,68,55,0.3)
+├── Icon: ✗ in #db4437
+└── Subtle red tint on hover
+```
+
+#### Accessibility Requirements
+
+```
+- ARIA role: "button" (since clickable)
+- ARIA label: "{title}: {subtitle}. Status: {status}. Click to view details."
+- Focus visible: 2px solid #60cdff outline
+- Tab order: Left-to-right, top-to-bottom in grid
+- Keyboard: Enter/Space to activate
+```
+
+### 5.5 Tip Banner Component
+
+A rotating informational banner displayed at the top of the Overview dashboard.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   🔔  TIP   Review App Permissions                           ● ● ● ○ ○     │
+│             Periodically check which apps have access to                    │
+│             your camera, microphone, and location.                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+SPECIFICATIONS:
+- Width: 100% of content area
+- Height: Auto (typically 80-100px)
+- Padding: 20px
+- Border radius: 8px
+- Background: #2d2d32 (BG_CARD)
+- Border: 1px solid #3a3a3f
+```
+
+#### Layout Structure
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  [ICON]  [BADGE]  [CONTENT]                              [PAGINATION]    │
+│   24px    auto     flex-1                                   auto         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+ICON:
+- Size: 24×24px
+- Type: Contextual (lightbulb 💡, bell 🔔, shield 🛡️, etc.)
+- Color: #f4b400 (amber) for tips, varies by type
+- Margin right: 12px
+
+BADGE:
+- Text: "TIP" or "INFO" or "SECURITY"
+- Font: 10px, Bold, uppercase
+- Background: rgba(244,180,0,0.2) for tips
+- Text color: #f4b400
+- Padding: 2px 8px
+- Border radius: 4px
+- Margin right: 12px
+
+CONTENT:
+- Title: 14px, SemiBold, #ffffff
+- Description: 13px, Regular, #9e9e9e
+- Max lines: Title 1, Description 2
+
+PAGINATION DOTS:
+- Dot size: 6px diameter
+- Active dot: #ffffff
+- Inactive dot: #636363
+- Spacing: 8px between dots
+- Shows current position in rotation
+```
+
+#### Rotation Behavior
+
+```
+AUTO-ROTATE:
+- Interval: 8 seconds between tips
+- Animation: Fade out (200ms) → Fade in (200ms)
+- Pause on hover: Yes
+- Resume after hover: Yes (restart timer)
+
+MANUAL NAVIGATION:
+- Click pagination dot: Jump to that tip
+- Swipe (touch): Previous/next tip
+- Keyboard: Arrow left/right when focused
+
+TIP CONTENT EXAMPLES:
+├── "Review App Permissions" - Privacy check
+├── "Clear Browser Cache" - Performance tip  
+├── "Check Startup Programs" - Boot optimization
+├── "Update Your Drivers" - Hardware maintenance
+└── "Run Disk Cleanup" - Storage management
+```
+
+### 5.6 Quick Tools Panel (Right Sidebar)
+
+A floating vertical toolbar providing quick access to common actions.
+
+```
+┌──────┐
+│  ☰   │   View toggle (list/grid)
+├──────┤
+│  ⊞   │   QR code / Share
+├──────┤
+│  🔧  │   Quick settings
+├──────┤
+│  ↻   │   Refresh / Re-scan
+└──────┘
+
+SPECIFICATIONS:
+- Width: 48px
+- Position: Fixed, right side of content area
+- Top offset: Aligned with content top + 200px
+- Background: #2d2d32 (BG_CARD)
+- Border: 1px solid #3a3a3f
+- Border radius: 8px
+- Shadow: blur=8, offset_y=2, opacity=60
+```
+
+#### Button Specifications
+
+```
+ICON BUTTON:
+- Size: 40×40px (with 4px margin = 48px container)
+- Icon size: 18px
+- Icon color: #9e9e9e (default)
+- Hover icon color: #ffffff
+- Background: transparent (default)
+- Hover background: #38383d
+- Border radius: 6px
+- Cursor: pointer
+
+TOOLTIP (REQUIRED):
+- Position: Left of button
+- Delay: 500ms before showing
+- Background: #1e1e1e
+- Text: 12px, #ffffff
+- Padding: 6px 10px
+- Border radius: 4px
+- Shadow: blur=8, opacity=80
+```
+
+#### Button Definitions
+
+| Position | Icon | Tooltip | Action |
+|----------|------|---------|--------|
+| 1 | ☰ (list) | "Toggle View" | Switch between list/grid view |
+| 2 | ⊞ (QR) | "System Report" | Generate shareable system report |
+| 3 | 🔧 (wrench) | "Quick Settings" | Open settings panel |
+| 4 | ↻ (refresh) | "Refresh All" | Re-run all health checks |
+
+#### Collapsed State
+
+```
+When content area width < 1000px:
+- Panel collapses to single toggle button
+- Click expands to show all buttons
+- Click outside collapses
+```
+
+### 5.7 Health Score Ring
+
+A circular progress indicator displaying the overall system health score.
+
+```
+        ╭─────────────╮
+       ╱    ░░░░░░░    ╲
+      │   ███████░░░    │
+      │                 │
+      │       65        │
+      │                 │
+      │   ███████░░░    │
+       ╲    ░░░░░░░    ╱
+        ╰─────────────╯
+
+SPECIFICATIONS:
+- Outer diameter: 160px
+- Ring thickness: 12px
+- Inner diameter: 136px (160 - 12*2)
+- Background track: #38383d at 30% opacity
+```
+
+#### Ring Gradient Colors by Score
+
+```
+SCORE 80-100 (Healthy):
+├── Start: #0f9d58 (green)
+├── End: #00c853 (bright green)
+└── Direction: Clockwise from top
+
+SCORE 60-79 (Attention Needed):
+├── Start: #f4b400 (amber)
+├── End: #ffcc00 (yellow)
+└── Direction: Clockwise from top
+
+SCORE 0-59 (Critical):
+├── Start: #db4437 (red)
+├── End: #ff6b6b (light red)
+└── Direction: Clockwise from top
+```
+
+#### Center Content
+
+```
+SCORE NUMBER:
+- Font: 48px, Bold
+- Color: #ffffff
+- Position: Centered vertically and horizontally
+
+SUBTEXT (Optional):
+- Text: "/ 100" or status label
+- Font: 14px, Regular
+- Color: #9e9e9e
+- Position: Below score number
+```
+
+#### Animation
+
+```
+ON LOAD / SCORE CHANGE:
+- Animation: Ring fills from 0% to target %
+- Duration: 800ms
+- Easing: ease-out
+- Score number: Counts up from 0 to target
+
+PULSE (Optional for low scores):
+- Subtle pulse animation for scores < 50
+- Scale: 1.0 → 1.02 → 1.0
+- Duration: 2s, infinite
+```
+
+### 5.8 Startup Programs Card
+
+A compact card showing startup program statistics with warning badge.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   ▶   Startup Programs                    ⚠ Warning         │
+│       61 enabled, 6 disabled                                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+SPECIFICATIONS:
+- Width: ~50% of content area
+- Height: 80px
+- Padding: 16px 20px
+- Border radius: 8px
+- Background: #2d2d32
+- Clickable: Yes
+```
+
+#### Warning Thresholds
+
+```
+STATUS CALCULATION:
+├── OK (no badge):     enabled ≤ 30
+├── Warning:           enabled 31-60  
+├── Attention:         enabled > 60
+└── Critical:          enabled > 100 or known problematic apps
+
+WARNING BADGE:
+- Text: "Warning" or "Attention"
+- Font: 11px, SemiBold
+- Background: rgba(244,180,0,0.2)
+- Text color: #f4b400
+- Padding: 4px 10px
+- Border radius: 4px
+- Position: Right side, vertically centered
+```
+
+#### Content Layout
+
+```
+[ICON]  [TITLE + BADGE]      
+        [SUBTITLE]           
+
+ICON:
+- Character: ▶ (play symbol) or 🚀
+- Size: 20px
+- Color: #60cdff
+
+TITLE:
+- Text: "Startup Programs"
+- Font: 14px, SemiBold, #ffffff
+
+SUBTITLE:
+- Format: "{enabled} enabled, {disabled} disabled"
+- Font: 12px, Regular, #9e9e9e
+```
+
+### 5.9 Boot Security Card
+
+A compact card showing secure boot and TPM status.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   🔒  Boot Security                                         │
+│                                                             │
+│       Secure Boot              Enabled  ●                   │
+│       TPM 2.0                  Active   ●                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+SPECIFICATIONS:
+- Width: ~50% of content area
+- Height: Auto (typically 100-120px)
+- Padding: 16px 20px
+- Border radius: 8px
+- Background: #2d2d32
+```
+
+#### Status Row Layout
+
+```
+[LABEL]                              [STATUS]  [DOT]
+
+LABEL:
+- Font: 13px, Regular, #9e9e9e
+- Examples: "Secure Boot", "TPM 2.0", "UEFI Mode"
+
+STATUS TEXT:
+- Font: 13px, SemiBold
+- Color: Status-specific (green/amber/red)
+- Values: "Enabled", "Disabled", "Active", "Not Found"
+
+STATUS DOT:
+- Size: 8px diameter
+- Color: Matches status (green/amber/red)
+- Margin left: 8px
+```
+
+#### Status Colors
+
+```
+ENABLED/ACTIVE:
+├── Text: #0f9d58 (green)
+└── Dot: #0f9d58
+
+DISABLED:
+├── Text: #f4b400 (amber) 
+└── Dot: #f4b400
+
+NOT FOUND/ERROR:
+├── Text: #db4437 (red)
+└── Dot: #db4437
+```
+
+### 5.10 Progress Indicators
 
 ```
 DETERMINATE PROGRESS BAR
@@ -324,7 +921,7 @@ INDETERMINATE PROGRESS
 Animation: Sliding highlight, 1.5s ease-in-out infinite
 ```
 
-### 5.5 Buttons
+### 5.11 Buttons
 
 ```
 PRIMARY BUTTON (Accent)
@@ -403,6 +1000,29 @@ ICON BUTTON
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+#### Status Bar vs. Main Content (Avoiding Duplication)
+
+```
+RULE: Status information should appear in ONE location based on context.
+
+DURING SCAN:
+├── Main content: Shows detailed progress modal or inline progress
+├── Status bar: Shows "Scanning... 3/7 checks complete"
+└── Health summary: Hidden or shows "Scanning..."
+
+AFTER SCAN (Overview page):
+├── Main content: Shows health score ring with summary text
+│   └── "4 checks passed • 1 warning • 2 errors"
+├── Status bar: Shows timestamp only
+│   └── "Scan complete - Today 2:45 PM"
+└── Do NOT duplicate counts in both locations
+
+ON MODULE PAGES:
+├── Main content: Module-specific status
+├── Status bar: "Ready" or module-specific message
+└── No health score summary in status bar
+```
+
 ### 6.2 Module Detail View (Example: Storage)
 
 ```
@@ -440,7 +1060,226 @@ ICON BUTTON
 
 ---
 
-## 7. Interaction Patterns
+## 7. Page Structure & Navigation Hierarchy
+
+This section defines the rules for page titles, headers, sub-pages, and navigation patterns throughout the application.
+
+### 7.0 Page Hierarchy Overview
+
+```
+NAVIGATION LEVELS:
+
+Level 1: MAIN PAGES (Sidebar Navigation)
+├── Accessed via sidebar click
+├── Each is a distinct functional area
+├── Title displayed at top of content area
+├── Examples: Overview, Drivers, Startup, Updates, Storage, Security, etc.
+
+Level 2: SUB-PAGES / TABS (Horizontal Tab Bar)
+├── Accessed via tab buttons within a main page
+├── Organizes related content within a page
+├── Tabs appear below page title
+├── Examples: "Installed Drivers" | "Driver Cleanup" | "Updates & Resources"
+
+Level 3: SECTIONS (Within Page/Tab Content)
+├── Visual groupings within content
+├── Section headers with optional expand/collapse
+├── Examples: "Safe to Remove", "System Health", "Quick Status"
+
+Level 4: ITEMS (List Rows, Cards)
+├── Individual data items
+├── May expand to show details or trigger modals
+└── Examples: Driver row, startup program row, storage drive card
+```
+
+### 7.0.1 Page Title Specifications
+
+```
+MAIN PAGE TITLE (Level 1):
+├── Font size: 28px
+├── Font weight: 600 (SemiBold)
+├── Color: Theme.TEXT_PRIMARY (#ffffff)
+├── Position: Top-left of content area
+├── Margin: 32px left, 28px top
+├── Line height: 36px
+├── Letter spacing: -0.5px
+
+TITLE ROW LAYOUT:
+┌────────────────────────────────────────────────────────────────────────┐
+│ Page Title                                        [Primary Action Btn] │
+│ (28px, SemiBold)                                  (e.g., "Open Device  │
+│                                                    Manager", "Run Scan")│
+└────────────────────────────────────────────────────────────────────────┘
+
+TITLE NAMING CONVENTIONS:
+├── Use noun phrases: "Driver Manager", "Storage Health", "System Events"
+├── Keep concise: 1-3 words maximum
+├── Match sidebar label when possible
+├── Avoid verbs: "Manage Drivers" ❌ → "Driver Manager" ✓
+└── Title case: Capitalize each word
+```
+
+### 7.0.2 Tab Navigation (Sub-Pages)
+
+```
+TAB BAR SPECIFICATIONS:
+├── Position: Below page title, above content
+├── Height: 44px
+├── Spacing between tabs: 0px (tabs touch)
+├── Background: Transparent
+├── Margin bottom: 20px
+
+TAB BUTTON STYLING:
+
+INACTIVE TAB:
+├── Background: Transparent
+├── Text color: Theme.TEXT_SECONDARY
+├── Font size: 14px
+├── Font weight: 500
+├── Padding: 12px 24px
+├── Border: None
+├── Border-bottom: 2px solid transparent
+
+ACTIVE TAB:
+├── Background: Theme.BG_CARD or subtle highlight
+├── Text color: Theme.TEXT_PRIMARY
+├── Font weight: 600
+├── Border-bottom: 2px solid Theme.ACCENT
+├── Border-radius: 8px 8px 0 0 (top corners only)
+
+HOVER TAB (inactive):
+├── Background: Theme.BG_CARD_HOVER
+├── Text color: Theme.TEXT_PRIMARY
+
+TAB CONTENT TRANSITIONS:
+├── Use AnimatedStackedWidget for smooth transitions
+├── Duration: 150ms (faster than page transitions)
+├── Direction: Slide left/right based on tab position
+└── Fade: Subtle opacity transition
+
+TAB NAMING CONVENTIONS:
+├── Use descriptive labels: "Installed Drivers", "Driver Cleanup"
+├── Keep labels short: 2-3 words maximum
+├── Use "&" for compound labels: "Updates & Resources"
+├── Indicate counts if relevant: "Warnings (3)"
+└── Avoid icons in tab labels (text only)
+```
+
+### 7.0.3 Section Headers
+
+```
+SECTION HEADER (Level 3):
+├── Font size: 16px
+├── Font weight: 600 (SemiBold)
+├── Color: Theme.TEXT_PRIMARY
+├── Margin top: 24px (space from previous section)
+├── Margin bottom: 12px (space before content)
+├── Optional count badge: "(22)" in Theme.TEXT_SECONDARY
+
+COLORED SECTION HEADERS (for status-grouped content):
+├── Success sections: Color Theme.SUCCESS (green)
+│   Example: "Safe to Remove (22)"
+├── Warning sections: Color Theme.WARNING (amber)
+│   Example: "Use Caution (5)"
+├── Error sections: Color Theme.ERROR (red)
+│   Example: "Critical Issues (3)"
+
+SECTION HEADER WITH COUNT:
+┌────────────────────────────────────────────────────────────────────────┐
+│ Section Title (count)                            [Optional Action Btn] │
+│ "Safe to Remove (22)"                                      [Remove All]│
+└────────────────────────────────────────────────────────────────────────┘
+
+COLLAPSIBLE SECTIONS:
+├── Chevron icon: Right-pointing (▶) when collapsed, down (▼) when expanded
+├── Click header row to toggle
+├── Animate height: 200ms ease-out
+├── Remember state: Persist user's expand/collapse preference
+└── Default state: Expanded (show content)
+```
+
+### 7.0.4 Navigation State Management
+
+```
+NAVIGATION STATE RULES:
+
+1. SIDEBAR SELECTION:
+   ├── Exactly one sidebar item selected at all times
+   ├── Selection persists until user clicks different item
+   ├── Clicking same item does nothing (no refresh)
+   └── Active state: Blue accent background with left border
+
+2. TAB SELECTION (within page):
+   ├── Exactly one tab selected when tabs are present
+   ├── Default to first tab on page load
+   ├── Remember last selected tab when returning to page
+   └── Tab state is per-page (not global)
+
+3. DEEP LINKING / NAVIGATION SIGNALS:
+   ├── Cards on Overview can navigate to specific pages
+   ├── Emit signal with target page ID: card_clicked.emit("drivers")
+   ├── MainWindow handles navigation and tab selection
+   └── Optional: Navigate to specific tab: "drivers:cleanup"
+
+4. BACK NAVIGATION:
+   ├── No explicit back button (use sidebar to navigate)
+   ├── Tabs don't have back (switch tabs or use sidebar)
+   ├── Modals have close button (X) or Cancel
+   └── Dialogs: Escape key or Cancel button
+
+NAVIGATION URL PATTERN (for internal linking):
+├── page_id                    → Navigate to page, default tab
+├── page_id:tab_id             → Navigate to page, specific tab
+└── page_id:tab_id:section_id  → Navigate to page, tab, scroll to section
+```
+
+### 7.0.5 Page Layout Template
+
+```
+STANDARD PAGE STRUCTURE:
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ MARGINS: 32px left/right, 28px top/bottom                              │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│ Page Title (28px)                              [Primary Action Button] │
+│                                                                        │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│ [Tab 1] [Tab 2] [Tab 3]                        (if page has tabs)      │
+│ ────────────────────────                                               │
+│                                                                        │
+├────────────────────────────────────────────────────────────────────────┤
+│ SCROLLABLE CONTENT AREA                                                │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │                                                                    │ │
+│ │  Info Banner (optional - tips, warnings)                           │ │
+│ │                                                                    │ │
+│ │  Section Header                                                    │ │
+│ │  ┌──────────────────────────────────────────────────────────────┐ │ │
+│ │  │ Content Card / List Container                                │ │ │
+│ │  │ - Row 1                                                      │ │ │
+│ │  │ - Row 2                                                      │ │ │
+│ │  │ - Row 3                                                      │ │ │
+│ │  └──────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                    │ │
+│ │  Section Header 2                                                  │ │
+│ │  ┌──────────────────────────────────────────────────────────────┐ │ │
+│ │  │ Content Card / List Container                                │ │ │
+│ │  └──────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                    │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+SPACING RULES:
+├── Page title to tabs: 20px
+├── Tabs to content: 20px
+├── Between sections: 24px
+├── Section header to content: 12px
+├── Between cards/containers: 16px
+└── Content padding inside scroll area: 0 (handled by cards)
+```
 
 ### 7.1 Navigation Flow
 
@@ -751,6 +1590,81 @@ ARIA LABELS
 }
 ```
 
+### 10.5 Keyboard Navigation
+
+```
+GLOBAL NAVIGATION:
+├── Tab: Move focus to next interactive element
+├── Shift+Tab: Move focus to previous element
+├── F6: Cycle between major regions (sidebar, content, toolbar)
+└── Escape: Close modals, cancel operations
+
+SIDEBAR NAVIGATION:
+├── Arrow Up/Down: Move between nav items
+├── Enter/Space: Select nav item
+├── Home: Jump to first item (Overview)
+└── End: Jump to last item (Settings)
+
+QUICK STATUS CARDS (Grid):
+├── Arrow keys: Navigate between cards
+│   ├── Left/Right: Previous/next in row
+│   └── Up/Down: Same position in adjacent row
+├── Enter/Space: Activate card (navigate to module)
+├── Tab: Move to next card (left-to-right, top-to-bottom)
+└── Focus order: Row 1 (L→R), Row 2 (L→R)
+
+QUICK TOOLS PANEL:
+├── Arrow Up/Down: Navigate between tool buttons
+├── Enter/Space: Activate tool
+└── Escape: Return focus to main content
+
+TIP BANNER:
+├── Arrow Left/Right: Previous/next tip
+├── Enter: Activate tip action (if any)
+└── Tab: Skip banner, move to next element
+
+MODALS:
+├── Tab: Cycle through modal controls
+├── Escape: Close modal
+├── Enter: Activate focused button
+└── Focus trap: Tab stays within modal
+```
+
+### 10.6 Tooltips Specification
+
+```
+TOOLTIP BEHAVIOR:
+├── Trigger: Hover (mouse) or Focus (keyboard)
+├── Delay before show: 500ms
+├── Delay before hide: 200ms
+├── Position: Prefer left of element, fallback to top
+└── Pointer events: None (don't block interaction)
+
+TOOLTIP STYLING:
+├── Background: #1e1e1e
+├── Border: 1px solid #3a3a3f
+├── Text: 12px, Regular, #ffffff
+├── Padding: 6px 10px
+├── Border radius: 4px
+├── Shadow: blur=8, offset_y=2, opacity=60
+├── Max width: 200px
+└── Word wrap: Yes
+
+REQUIRED TOOLTIPS:
+├── Quick Tools panel buttons (always)
+├── Icon-only buttons (always)
+├── Truncated text (on overflow)
+├── Status icons (explain meaning)
+└── Health score ("What does this mean?")
+
+TOOLTIP CONTENT EXAMPLES:
+├── List icon: "Toggle between list and grid view"
+├── QR icon: "Generate system report to share"
+├── Wrench icon: "Open quick settings"
+├── Refresh icon: "Re-run all health checks"
+└── Health score: "Score based on 12 system checks. 80+ is healthy."
+```
+
 ---
 
 ## 11. Responsive Behavior
@@ -785,7 +1699,114 @@ WINDOW WIDTH ADAPTATIONS
 
 ---
 
-## 12. Implementation Notes
+## 12. Empty States & Edge Cases
+
+Define how the UI handles missing data, errors, and first-run scenarios.
+
+### 12.1 First Run (Never Scanned)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│   System Health Score                                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                                                                 │   │
+│   │        ╭─────────────╮                                          │   │
+│   │       ╱               ╲      --                                 │   │
+│   │      │    ░░░░░░░░    │      Run your first scan                │   │
+│   │      │    ░░░░░░░░    │                                         │   │
+│   │       ╲    ░░░░░░░   ╱       No health data yet                 │   │
+│   │        ╰─────────────╯                                          │   │
+│   │                                                                 │   │
+│   │   [Run Full Scan]                                               │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│   Quick Status                                                          │
+│   ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐          │
+│   │ ?  Windows Update│ │ ?  Defender     │ │ ?  Storage      │          │
+│   │   Not checked    │ │   Not checked   │ │   Not checked   │          │
+│   └─────────────────┘ └─────────────────┘ └─────────────────┘          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+SPECIFICATIONS:
+- Score display: "--" instead of number
+- Ring: Empty (gray track only, no fill)
+- Status text: "Run your first scan" / "No health data yet"
+- Quick Status cards: "?" icon, "Not checked" subtitle
+- CTA: Prominent "Run Full Scan" button
+```
+
+### 12.2 Scan Error / Data Fetch Failed
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   ✗   Windows Update                            ⚠ Error     │
+│       Could not connect to update service                   │
+│                                                             │
+│       [Retry]  [Troubleshoot]                               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+ERROR CARD SPECIFICATIONS:
+- Icon: ✗ or ⚠ in #db4437 (red)
+- Status badge: "Error" with red background
+- Error message: 13px, #9e9e9e, max 2 lines
+- Action buttons: "Retry" (primary), "Troubleshoot" (secondary)
+- Border: 1px solid rgba(219,68,55,0.3)
+```
+
+### 12.3 No Issues Found
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│        ╭─────────────╮                                                  │
+│       ╱               ╲      100                                        │
+│      │   ██████████   │      Your system is healthy! 🎉                 │
+│      │   ██████████   │                                                 │
+│       ╲   ████████   ╱       All 12 checks passed                       │
+│        ╰─────────────╯                                                  │
+│                                                                         │
+│   Great job! No issues were found during the health check.              │
+│   Consider running another scan in a week.                              │
+│                                                                         │
+│   [Schedule Reminder]                                                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+SPECIFICATIONS:
+- Score: 100 with green gradient ring
+- Celebratory message with optional emoji
+- Suggestion for next action
+- Optional: "Schedule Reminder" button
+```
+
+### 12.4 Module-Specific Empty States
+
+```
+DRIVERS MODULE (No outdated drivers):
+├── Icon: ✓ large checkmark
+├── Title: "All drivers are up to date"
+├── Subtitle: "Last checked: {timestamp}"
+└── Action: [Check Again]
+
+EVENTS MODULE (No errors):
+├── Icon: 📋 clipboard
+├── Title: "No critical events found"
+├── Subtitle: "Your event logs look clean"
+└── Action: [View All Events]
+
+STARTUP MODULE (No programs):
+├── Icon: 🚀 rocket
+├── Title: "No startup programs configured"
+├── Subtitle: "Programs will appear here when added"
+└── Action: [Learn More]
+```
+
+---
+
+## 13. Implementation Notes
 
 ### Component Hierarchy
 
@@ -834,7 +1855,7 @@ ScanResult
 
 ---
 
-## 13. File Structure for Implementation
+## 14. File Structure for Implementation
 
 ```
 /src
@@ -886,7 +1907,7 @@ Both versions share the same layout, typography, and spacing — only the surfac
 
 ---
 
-## 14. Modern UI Enhancements (Implemented)
+## 15. Modern UI Enhancements (Implemented)
 
 This section documents the modern UI improvements implemented in `driver_updater_qt_mk5.py` using PyQt6.
 
@@ -955,6 +1976,51 @@ Theme.apply_button_shadow(button, color="#0078d4")
 ANIM_DURATION_FAST = 150    # Quick micro-interactions
 ANIM_DURATION_NORMAL = 250  # Standard transitions
 ANIM_DURATION_SLOW = 400    # Deliberate animations
+ANIM_STAGGER_DELAY = 80     # Delay between staggered items
+ANIM_FADE_DURATION = 300    # Fade-in animation duration
+```
+
+#### Staggered Fade-In Animation (Overview Page)
+
+When the Overview page loads for the first time, widgets animate in sequentially:
+
+```
+STAGGERED FADE-IN SEQUENCE:
+├── Tips Carousel       → Delay: 0ms,   Fade: 300ms
+├── Health Summary Card → Delay: 80ms,  Fade: 300ms
+├── Quick Status Grid   → Delay: 160ms, Fade: 300ms
+├── Startup Card        → Delay: 240ms, Fade: 300ms
+├── Boot Security Card  → Delay: 320ms, Fade: 300ms
+├── System Info Card    → Delay: 400ms, Fade: 300ms
+└── Activity Container  → Delay: 480ms, Fade: 300ms
+
+IMPLEMENTATION:
+├── Use QGraphicsOpacityEffect for fade
+├── Start at opacity 0, animate to 1
+├── Easing: OutCubic for smooth deceleration
+├── Remove graphics effect after animation completes
+│   (prevents rendering issues with child widgets like buttons)
+└── Only animate on first show, not subsequent visits
+```
+
+#### Quick Status Card Hover Animation
+
+Cards in the Quick Status grid have interactive hover effects:
+
+```
+HOVER EFFECT (GlassCard):
+├── Lift: Card rises 3px (translateY animation)
+├── Glow intensification: Up to 80% brighter glow
+├── Border brightening: Border alpha increases on hover
+├── Animation: 60fps smooth transition (16ms timer)
+├── Easing: Smooth interpolation over ~200ms
+
+IDLE → HOVER TRANSITION:
+├── _hover_progress: 0.0 → 1.0
+├── Card Y offset: 0px → -3px
+├── Glow alpha multiplier: 1.0 → 1.8
+├── Glow radius expansion: +4px on hover
+└── Border width: 1.5px → 2.0px
 ```
 
 #### AnimatedButton Widget
@@ -1124,6 +2190,29 @@ def _setup_shadow(self):
 Theme.apply_shadow(self, blur_radius=16, offset_y=4, opacity=70)
 ```
 
+#### HealthSummaryCard Gradient Background
+
+The Health Summary card has a dynamic gradient background that subtly tints based on the health score:
+
+```
+GRADIENT BACKGROUND (Score-Based):
+├── Direction: Diagonal (top-left to bottom-right)
+├── Base color: Theme.BG_CARD
+└── Tint blending: 8% tint color, 92% base color
+
+SCORE THRESHOLDS:
+├── Score >= 80: Green tint (Theme.GLOW_SUCCESS)
+├── Score >= 50: Yellow tint (Theme.GLOW_WARNING)  
+└── Score < 50:  Red tint (Theme.GLOW_ERROR)
+
+IMPLEMENTATION:
+gradient = QLinearGradient(0, 0, rect.width(), rect.height())
+start_color = base_color
+end_color = blend(base_color * 0.92, tint_color * 0.08)
+gradient.setColorAt(0, start_color)
+gradient.setColorAt(1, end_color)
+```
+
 #### Other Cards
 
 ```python
@@ -1162,11 +2251,128 @@ ANIMATIONS
 
 ---
 
-## 15. Modern Table & List Design (Implemented)
+## 16. Modern Table & List Design (Implemented)
 
-This section documents the improved table and list row components for better readability and user-friendliness.
+This section documents the data table and list row components for displaying structured data with proper readability and user-friendliness.
 
-### 15.1 Design Principles
+### 16.0 Table UX Best Practices
+
+```
+CORE PRINCIPLES FOR USABILITY:
+
+1. WHITESPACE & SPACING
+   ├── Use generous padding (16px horizontal, 16px vertical minimum)
+   ├── Group related data visually with spacing
+   ├── Prevent cluttered appearance with breathing room
+   └── Alternating row backgrounds aid scanning
+
+2. ALIGNMENT RULES
+   ├── Left-align all text content (titles, descriptions, names)
+   ├── Right-align numeric values (for easy comparison)
+   ├── Match header alignment to column data alignment
+   └── Center only icons or very short status indicators
+
+3. VISUAL HIERARCHY
+   ├── Headers: Bold (600-700 weight), slightly larger or uppercase
+   ├── Primary data: Medium weight (500), high contrast color
+   ├── Secondary data: Regular weight (400), muted color (TEXT_SECONDARY)
+   ├── Tertiary data: Smaller size, lowest contrast (TEXT_TERTIARY)
+   └── Use font weight/color, NOT just size, to create hierarchy
+
+4. MINIMIZE VISUAL NOISE
+   ├── Avoid heavy borders between rows
+   ├── Use subtle background alternation instead of grid lines
+   ├── Let typography and spacing create structure
+   └── Reserve borders for container edges only
+
+5. FIXED HEADERS (for scrollable tables)
+   ├── Keep column headers visible when scrolling
+   ├── Use sticky positioning or separate header widget
+   └── Maintain context for users scanning data
+
+HANDLING LARGE/COMPLEX DATASETS:
+
+1. OVERVIEW & DETAIL PATTERN
+   ├── Show summary table with key columns only
+   ├── Allow drill-down to detail view (modal or separate page)
+   ├── Use "expand row" for inline details when appropriate
+   └── Don't overwhelm with all data at once
+
+2. PROGRESSIVE DISCLOSURE
+   ├── Show 20-50 rows initially
+   ├── "Load more" or "Show all" button for additional rows
+   ├── Display count: "Showing 20 of 156 items"
+   └── Consider virtual scrolling for 1000+ items
+
+3. CONTEXTUAL INFORMATION
+   ├── Use subtext under primary data (email under name, date under title)
+   ├── Tooltips for truncated content or additional details
+   ├── Status badges with descriptive text, not just colors
+   └── Timestamps in relative format when recent ("2 hours ago")
+
+INTERACTION PATTERNS:
+
+1. HOVER EFFECTS
+   ├── Subtle background highlight on row hover
+   ├── Show action buttons on hover (or always if space permits)
+   ├── Cursor change to pointer for clickable rows
+   └── Don't rely solely on hover for mobile compatibility
+
+2. ACTION BUTTONS
+   ├── Place in dedicated column, typically rightmost
+   ├── Primary action: Filled button with accent color
+   ├── Secondary actions: Outline or ghost buttons
+   ├── Destructive actions: Red text/outline, confirm before executing
+   └── Group related actions, limit to 2-3 per row
+
+3. SORTING & FILTERING
+   ├── Essential for datasets > 10 items
+   ├── Click header to sort (toggle asc/desc)
+   ├── Visual indicator for active sort column
+   └── Filter controls above table, not inline
+
+WHEN TO USE ALTERNATIVES:
+
+├── CARDS: When users focus on individual items, not comparing across rows
+├── LISTS: For simpler, less structured data with fewer columns
+├── ACCORDION: When each item has significant expandable content
+└── TILES/GRID: For visual items (images, icons, thumbnails)
+```
+
+### 16.0.1 Table Design Philosophy
+
+```
+IMPLEMENTATION DECISIONS:
+├── Use custom QFrame-based rows instead of QTableWidget
+│   └── Reason: Better styling control, modern appearance, flexibility
+├── Avoid native table widgets (QTableWidget, QTreeWidget)
+│   └── Reason: Limited styling, platform-inconsistent appearance
+├── Build tables from composable row components
+│   └── Components: ModernListRow, ModernCategoryHeader, ModernListContainer
+└── Support both simple lists and complex data grids
+
+WHEN TO USE EACH COMPONENT:
+├── ModernListRow: Single data item with title, subtitle, status, actions
+├── ModernCategoryHeader: Group label for categorizing rows
+├── ModernListContainer: Scrollable container for multiple rows
+└── Custom grid layouts: For dashboard cards and multi-column data
+
+TABLE DATA PATTERNS:
+├── Sorted Data: Apply sorting in the data layer, rebuild rows
+├── Filtered Data: Filter data first, then create rows for visible items
+├── Paginated Data: Show subset of rows with "load more" or pagination
+├── Grouped Data: Use category headers to separate logical groups
+└── Searchable Data: Filter on input, recreate visible rows
+
+PERFORMANCE GUIDELINES:
+├── Limit visible rows to ~50-100 for smooth scrolling
+├── Use "Show more" buttons for large datasets
+├── Lazy load row content when possible
+├── Clear and rebuild rows on data refresh (don't try to update in-place)
+└── Use alternating row colors for datasets > 5 items
+```
+
+### 16.1 Design Principles
 
 ```
 READABILITY IMPROVEMENTS
@@ -1185,7 +2391,84 @@ VISUAL HIERARCHY
 └── Action buttons with proper hit targets
 ```
 
-### 15.2 ModernListRow Component
+### 16.1.1 Column & Data Alignment
+
+```
+HORIZONTAL ALIGNMENT:
+├── Text content: Left-aligned
+├── Numeric values: Right-aligned
+├── Status badges: Right-aligned (before chevron)
+├── Action buttons: Right-aligned (after status)
+├── Icons: Left-aligned (before title)
+└── Chevrons: Right-most position
+
+VERTICAL ALIGNMENT:
+├── All row content: Vertically centered
+├── Multi-line subtitles: Top-aligned within their space
+└── Status icons: Vertically centered
+
+DATA FORMATTING:
+├── Dates: "YYYY-MM-DD" or "Dec 11, 2025" (human readable)
+├── File sizes: "1.2 GB", "456 MB", "12 KB" (abbreviated)
+├── Percentages: "85%" (no decimals unless < 1%)
+├── Counts: "1,234" (comma-separated thousands)
+├── Version numbers: "v1.2.3" or "1.2.3.456"
+└── Truncation: Use ellipsis "..." for overflow, show full on tooltip
+
+ROW CONTENT STRUCTURE:
+┌──────────────────────────────────────────────────────────────────────────┐
+│ [ICON] [TITLE + SUBTITLE]              [STATUS BADGE] [ACTIONS] [CHEVRON]│
+│  18px   flex-1 (stretch)                 auto          auto       16px   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### 16.1.2 Action Button Styling
+
+```
+BUTTON TYPES IN TABLE ROWS:
+
+PRIMARY BUTTON (use sparingly - 1 per table max):
+├── Background: Theme.ACCENT (solid blue)
+├── Text: White
+├── Border: None
+├── Use for: Main action user is expected to take
+├── Example: "Run Scan", "Apply All"
+└── Avoid: Having primary buttons on every row
+
+SECONDARY BUTTON (default for row actions):
+├── Background: Transparent
+├── Text: Theme.ACCENT (blue)
+├── Border: 1px solid Theme.ACCENT
+├── Hover: Fill with Theme.ACCENT, text white
+├── Use for: Individual row actions
+└── Example: "Remove", "View", "Edit"
+
+GHOST BUTTON (tertiary actions):
+├── Background: Transparent
+├── Text: Theme.TEXT_SECONDARY
+├── Border: None
+├── Hover: Background Theme.BG_CARD_HOVER
+├── Use for: Low-priority or supplementary actions
+└── Example: "Details", "Copy", "Share"
+
+DESTRUCTIVE BUTTON (delete/remove with warning):
+├── Background: Transparent
+├── Text: Theme.ERROR (red)
+├── Border: 1px solid Theme.ERROR
+├── Hover: Fill with Theme.ERROR, text white
+├── Use for: Permanent deletions requiring attention
+└── Example: "Delete", "Uninstall"
+
+BUTTON SIZING:
+├── Height: 28px (compact for table rows)
+├── Padding: 4px 14px
+├── Font size: 11px
+├── Font weight: 500-600
+├── Border radius: 4px
+└── Spacing between buttons: 8px
+```
+
+### 16.2 ModernListRow Component
 
 A styled list row with improved readability and hover effects.
 
@@ -1241,7 +2524,7 @@ STATUS BADGE COLORS
 └── Info:    Background: rgba(66,133,244,0.15) Text: #60cdff
 ```
 
-### 15.3 ModernCategoryHeader Component
+### 16.3 ModernCategoryHeader Component
 
 A styled category header for grouping list items.
 
@@ -1276,7 +2559,7 @@ COUNT BADGE
 └── Format: "(count)"
 ```
 
-### 15.4 ModernListContainer Component
+### 16.4 ModernListContainer Component
 
 A container that manages list items with proper styling.
 
@@ -1307,7 +2590,40 @@ SPACING
 └── Dividers handled by category headers
 ```
 
-### 15.5 Improved Stats Display
+### 16.4.1 Table Empty & Loading States
+
+```
+EMPTY STATE (No Data):
+├── Display centered message in container
+├── Icon: Relevant empty icon (e.g., document, folder)
+├── Title: "No items found" (14px, TEXT_PRIMARY)
+├── Subtitle: Contextual message (12px, TEXT_SECONDARY)
+├── Optional action button: "Refresh" or "Add Item"
+└── Min height: 120px for empty container
+
+LOADING STATE:
+├── Display spinner centered in container
+├── Use ModernSpinner component (24px)
+├── Optional loading text: "Loading..." (12px, TEXT_SECONDARY)
+├── Disable interactions during load
+└── Min height: 80px for loading container
+
+ERROR STATE:
+├── Display error message with error icon
+├── Icon: Error/warning icon in Theme.ERROR color
+├── Title: Brief error description (14px, TEXT_PRIMARY)
+├── Subtitle: Technical details if helpful (12px, TEXT_TERTIARY)
+├── Action button: "Retry" or "View Details"
+└── Border: 1px solid Theme.ERROR at 30% opacity
+
+PARTIAL LOAD STATE:
+├── Show available rows immediately
+├── Display "Loading more..." at bottom
+├── Use skeleton rows for pending items (optional)
+└── "Show more" button for paginated data
+```
+
+### 16.5 Improved Stats Display
 
 Enhanced statistics display with visual dividers and color coding.
 
@@ -1328,7 +2644,7 @@ STAT DIVIDERS
 ├── Margin: 24px horizontal
 ```
 
-### 15.6 Usage Examples
+### 16.6 Usage Examples
 
 **Driver Manager Page:**
 
@@ -1354,7 +2670,7 @@ row.add_action_button("Fix", callback, primary=True)
 self.drivers_list.add_more_label("... and 3 more drivers")
 ```
 
-### 15.7 Comparison: Before vs After
+### 16.7 Comparison: Before vs After
 
 | Aspect              | Before                    | After                     |
 |---------------------|---------------------------|---------------------------|

@@ -1270,7 +1270,11 @@ class HealthChecker:
                     SerialNumber = $disk.SerialNumber
                     SizeGB = [math]::Round($disk.Size / 1GB, 1)
                     Status = $disk.Status
-                    MediaType = if ($disk.MediaType -match 'SSD|Solid') { 'SSD' } elseif ($disk.MediaType -match 'Fixed') { 'HDD' } else { $disk.MediaType }
+                    MediaType = if ($disk.MediaType -match 'SSD|Solid') { 'SSD' } `
+                        elseif ($disk.InterfaceType -eq 'NVMe' -or $disk.Model -match 'NVMe|Hynix|Samsung|Crucial|SanDisk|Kingston|ADATA|Intel SSD') { 'SSD' } `
+                        elseif ($disk.MediaType -match 'Fixed' -and $disk.Model -match 'Barracuda|IronWolf|WD Blue|WD Red|WD Black|Seagate|Toshiba P300') { 'HDD' } `
+                        elseif ($disk.MediaType -match 'Fixed') { 'SSD' } `
+                        else { $disk.MediaType }
                     InterfaceType = $disk.InterfaceType
                     Partitions = $partCount
                     Index = $disk.Index

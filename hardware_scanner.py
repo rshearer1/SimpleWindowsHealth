@@ -414,6 +414,22 @@ class BatteryInfo:
 
 
 @dataclass
+class HPDockInfo:
+    """HP Dock/Docking Station information"""
+    name: str = "Unknown"
+    model: str = ""
+    device_id: str = ""
+    pnp_device_id: str = ""
+    manufacturer: str = "HP"
+    firmware_version: str = ""
+    status: str = "Unknown"
+    needs_update: bool = False
+    update_available: str = ""
+    dock_type: str = ""  # USB-C, Thunderbolt, USB-A, etc.
+    raw_properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class PrinterInfo:
     """Printer information"""
     name: str = "Unknown"
@@ -449,6 +465,7 @@ class HardwareSnapshot:
     monitors: List[MonitorInfo] = field(default_factory=list)
     batteries: List[BatteryInfo] = field(default_factory=list)
     printers: List[PrinterInfo] = field(default_factory=list)
+    hp_docks: List[HPDockInfo] = field(default_factory=list)
 
 
 def _run_wmic(wmic_class: str, properties: List[str], timeout: int = 10) -> List[Dict[str, str]]:
@@ -1027,11 +1044,35 @@ def collect_storage_info() -> StorageInfo:
             drive.serial_number = r.get("SerialNumber", "Unknown").strip()
             drive.interface_type = r.get("InterfaceType", "Unknown")
             
+            # Improved media type detection
             media = r.get("MediaType", "").lower()
+            model_lower = drive.model.lower()
+            interface_lower = drive.interface_type.lower()
+            
+            # Known SSD manufacturers and patterns
+            ssd_indicators = ['ssd', 'solid', 'nvme', 'sk hynix', 'hynix', 'samsung', 'crucial', 
+                              'sandisk', 'wd blue sn', 'wd black sn', 'intel ssd', 'kingston', 
+                              'adata', 'patriot', 'pny', 'ocz', 'plextor', 'corsair', 'mushkin',
+                              'transcend', 'toshiba xg', 'kioxia', 'seagate firecuda', 'sabrent']
+            
             if "ssd" in media or "solid" in media:
                 drive.media_type = "SSD"
-            elif "hdd" in media or "hard" in media or "fixed" in media:
+            elif "nvme" in interface_lower or "nvme" in model_lower:
+                drive.media_type = "SSD"  # NVMe is always SSD
+            elif any(indicator in model_lower for indicator in ssd_indicators):
+                drive.media_type = "SSD"  # Known SSD brand/model
+            elif "hdd" in media or "hard" in media:
                 drive.media_type = "HDD"
+            elif "fixed" in media:
+                # "Fixed hard disk media" - need additional heuristics
+                # Check for HDD indicators in model name
+                hdd_indicators = ['barracuda', 'ironwolf', 'wd blue', 'wd red', 'wd black', 
+                                  'wd purple', 'seagate', 'toshiba p300', 'toshiba n300']
+                if any(indicator in model_lower for indicator in hdd_indicators):
+                    drive.media_type = "HDD"
+                else:
+                    # Default to SSD for unrecognized "Fixed" drives on modern systems
+                    drive.media_type = "SSD"
             else:
                 drive.media_type = r.get("MediaType", "Unknown")
             
@@ -1506,6 +1547,229 @@ def collect_printers() -> List[PrinterInfo]:
     return printers
 
 
+# HP Dock detection constants
+# HP USB Vendor ID: 03F0
+# Known HP Dock Product IDs and name patterns
+HP_DOCK_IDENTIFIERS = {
+    # USB-C Docks
+    'USB-C Dock G5': {'pids': ['0867', '484A', '0488'], 'type': 'USB-C'},
+    'USB-C Dock G4': {'pids': ['0857'], 'type': 'USB-C'},
+    'USB-C/A Universal Dock G2': {'pids': ['0A6A', '0A6B'], 'type': 'USB-C/A'},
+    'USB-C Universal Dock G2': {'pids': ['0379'], 'type': 'USB-C'},
+    # Thunderbolt Docks
+    'Thunderbolt Dock G4': {'pids': ['0488', '0489'], 'type': 'Thunderbolt'},
+    'Thunderbolt Dock G2': {'pids': ['046B'], 'type': 'Thunderbolt'},
+    'Thunderbolt Dock 120W G2': {'pids': ['046A'], 'type': 'Thunderbolt'},
+    'Thunderbolt Dock 230W G2': {'pids': ['0379', '037A'], 'type': 'Thunderbolt'},
+    # Elite/ZBook Docks
+    'Elite USB-C Dock G3': {'pids': ['0580'], 'type': 'USB-C'},
+    'ZBook Dock G2': {'pids': ['0610'], 'type': 'USB-C'},
+    # Legacy Docks
+    'USB-C Dock': {'pids': ['0667', '0668'], 'type': 'USB-C'},
+    'USB 3.0 Dock': {'pids': ['2012'], 'type': 'USB 3.0'},
+}
+
+# Name patterns to identify HP docks in device names
+HP_DOCK_NAME_PATTERNS = [
+    'hp usb-c dock', 'hp thunderbolt dock', 'hp dock', 'hp universal dock',
+    'hp elite dock', 'hp zbook dock', 'hp usb dock', 'hp displaylink',
+    'hp usb-c/a', 'hp usb-c g', 'hp tb dock', 'hp g4 dock', 'hp g5 dock'
+]
+
+
+@timed("detect_hp_docks")
+def detect_hp_docks() -> List[HPDockInfo]:
+    """
+    Detect HP docking stations connected to the system.
+    
+    Uses multiple detection methods:
+    1. USB Vendor/Product ID matching (HP VID: 03F0)
+    2. Device name pattern matching
+    3. PnP device enumeration
+    
+    Returns a list of detected HP docks with their information.
+    """
+    docks = []
+    seen_device_ids = set()  # Prevent duplicates
+    
+    try:
+        # Method 1: Query all PnP entities and look for HP dock patterns
+        cmd = """
+        Get-CimInstance Win32_PnPEntity | 
+        Where-Object { 
+            ($_.DeviceID -like '*VID_03F0*') -or 
+            ($_.Name -like '*HP*Dock*') -or
+            ($_.Name -like '*HP*USB-C*') -or
+            ($_.Name -like '*HP*Thunderbolt*') -or
+            ($_.Description -like '*HP*Dock*')
+        } | Select-Object Name, DeviceID, PNPDeviceID, Manufacturer, Status, 
+                         Description, Service, ClassGuid | ConvertTo-Json -Depth 2
+        """
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", cmd],
+            capture_output=True, text=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        )
+        
+        if result.stdout.strip():
+            import json
+            devices = json.loads(result.stdout)
+            if isinstance(devices, dict):
+                devices = [devices]
+            
+            for dev in devices:
+                device_id = dev.get('DeviceID', '')
+                name = dev.get('Name', '') or dev.get('Description', '') or ''
+                
+                # Skip if we've already processed this device
+                if device_id in seen_device_ids:
+                    continue
+                
+                # Check if this looks like a dock
+                is_dock = False
+                dock_type = ''
+                dock_model = ''
+                
+                name_lower = name.lower()
+                device_id_upper = device_id.upper()
+                
+                # Check name patterns
+                for pattern in HP_DOCK_NAME_PATTERNS:
+                    if pattern in name_lower:
+                        is_dock = True
+                        break
+                
+                # Check USB VID/PID for HP docks
+                if 'VID_03F0' in device_id_upper:
+                    # Extract PID
+                    import re
+                    pid_match = re.search(r'PID_([0-9A-F]{4})', device_id_upper)
+                    if pid_match:
+                        pid = pid_match.group(1)
+                        # Check against known dock PIDs
+                        for model_name, info in HP_DOCK_IDENTIFIERS.items():
+                            if pid in info['pids']:
+                                is_dock = True
+                                dock_model = model_name
+                                dock_type = info['type']
+                                break
+                        
+                        # Even if not in known PIDs, HP VID with dock-like name is a dock
+                        if not is_dock and any(p in name_lower for p in ['dock', 'hub', 'displaylink']):
+                            is_dock = True
+                
+                if is_dock:
+                    seen_device_ids.add(device_id)
+                    
+                    dock = HPDockInfo()
+                    dock.name = name or 'HP Dock'
+                    dock.model = dock_model or _extract_dock_model_from_name(name)
+                    dock.device_id = device_id
+                    dock.pnp_device_id = dev.get('PNPDeviceID', '')
+                    dock.manufacturer = dev.get('Manufacturer', '') or 'HP'
+                    dock.status = dev.get('Status', 'Unknown')
+                    dock.dock_type = dock_type or _infer_dock_type(name)
+                    dock.raw_properties = dev.copy()
+                    
+                    # Mark as potentially needing update (user should check HP Support)
+                    dock.needs_update = True  # Conservative: always suggest checking
+                    dock.update_available = "Check HP Support for latest firmware"
+                    
+                    docks.append(dock)
+                    
+    except Exception:
+        pass
+    
+    # Method 2: Also check USB hubs for HP devices
+    try:
+        usb_results = _run_wmic(
+            "path Win32_USBHub",
+            ["Name", "DeviceID", "PNPDeviceID", "Description", "Manufacturer", "Status"]
+        )
+        
+        for r in usb_results:
+            device_id = r.get('DeviceID', '')
+            if device_id in seen_device_ids:
+                continue
+                
+            name = r.get('Name', '') or r.get('Description', '') or ''
+            name_lower = name.lower()
+            
+            # Check for HP dock patterns in USB hubs
+            if ('03F0' in device_id.upper() and 
+                any(p in name_lower for p in ['dock', 'hub']) and
+                'hp' in (r.get('Manufacturer', '') or name).lower()):
+                
+                seen_device_ids.add(device_id)
+                
+                dock = HPDockInfo()
+                dock.name = name or 'HP USB Hub/Dock'
+                dock.model = _extract_dock_model_from_name(name)
+                dock.device_id = device_id
+                dock.pnp_device_id = r.get('PNPDeviceID', '')
+                dock.manufacturer = r.get('Manufacturer', '') or 'HP'
+                dock.status = r.get('Status', 'Unknown')
+                dock.dock_type = _infer_dock_type(name)
+                dock.raw_properties = r.copy()
+                dock.needs_update = True
+                dock.update_available = "Check HP Support for latest firmware"
+                
+                docks.append(dock)
+                
+    except Exception:
+        pass
+    
+    return docks
+
+
+def _extract_dock_model_from_name(name: str) -> str:
+    """Extract dock model from device name."""
+    if not name:
+        return ''
+    
+    name_lower = name.lower()
+    
+    # Try to match known models
+    for model in HP_DOCK_IDENTIFIERS.keys():
+        if model.lower().replace('-', ' ') in name_lower.replace('-', ' '):
+            return model
+    
+    # Try to extract generation (G2, G3, G4, G5)
+    import re
+    gen_match = re.search(r'\b(G[2-5])\b', name, re.IGNORECASE)
+    
+    if 'thunderbolt' in name_lower:
+        gen = gen_match.group(1).upper() if gen_match else ''
+        return f"Thunderbolt Dock {gen}".strip()
+    elif 'usb-c' in name_lower or 'usb c' in name_lower:
+        gen = gen_match.group(1).upper() if gen_match else ''
+        return f"USB-C Dock {gen}".strip()
+    elif 'universal' in name_lower:
+        gen = gen_match.group(1).upper() if gen_match else ''
+        return f"Universal Dock {gen}".strip()
+    
+    return ''
+
+
+def _infer_dock_type(name: str) -> str:
+    """Infer dock connection type from name."""
+    if not name:
+        return 'Unknown'
+    
+    name_lower = name.lower()
+    
+    if 'thunderbolt' in name_lower or 'tb' in name_lower:
+        return 'Thunderbolt'
+    elif 'usb-c' in name_lower or 'usb c' in name_lower or 'type-c' in name_lower:
+        return 'USB-C'
+    elif 'usb 3' in name_lower or 'usb3' in name_lower:
+        return 'USB 3.0'
+    elif 'usb' in name_lower:
+        return 'USB'
+    
+    return 'Unknown'
+
+
 @timed("collect_hardware_snapshot")
 def collect_hardware_snapshot() -> HardwareSnapshot:
     """
@@ -1533,6 +1797,7 @@ def collect_hardware_snapshot() -> HardwareSnapshot:
     snapshot.monitors = collect_monitors()
     snapshot.batteries = collect_batteries()
     snapshot.printers = collect_printers()
+    snapshot.hp_docks = detect_hp_docks()
     
     # Determine overall health status
     all_statuses = [snapshot.cpu.status, snapshot.ram.status, snapshot.motherboard.status]
