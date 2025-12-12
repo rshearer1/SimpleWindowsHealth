@@ -5,7 +5,7 @@ a = Analysis(
     ['driver_updater_qt_mk5.py'],
     pathex=[],
     binaries=[],
-    datas=[('hardware_scanner.py', '.'), ('startup_scanner.py', '.'), ('perf_utils.py', '.')],
+    datas=[('hardware_scanner.py', '.'), ('startup_scanner.py', '.'), ('perf_utils.py', '.'), ('icon.ico', '.')],
     hiddenimports=['PyQt6.QtCore', 'PyQt6.QtWidgets', 'PyQt6.QtGui', 'wmi', 'win32com.client', 'pythoncom', 'pywintypes', 'multiprocessing'],
     hookspath=[],
     hooksconfig={},

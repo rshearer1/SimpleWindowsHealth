@@ -11,7 +11,7 @@ from pathlib import Path
 
 # Configuration
 APP_NAME = "WindowsHealthCheckerPro"
-VERSION = "4.0.0"
+VERSION = "4.1.1"
 MAIN_SCRIPT = "driver_updater_qt_mk5.py"
 ICON_FILE = "icon.ico"  # Heart with pulse icon
 VERSION_FILE = "version_info.txt"  # Windows version info

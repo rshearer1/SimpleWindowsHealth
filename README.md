@@ -5,7 +5,7 @@
 **The all-in-one Windows system diagnostics and optimization tool**
 
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows)](https://www.microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-4.1.0-green?style=for-the-badge)](https://github.com/rshearer1/SimpleWindowsHealth/releases/latest)
+[![Version](https://img.shields.io/badge/Version-4.1.1-green?style=for-the-badge)](https://github.com/rshearer1/SimpleWindowsHealth/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/rshearer1/SimpleWindowsHealth/total?style=for-the-badge&color=blue)](https://github.com/rshearer1/SimpleWindowsHealth/releases)
 

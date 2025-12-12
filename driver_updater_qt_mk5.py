@@ -63,7 +63,7 @@ except ImportError:
 # APPLICATION CONFIGURATION
 # =============================================================================
 
-APP_VERSION = "4.0.0"
+APP_VERSION = "4.1.1"
 APP_BUILD = "2025.12.11"
 
 # Production mode - disable settings persistence for release builds
@@ -3936,7 +3936,7 @@ class OverviewPage(QWidget):
             ("updates", "Windows Update", "updates"),
             ("defender", "Defender", "security"),
             ("storage", "Storage", "storage"),
-            ("drives", "Drive Health", "hardware"),
+            ("drivers", "Drivers", "drivers"),
             ("memory", "Memory", "hardware"),
             ("system", "Event Logs", "events"),  # Navigate to Events page to see errors
         ]
@@ -4737,6 +4737,22 @@ class DriversPage(QWidget):
         self.drivers = drivers
         self.problem_devices = problems
         self._clear_layout(self.installed_layout)
+        
+        # Update Overview page's drivers card if available
+        try:
+            from PyQt6.QtWidgets import QApplication
+            for widget in QApplication.topLevelWidgets():
+                if hasattr(widget, 'overview') and hasattr(widget.overview, 'status_cards'):
+                    total = len(drivers)
+                    ok_count = sum(1 for d in drivers if d.status == "OK")
+                    problem_count = len(problems) + sum(1 for d in drivers if d.status != "OK")
+                    if problem_count > 0:
+                        widget.overview.status_cards["drivers"].set_status("warning", f"{problem_count} issues")
+                    else:
+                        widget.overview.status_cards["drivers"].set_status("check", f"{total} OK")
+                    break
+        except:
+            pass
         
         if not drivers:
             label = QLabel("No drivers found or unable to scan")
@@ -18132,10 +18148,11 @@ class MainWindow(QMainWindow):
                 warnings = event_data.get("WarningCount", 0)
                 critical = event_data.get("CriticalCount", 0)
                 
-                if critical > 0 or errors > 20:
+                # Only show red (error) status for critical events
+                if critical > 0:
                     results["status"] = "error"
                     results["message"] = f"{critical} critical, {errors} errors"
-                elif warnings > 50 or errors > 10:
+                elif errors > 10 or warnings > 50:
                     results["status"] = "warning"
                     results["message"] = f"{errors} errors, {warnings} warnings"
                 else:
@@ -18247,11 +18264,18 @@ class MainWindow(QMainWindow):
             events_res.get("message", "Unknown")
         )
         
-        # Update drives card (use storage data)
-        self.overview.status_cards["drives"].set_status(
-            storage_res.get("status", "check"),
-            "All drives OK" if storage_res.get("status") == "check" else "Issues found"
-        )
+        # Update drivers card - will show driver status after driver scan completes
+        # For now, show as pending until drivers are scanned
+        if hasattr(self, 'cached_data') and self.cached_data.get("drivers"):
+            driver_data = self.cached_data["drivers"]
+            total = len(driver_data) if isinstance(driver_data, list) else 0
+            problem_count = sum(1 for d in driver_data if isinstance(d, dict) and d.get("status") != "OK") if isinstance(driver_data, list) else 0
+            if problem_count > 0:
+                self.overview.status_cards["drivers"].set_status("warning", f"{problem_count} issues")
+            else:
+                self.overview.status_cards["drivers"].set_status("check", f"{total} drivers OK")
+        else:
+            self.overview.status_cards["drivers"].set_status("check", "Not scanned")
         
         # Update startup programs card from scan results
         startup_res = self.scan_results.get("sfc", {})  # "sfc" is the task_id for startup
@@ -19148,10 +19172,80 @@ class SplashController:
 # ENTRY POINT
 # =============================================================================
 
+def show_error_dialog(exc_type, exc_value, exc_tb):
+    """Show a detailed error dialog when an unhandled exception occurs"""
+    import traceback
+    from PyQt6.QtWidgets import QMessageBox, QApplication
+    
+    # Format the traceback
+    tb_lines = traceback.format_exception(exc_type, exc_value, exc_tb)
+    tb_text = ''.join(tb_lines)
+    
+    # Log to file
+    try:
+        import os
+        import datetime
+        log_path = os.path.join(os.path.expanduser("~"), "health_checker_crash.log")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"CRASH: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"{'='*60}\n")
+            f.write(tb_text)
+            f.write(f"\n{'='*60}\n")
+    except:
+        log_path = None
+    
+    # Print to console for debugging
+    print("=" * 60)
+    print("UNHANDLED EXCEPTION:")
+    print("=" * 60)
+    print(tb_text)
+    print("=" * 60)
+    
+    # Show dialog if Qt app exists
+    app = QApplication.instance()
+    if app:
+        error_msg = f"An unexpected error occurred:\n\n{exc_type.__name__}: {exc_value}"
+        
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle("Windows Health Checker Pro - Error")
+        msg_box.setText(error_msg)
+        msg_box.setDetailedText(tb_text)
+        if log_path:
+            msg_box.setInformativeText(f"Details saved to: {log_path}")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Ignore)
+        msg_box.setDefaultButton(QMessageBox.StandardButton.Ok)
+        
+        result = msg_box.exec()
+        if result == QMessageBox.StandardButton.Ok:
+            # Exit the application
+            app.quit()
+            sys.exit(1)
+        # If Ignore, continue running (may be unstable)
+
+
+def install_exception_hooks():
+    """Install global exception handlers for both Python and Qt"""
+    # Python exception hook
+    sys.excepthook = show_error_dialog
+    
+    # Qt exception hook for signals/slots (unhandled exceptions in Qt callbacks)
+    def qt_exception_hook(exc_type, exc_value, exc_tb):
+        show_error_dialog(exc_type, exc_value, exc_tb)
+    
+    # Store original to call if needed
+    original_excepthook = sys.excepthook
+    sys.excepthook = qt_exception_hook
+
+
 def main():
     import multiprocessing
     import time
     multiprocessing.freeze_support()  # Required for Windows executables
+    
+    # Install global exception handlers
+    install_exception_hooks()
     
     # Start splash screen in separate process
     splash = SplashController()
@@ -19246,9 +19340,41 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         import traceback
-        print("=" * 60)
-        print("CRASH LOG:")
-        print("=" * 60)
-        traceback.print_exc()
-        print("=" * 60)
-        input("Press Enter to exit...")
+        import sys
+        
+        # Try to show GUI error dialog
+        try:
+            from PyQt6.QtWidgets import QApplication, QMessageBox
+            app = QApplication.instance() or QApplication(sys.argv)
+            
+            tb_text = traceback.format_exc()
+            
+            # Log to file
+            try:
+                import os
+                import datetime
+                log_path = os.path.join(os.path.expanduser("~"), "health_checker_crash.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"STARTUP CRASH: {datetime.datetime.now().isoformat()}\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(tb_text)
+                    f.write(f"\n{'='*60}\n")
+            except:
+                log_path = "your home folder"
+            
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("Windows Health Checker Pro - Startup Error")
+            msg_box.setText(f"The application failed to start:\n\n{type(e).__name__}: {e}")
+            msg_box.setDetailedText(tb_text)
+            msg_box.setInformativeText(f"Error log saved to: {log_path}")
+            msg_box.exec()
+        except:
+            # Fallback to console
+            print("=" * 60)
+            print("CRASH LOG:")
+            print("=" * 60)
+            traceback.print_exc()
+            print("=" * 60)
+            input("Press Enter to exit...")
